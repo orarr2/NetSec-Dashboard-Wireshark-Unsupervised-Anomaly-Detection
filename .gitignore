@@ -1,0 +1,8 @@
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+*.tmp
+_*.py
+_*.json
+netsec_upload_*.pcapng

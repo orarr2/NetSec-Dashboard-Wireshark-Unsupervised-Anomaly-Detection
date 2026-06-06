@@ -1,0 +1,3198 @@
+{
+  "version": "2.0.0",
+  "description": "Expanded DNS-based device fingerprinting: covers iOS/Android/desktops, all major phone vendors (Xiaomi/Oppo/Vivo/Huawei/OnePlus/Realme), wearables (Garmin/Fitbit/Apple Watch/Oura/WHOOP), smart-home (Hue/LIFX/Nanoleaf/Govee/Roomba/Roborock/Eufy/August/Yale/Schlage), security cameras (Blink/Ezviz/Tapo/Lorex/Swann/SimpliSafe/Vivint/Annke), TVs (Roku/Vizio/Hisense/TCL/Philips/Sharp), consoles (Xbox Series/PS5/Quest/Shield), printers (HP/Canon/Brother/Epson/Lexmark/Kyocera/Ricoh/Konica Minolta), POS (Square/Toast/Clover/Stripe Terminal/SumUp), vehicles (Tesla/BMW/Ford/Toyota/Honda/Hyundai/Kia/Audi/VW/Volvo/Mercedes/Nissan/Polestar/Rivian).",
+  "match_algorithm": {
+    "type": "weighted_count",
+    "rules": [
+      "Iterate over fingerprints in order; first match with score >= threshold wins.",
+      "A signature domain matches if it appears as a suffix of any of the device's DNS queries.",
+      "Patterns marked with `regex: true` are treated as Python re patterns (case-insensitive)."
+    ]
+  },
+  "fingerprints": [
+    {
+      "id": "ios",
+      "device_type": "Mobile",
+      "subtype": "iPhone",
+      "vendor": "Apple",
+      "model": "iOS device",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "mesu.apple.com",
+        "gsp-ssl.ls.apple.com",
+        "gs-loc.apple.com",
+        "captive.apple.com",
+        "init.itunes.apple.com",
+        "time-ios.apple.com",
+        "p[0-9]+-keyvalueservice.icloud.com",
+        "configuration.apple.com",
+        "ess.apple.com",
+        "guzzoni.apple.com",
+        "smoot.apple.com",
+        "courier.push.apple.com"
+      ]
+    },
+    {
+      "id": "ipados",
+      "device_type": "Mobile",
+      "subtype": "iPad",
+      "vendor": "Apple",
+      "model": "iPad",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "ipad.apple.com",
+        "mesu.apple.com",
+        "captive.apple.com",
+        "configuration.apple.com",
+        "guzzoni.apple.com",
+        "smoot.apple.com",
+        "init.push.apple.com"
+      ]
+    },
+    {
+      "id": "macos",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Apple",
+      "model": "Mac (macOS)",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "swcdn.apple.com",
+        "swdownload.apple.com",
+        "swscan.apple.com",
+        "gsa.apple.com",
+        "iprofiles.apple.com",
+        "configuration.apple.com",
+        "xp.apple.com",
+        "appldnld.apple.com",
+        "osxapps.itunes.apple.com",
+        "mzstatic.com"
+      ]
+    },
+    {
+      "id": "android",
+      "device_type": "Mobile",
+      "subtype": "Android",
+      "vendor": "Google",
+      "model": "Android device",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "connectivitycheck.gstatic.com",
+        "connectivitycheck.android.com",
+        "clients3.google.com",
+        "android.googleapis.com",
+        "android.clients.google.com",
+        "play.googleapis.com",
+        "play-lh.googleusercontent.com",
+        "mtalk.google.com",
+        "android.com",
+        "gservices.android.com"
+      ]
+    },
+    {
+      "id": "android_china",
+      "device_type": "Mobile",
+      "subtype": "Android",
+      "vendor": "Generic (China-region Android)",
+      "model": "Android (China)",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "ext.captive.apple.com",
+        "data.bj.bcebos.com",
+        "imtt.qq.com",
+        "msg.weixin.qq.com",
+        "config.android.xiaomi.com",
+        "captive.huawei.com",
+        "hwcloudtest.cn",
+        "hicloud.com"
+      ]
+    },
+    {
+      "id": "windows",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Microsoft",
+      "model": "Windows PC",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "dns.msftncsi.com",
+        "www.msftncsi.com",
+        "settings-win.data.microsoft.com",
+        "ctldl.windowsupdate.com",
+        "watson.telemetry.microsoft.com",
+        "sls.update.microsoft.com",
+        "fe2.update.microsoft.com",
+        "v10.events.data.microsoft.com",
+        "self.events.data.microsoft.com",
+        "windowsupdate.com",
+        "vortex.data.microsoft.com",
+        "client.wns.windows.com"
+      ]
+    },
+    {
+      "id": "windows_11",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Microsoft",
+      "model": "Windows 11 PC",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "browser.events.data.msn.com",
+        "ntp.msn.com",
+        "config.edge.skype.com",
+        "edge.microsoft.com",
+        "store-images.s-microsoft.com",
+        "officeclient.microsoft.com"
+      ]
+    },
+    {
+      "id": "linux_ubuntu",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Ubuntu Linux",
+      "model": "Linux (Ubuntu)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "archive.ubuntu.com",
+        "security.ubuntu.com",
+        "changelogs.ubuntu.com",
+        "snapcraft.io",
+        "api.snapcraft.io",
+        "ddebs.ubuntu.com",
+        "esm.ubuntu.com",
+        "livepatch.canonical.com"
+      ]
+    },
+    {
+      "id": "linux_debian",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Debian Linux",
+      "model": "Linux (Debian)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "deb.debian.org",
+        "security.debian.org",
+        "ftp.debian.org"
+      ]
+    },
+    {
+      "id": "linux_fedora",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Fedora/Red Hat",
+      "model": "Linux (Fedora/RHEL)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "mirrors.fedoraproject.org",
+        "dl.fedoraproject.org",
+        "subscription.rhsm.redhat.com",
+        "cdn.redhat.com"
+      ]
+    },
+    {
+      "id": "linux_arch",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Arch Linux",
+      "model": "Linux (Arch)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "mirrors.archlinux.org",
+        "aur.archlinux.org"
+      ]
+    },
+    {
+      "id": "chromeos",
+      "device_type": "Computers",
+      "subtype": "Laptop",
+      "vendor": "Google",
+      "model": "Chromebook (ChromeOS)",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "tools.google.com",
+        "m.chromebook.com",
+        "dl.google.com/dl/edgedl/chromeos",
+        "omahaproxy.appspot.com",
+        "chromewebstore.google.com",
+        "chrome.google.com"
+      ]
+    },
+    {
+      "id": "xbox",
+      "device_type": "Entertainment",
+      "subtype": "Xbox",
+      "vendor": "Microsoft",
+      "model": "Xbox console",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "xboxlive.com",
+        "definitions.xboxlive.com",
+        "title.mgt.xboxlive.com",
+        "content.xboxlive.com",
+        "settings.xboxlive.com",
+        "v10.events.data.microsoft.com/xbox"
+      ]
+    },
+    {
+      "id": "playstation_5",
+      "device_type": "Entertainment",
+      "subtype": "PlayStation",
+      "vendor": "Sony",
+      "model": "PlayStation 5",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ps5.update.playstation.net",
+        "f.update.playstation.net",
+        "a0.ww.np.dl.playstation.net"
+      ]
+    },
+    {
+      "id": "playstation_4",
+      "device_type": "Entertainment",
+      "subtype": "PlayStation",
+      "vendor": "Sony",
+      "model": "PlayStation 4",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ps4.update.playstation.net",
+        "playstation.net",
+        "scea.com",
+        "sonyentertainmentnetwork.com",
+        "scee.net"
+      ]
+    },
+    {
+      "id": "nintendo_switch",
+      "device_type": "Entertainment",
+      "subtype": "Nintendo Switch",
+      "vendor": "Nintendo",
+      "model": "Nintendo Switch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "nintendo.net",
+        "ctest.cdn.nintendo.net",
+        "ccs.cdn.wup.shop.nintendo.net",
+        "ccs-cdn.nintendo.net",
+        "atumn.hac.lp1.d4c.nintendo.net",
+        "snake.update.lp1.aws.nintendo.net"
+      ]
+    },
+    {
+      "id": "steam_deck",
+      "device_type": "Entertainment",
+      "subtype": "Steam Deck",
+      "vendor": "Valve",
+      "model": "Steam Deck",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "steamdeck-prerelease.steamcontent.com",
+        "client-update.akamai.steamstatic.com",
+        "store.steampowered.com",
+        "steamcommunity.com",
+        "steamcontent.com"
+      ]
+    },
+    {
+      "id": "samsung_tizen_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Samsung",
+      "model": "Samsung Smart TV (Tizen)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "samsungcloudsolution.net",
+        "samsungcloudsolution.com",
+        "samsungotn.net",
+        "samsungtv.net",
+        "samsungtizen.com",
+        "samsungelectronics.com"
+      ]
+    },
+    {
+      "id": "lg_webos_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "LG",
+      "model": "LG Smart TV (WebOS)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lge.com",
+        "lgtvsdp.com",
+        "lgtvonline.com",
+        "lgappstv.com",
+        "webostv.com",
+        "lgsmartplatform.com"
+      ]
+    },
+    {
+      "id": "sony_bravia_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Sony",
+      "model": "Sony Bravia TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "bravia.com",
+        "bravia.sony.net",
+        "sony-asia.com",
+        "sonyentertainmentnetwork.com",
+        "snei.update.sony.net"
+      ]
+    },
+    {
+      "id": "tcl_smart_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "TCL",
+      "model": "TCL Smart TV (Roku/Android)",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "tclking.com",
+        "tcl-overseas.com",
+        "tclmsmart.com",
+        "tcl.com.cn"
+      ]
+    },
+    {
+      "id": "hisense_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Hisense",
+      "model": "Hisense Smart TV",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "hisense-usa.com",
+        "hisense.com",
+        "hismarttv.com",
+        "vidaa.com"
+      ]
+    },
+    {
+      "id": "vizio_smartcast_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Vizio",
+      "model": "Vizio SmartCast TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vizio.com",
+        "smartcast.vizio.com",
+        "viziocast.com",
+        "tv.vizio.com",
+        "scfs.vizio.com"
+      ]
+    },
+    {
+      "id": "roku_device",
+      "device_type": "Entertainment",
+      "subtype": "Roku",
+      "vendor": "Roku",
+      "model": "Roku streaming device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "roku.com",
+        "rokulabs.net",
+        "logs.roku.com",
+        "scribe.logs.roku.com",
+        "billing.roku.com",
+        "image.roku.com",
+        "cdn-eu.roku.com"
+      ]
+    },
+    {
+      "id": "chromecast",
+      "device_type": "Entertainment",
+      "subtype": "Chromecast",
+      "vendor": "Google",
+      "model": "Chromecast / Google TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "clients3.google.com/cast_sender",
+        "redirector.gvt1.com",
+        "ssl.gstatic.com/cast",
+        "chromecast.com",
+        "googlecast.com"
+      ]
+    },
+    {
+      "id": "fire_tv",
+      "device_type": "Entertainment",
+      "subtype": "Fire TV",
+      "vendor": "Amazon",
+      "model": "Amazon Fire TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "amazonvideo.com",
+        "primevideo.com",
+        "aiv-cdn.net",
+        "tvb.dms.amazon.com",
+        "atv-ext.amazon.com",
+        "dcape-na.amazon.com",
+        "amazonott.com"
+      ]
+    },
+    {
+      "id": "apple_tv",
+      "device_type": "Entertainment",
+      "subtype": "Apple TV",
+      "vendor": "Apple",
+      "model": "Apple TV",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "tv.apple.com",
+        "appletvprodimg.apple.com",
+        "se.itunes.apple.com",
+        "isrv.apple.com",
+        "mzstatic.com"
+      ]
+    },
+    {
+      "id": "nvidia_shield",
+      "device_type": "Entertainment",
+      "subtype": "NVIDIA Shield",
+      "vendor": "NVIDIA",
+      "model": "NVIDIA Shield TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ardshield.nvidia.com",
+        "shield-keystone.nvidia.com",
+        "ota.gfe.nvidia.com",
+        "events.gfe.nvidia.com"
+      ]
+    },
+    {
+      "id": "amazon_echo",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Amazon",
+      "model": "Echo / Alexa device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "amazonalexa.com",
+        "alexa.amazon.com",
+        "avs-alexa-na.amazon.com",
+        "dcape-na.amazon.com",
+        "device-metrics-us.amazon.com",
+        "dp-gw-na.amazon.com",
+        "softwareupdates.amazon.com"
+      ]
+    },
+    {
+      "id": "google_home",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Google",
+      "model": "Google Home / Nest Audio",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "clients3.google.com/generate_204",
+        "home.google.com",
+        "casttvsetup-pa.googleapis.com",
+        "redirector.gvt1.com",
+        "androidpartner.googleapis.com",
+        "ota.nestapi.com"
+      ]
+    },
+    {
+      "id": "homepod",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Apple",
+      "model": "HomePod",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "siri.apple.com",
+        "guzzoni.apple.com",
+        "smoot.apple.com",
+        "audio.apple.com",
+        "mesu.apple.com/assets/com_apple_HomePod"
+      ]
+    },
+    {
+      "id": "sonos",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Sonos",
+      "model": "Sonos speaker",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "sonos.com",
+        "msl.sonos.com",
+        "ws.sonos.com",
+        "api.sonos.com",
+        "update.sonos.com"
+      ]
+    },
+    {
+      "id": "ring_doorbell",
+      "device_type": "Security & Cameras",
+      "subtype": "Doorbell",
+      "vendor": "Ring (Amazon)",
+      "model": "Ring Doorbell / Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ring.com",
+        "ringapp.com",
+        "ring-devices-prod.s3.amazonaws.com",
+        "fw.ring.com",
+        "doorbell.ring.com"
+      ]
+    },
+    {
+      "id": "nest_cam",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Google Nest",
+      "model": "Nest Cam",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "dropcam.com",
+        "nexus.dropcam.com",
+        "frontdoor.nest.com",
+        "nestlabs.com",
+        "home.nest.com"
+      ]
+    },
+    {
+      "id": "wyze_cam",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Wyze",
+      "model": "Wyze Cam",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "wyzecam.com",
+        "wyze.com",
+        "api.wyzecam.com",
+        "iot.us-east-1.amazonaws.com/wyze"
+      ]
+    },
+    {
+      "id": "arlo_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Arlo",
+      "model": "Arlo Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "arlo.com",
+        "arloapp.com",
+        "myarlo.com",
+        "netgear-arlo.com"
+      ]
+    },
+    {
+      "id": "eufy_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Eufy",
+      "model": "Eufy Cam",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "eufylife.com",
+        "security-app.eufylife.com",
+        "ankermake.com"
+      ]
+    },
+    {
+      "id": "reolink_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Reolink",
+      "model": "Reolink Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "reolink.com",
+        "p2p.reolink.com",
+        "home.reolink.com"
+      ]
+    },
+    {
+      "id": "hikvision_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Hikvision",
+      "model": "Hikvision IP Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "hikvision.com",
+        "hik-online.com",
+        "hik-connect.com",
+        "ezvizlife.com"
+      ]
+    },
+    {
+      "id": "dahua_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Dahua",
+      "model": "Dahua IP Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "dahuasecurity.com",
+        "dahuaddns.com",
+        "dahuatech.com"
+      ]
+    },
+    {
+      "id": "axis_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "IP Camera",
+      "vendor": "Axis Communications",
+      "model": "Axis IP Camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "axis.com",
+        "axiscam.net",
+        "axiscompanion.com"
+      ]
+    },
+    {
+      "id": "nest_thermostat",
+      "device_type": "Smart Home",
+      "subtype": "Thermostat",
+      "vendor": "Google Nest",
+      "model": "Nest Thermostat",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "transport.home.nest.com",
+        "frontdoor.nest.com",
+        "weather.nest.com",
+        "logsink.home.nest.com"
+      ]
+    },
+    {
+      "id": "ecobee_thermostat",
+      "device_type": "Smart Home",
+      "subtype": "Thermostat",
+      "vendor": "ecobee",
+      "model": "ecobee Thermostat",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ecobee.com",
+        "api.ecobee.com",
+        "home.ecobee.com"
+      ]
+    },
+    {
+      "id": "honeywell_thermostat",
+      "device_type": "Smart Home",
+      "subtype": "Thermostat",
+      "vendor": "Honeywell",
+      "model": "Honeywell Lyric/T-series",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "mytotalconnectcomfort.com",
+        "honeywellhome.com",
+        "lyric.honeywell.com"
+      ]
+    },
+    {
+      "id": "philips_hue",
+      "device_type": "Smart Home",
+      "subtype": "Smart Light",
+      "vendor": "Philips Hue",
+      "model": "Hue Bridge / Bulb",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "meethue.com",
+        "philips-hue.com",
+        "huebridge.meethue.com",
+        "diagnostics.meethue.com"
+      ]
+    },
+    {
+      "id": "lifx",
+      "device_type": "Smart Home",
+      "subtype": "Smart Light",
+      "vendor": "LIFX",
+      "model": "LIFX Bulb",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lifx.co",
+        "api.lifx.com",
+        "cloud.lifx.com"
+      ]
+    },
+    {
+      "id": "tplink_kasa",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug/Light",
+      "vendor": "TP-Link",
+      "model": "Kasa Smart device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "kasa.tplinkcloud.com",
+        "tplinkcloud.com",
+        "n-deventry.tplinkcloud.com",
+        "tplinkra.com",
+        "tplinkwifi.net"
+      ]
+    },
+    {
+      "id": "belkin_wemo",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug/Switch",
+      "vendor": "Belkin WeMo",
+      "model": "WeMo device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "xbcs.net",
+        "belkin.com",
+        "wemo.com",
+        "wemoupdate.belkin.com"
+      ]
+    },
+    {
+      "id": "amazon_smart_plug",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug",
+      "vendor": "Amazon",
+      "model": "Amazon Smart Plug",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "amazon.com/dp/smartplug",
+        "device-metrics-us.amazon.com",
+        "smartplug.amazon.com"
+      ]
+    },
+    {
+      "id": "irobot_roomba",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "iRobot",
+      "model": "Roomba",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "irobot.com",
+        "iot.irobotapi.com",
+        "irobotapi.com"
+      ]
+    },
+    {
+      "id": "roborock",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "Roborock",
+      "model": "Roborock Vacuum",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "roborock.com",
+        "roborock.io",
+        "mirobo.com"
+      ]
+    },
+    {
+      "id": "shark_iq",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "Shark",
+      "model": "Shark IQ Vacuum",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "sharkninja.com",
+        "iot-prod.sharkninjacommerce.com"
+      ]
+    },
+    {
+      "id": "samsung_smartthings",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Samsung",
+      "model": "Samsung SmartThings device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "smartthings.com",
+        "api.smartthings.com",
+        "samsungiotcloud.com",
+        "samsungiots.com"
+      ]
+    },
+    {
+      "id": "lg_thinq",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "LG",
+      "model": "LG ThinQ appliance",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lgthinq.com",
+        "thinq.lge.com",
+        "lgeapi.com",
+        "lgsvc.com"
+      ]
+    },
+    {
+      "id": "whirlpool",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Whirlpool",
+      "model": "Whirlpool smart appliance",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "whirlpool.com",
+        "api.whrcloud.com",
+        "whirlpoolappliances.com"
+      ]
+    },
+    {
+      "id": "bosch_home_connect",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Bosch",
+      "model": "Bosch Home Connect appliance",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "home-connect.com",
+        "api.home-connect.com"
+      ]
+    },
+    {
+      "id": "fitbit",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Fitbit (Google)",
+      "model": "Fitbit",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "fitbit.com",
+        "api.fitbit.com",
+        "client.fitbit.com"
+      ]
+    },
+    {
+      "id": "garmin",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Garmin",
+      "model": "Garmin device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "garmin.com",
+        "services.garmin.com",
+        "connect.garmin.com",
+        "omt.garmin.com"
+      ]
+    },
+    {
+      "id": "apple_watch",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Apple",
+      "model": "Apple Watch",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "watch.apple.com",
+        "wcommerce.apple.com",
+        "fitness.apple.com",
+        "init.push.apple.com/applewatch",
+        "captive.apple.com"
+      ]
+    },
+    {
+      "id": "galaxy_watch",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Samsung",
+      "model": "Galaxy Watch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "samsunghealth.com",
+        "wfsstg.samsungrs.com",
+        "samsungknox.com"
+      ]
+    },
+    {
+      "id": "tesla",
+      "device_type": "Vehicle",
+      "subtype": "Tesla",
+      "vendor": "Tesla",
+      "model": "Tesla vehicle",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "tesla.com",
+        "owner-api.teslamotors.com",
+        "vca.tesla.com",
+        "akamai.tesla.com",
+        "ota.tesla.com"
+      ]
+    },
+    {
+      "id": "bmw_connected",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "BMW",
+      "model": "BMW ConnectedDrive",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "bmwgroup.com",
+        "connecteddrive.bmw.com",
+        "myb.bmwusa.com"
+      ]
+    },
+    {
+      "id": "gm_onstar",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "GM",
+      "model": "GM OnStar",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "onstar.com",
+        "gm.com",
+        "my.gm.com"
+      ]
+    },
+    {
+      "id": "hp_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "HP",
+      "model": "HP Printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "hpeprint.com",
+        "hpconnected.com",
+        "h30495.www3.hp.com",
+        "h41201.www4.hp.com",
+        "hpsmartmobile.com",
+        "instant-ink.hpconnected.com"
+      ]
+    },
+    {
+      "id": "canon_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Canon",
+      "model": "Canon Printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "canon.com",
+        "canon-europe.com",
+        "ssl.cmcm.com.cn",
+        "ij.start.canon"
+      ]
+    },
+    {
+      "id": "brother_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Brother",
+      "model": "Brother Printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "brother.com",
+        "brother-online.com",
+        "brotherearth.com"
+      ]
+    },
+    {
+      "id": "epson_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Epson",
+      "model": "Epson Printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "epson.com",
+        "ecoprint.epson.com",
+        "epsonconnect.com"
+      ]
+    },
+    {
+      "id": "xerox_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Xerox",
+      "model": "Xerox Printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "xerox.com",
+        "support.xerox.com",
+        "services.xerox.com"
+      ]
+    },
+    {
+      "id": "polycom_voip",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "Polycom",
+      "model": "Polycom IP Phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "polycom.com",
+        "downloads.polycom.com",
+        "ptsupplier.polycom.com"
+      ]
+    },
+    {
+      "id": "yealink_voip",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "Yealink",
+      "model": "Yealink IP Phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "yealink.com",
+        "ydms.yealink.com",
+        "support.yealink.com"
+      ]
+    },
+    {
+      "id": "cisco_ip_phone",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "Cisco",
+      "model": "Cisco IP Phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "webex.com",
+        "callcontrol.webex.com",
+        "ucm.cisco.com"
+      ]
+    },
+    {
+      "id": "square_pos",
+      "device_type": "Point of Sale",
+      "subtype": "Card Reader",
+      "vendor": "Square",
+      "model": "Square POS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "squareup.com",
+        "connect.squareup.com",
+        "production-msa.squareup.com"
+      ]
+    },
+    {
+      "id": "verifone_pos",
+      "device_type": "Point of Sale",
+      "subtype": "POS Terminal",
+      "vendor": "Verifone",
+      "model": "Verifone Terminal",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "verifone.com",
+        "vfi-online.com",
+        "vfi-cloud.com"
+      ]
+    },
+    {
+      "id": "ingenico_pos",
+      "device_type": "Point of Sale",
+      "subtype": "POS Terminal",
+      "vendor": "Ingenico",
+      "model": "Ingenico Terminal",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ingenico.com",
+        "ingenico.net",
+        "estate-manager.ingenico.com"
+      ]
+    },
+    {
+      "id": "tplink_router",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "TP-Link",
+      "model": "TP-Link Router",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "tplinkwifi.net",
+        "tplinkcloud.com",
+        "tplinkdns.com",
+        "router.tplinkid.com"
+      ]
+    },
+    {
+      "id": "netgear_router",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Netgear",
+      "model": "Netgear Router",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "netgear.com",
+        "routerlogin.net",
+        "routerlogin.com",
+        "orbilogin.com",
+        "ntpserver.netgear.com"
+      ]
+    },
+    {
+      "id": "asus_router",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "ASUS",
+      "model": "ASUS Router",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "asusrouter.com",
+        "asuscomm.com",
+        "router.asus.com"
+      ]
+    },
+    {
+      "id": "ubiquiti_unifi",
+      "device_type": "Network Infrastructure",
+      "subtype": "Access Point",
+      "vendor": "Ubiquiti",
+      "model": "UniFi device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "unifi.ui.com",
+        "device-airos.svc.ubnt.com",
+        "ubnt.com",
+        "amplifi.com"
+      ]
+    },
+    {
+      "id": "synology_nas",
+      "device_type": "Network Infrastructure",
+      "subtype": "NAS",
+      "vendor": "Synology",
+      "model": "Synology NAS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "synology.com",
+        "checkip.synology.com",
+        "myds.synology.com",
+        "quickconnect.to"
+      ]
+    },
+    {
+      "id": "qnap_nas",
+      "device_type": "Network Infrastructure",
+      "subtype": "NAS",
+      "vendor": "QNAP",
+      "model": "QNAP NAS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "qnap.com",
+        "qnapcloud.com",
+        "myqnapcloud.com"
+      ]
+    },
+    {
+      "id": "xiaomi_iot",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub/IoT",
+      "vendor": "Xiaomi",
+      "model": "Xiaomi IoT device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "miio.io",
+        "mi.com",
+        "xiaomi.com",
+        "io.mi.com"
+      ]
+    },
+    {
+      "id": "raspberry_pi",
+      "device_type": "Computers",
+      "subtype": "Single-Board",
+      "vendor": "Raspberry Pi",
+      "model": "Raspberry Pi",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "raspberrypi.org",
+        "downloads.raspberrypi.org",
+        "archive.raspberrypi.org",
+        "rpi.org"
+      ]
+    },
+    {
+      "id": "esp32_iot",
+      "device_type": "Smart Home",
+      "subtype": "DIY IoT",
+      "vendor": "Espressif (ESP32/8266)",
+      "model": "ESP-based IoT device",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "espressif.com",
+        "esp32-rust.dev",
+        "iot.espressif.com"
+      ]
+    },
+    {
+      "id": "spotify_app",
+      "device_type": "Mobile",
+      "subtype": "Generic phone/laptop",
+      "vendor": "Generic",
+      "model": "Device using Spotify",
+      "match_threshold": 3,
+      "confidence": "very-low",
+      "signature_domains": [
+        "spotify.com",
+        "scdn.co",
+        "spclient.wg.spotify.com"
+      ]
+    },
+    {
+      "id": "netflix_app",
+      "device_type": "Entertainment",
+      "subtype": "Generic streamer",
+      "vendor": "Generic",
+      "model": "Device using Netflix",
+      "match_threshold": 3,
+      "confidence": "very-low",
+      "signature_domains": [
+        "netflix.com",
+        "nflxvideo.net",
+        "nflxso.net",
+        "nflximg.net"
+      ]
+    },
+    {
+      "id": "philips_sonicare",
+      "device_type": "Smart Home",
+      "subtype": "Smart Health Device",
+      "vendor": "Philips",
+      "model": "Sonicare smart toothbrush",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "philips.com/sonicare",
+        "sonicare.philips.com"
+      ]
+    },
+    {
+      "id": "withings",
+      "device_type": "Smart Home",
+      "subtype": "Smart Health Device",
+      "vendor": "Withings",
+      "model": "Withings smart scale/monitor",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "withings.com",
+        "scalews.withings.com"
+      ]
+    },
+    {
+      "id": "siemens_plc",
+      "device_type": "Industrial IoT",
+      "subtype": "PLC",
+      "vendor": "Siemens",
+      "model": "Siemens PLC",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "siemens.com",
+        "support.industry.siemens.com",
+        "mindsphere.io"
+      ]
+    },
+    {
+      "id": "rockwell_plc",
+      "device_type": "Industrial IoT",
+      "subtype": "PLC",
+      "vendor": "Rockwell Automation",
+      "model": "Allen-Bradley PLC",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "rockwellautomation.com",
+        "factorytalk.com",
+        "ab.com"
+      ]
+    },
+    {
+      "id": "schneider_industrial",
+      "device_type": "Industrial IoT",
+      "subtype": "PLC",
+      "vendor": "Schneider Electric",
+      "model": "Schneider PLC/EVlink",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "schneider-electric.com",
+        "se.com",
+        "ecostruxure.com"
+      ]
+    },
+    {
+      "id": "ge_medical",
+      "device_type": "Medical",
+      "subtype": "Medical IoT",
+      "vendor": "GE Healthcare",
+      "model": "GE medical device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "gehealthcare.com",
+        "predix.io/healthcare"
+      ]
+    },
+    {
+      "id": "philips_medical",
+      "device_type": "Medical",
+      "subtype": "Patient Monitor",
+      "vendor": "Philips Healthcare",
+      "model": "Philips medical monitor",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "intellispace.philips.com",
+        "philips-healthcare.com"
+      ]
+    },
+    {
+      "id": "kindle",
+      "device_type": "Mobile",
+      "subtype": "E-Reader",
+      "vendor": "Amazon",
+      "model": "Kindle",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "kindle.amazon.com",
+        "kindle-time.amazon.com",
+        "todo-ta-g7g.amazon.com"
+      ]
+    },
+    {
+      "id": "kobo",
+      "device_type": "Mobile",
+      "subtype": "E-Reader",
+      "vendor": "Rakuten Kobo",
+      "model": "Kobo e-reader",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "kobobooks.com",
+        "kobo.com",
+        "google.kobo.com"
+      ]
+    },
+    {
+      "id": "echo_show",
+      "device_type": "Smart Home",
+      "subtype": "Smart Display",
+      "vendor": "Amazon",
+      "model": "Echo Show",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "device-metrics-us.amazon.com",
+        "echo-show.amazon.com",
+        "alexa-comms-mobile-service.amazon.com",
+        "knight-na.amazon.com"
+      ]
+    },
+    {
+      "id": "nest_hub",
+      "device_type": "Smart Home",
+      "subtype": "Smart Display",
+      "vendor": "Google",
+      "model": "Nest Hub",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "casttvsetup-pa.googleapis.com",
+        "home.google.com",
+        "androidpartner.googleapis.com",
+        "ota.nestapi.com"
+      ]
+    },
+    {
+      "id": "tile_tracker",
+      "device_type": "Smart Home",
+      "subtype": "Tracker",
+      "vendor": "Tile",
+      "model": "Tile tracker (gateway)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "tile.com",
+        "production.tile-api.com"
+      ]
+    },
+    {
+      "id": "airtag",
+      "device_type": "Smart Home",
+      "subtype": "Tracker",
+      "vendor": "Apple",
+      "model": "AirTag (relay device)",
+      "match_threshold": 2,
+      "confidence": "low",
+      "signature_domains": [
+        "find-items.apple.com",
+        "findmy.apple.com"
+      ]
+    },
+    {
+      "id": "shelly_iot",
+      "device_type": "Smart Home",
+      "subtype": "Smart Switch",
+      "vendor": "Shelly",
+      "model": "Shelly Smart Switch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "shelly.cloud",
+        "api.shelly.cloud"
+      ]
+    },
+    {
+      "id": "tuya_iot",
+      "device_type": "Smart Home",
+      "subtype": "Generic IoT",
+      "vendor": "Tuya (white-label IoT)",
+      "model": "Tuya-based IoT device",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "tuya.com",
+        "tuyaeu.com",
+        "tuyaus.com",
+        "smartlife.tuya.com"
+      ]
+    },
+    {
+      "id": "starlink",
+      "device_type": "Network Infrastructure",
+      "subtype": "Satellite Router",
+      "vendor": "SpaceX Starlink",
+      "model": "Starlink dish",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "starlink.com",
+        "starlinkisp.net",
+        "telemetry.starlink.com"
+      ]
+    },
+    {
+      "id": "oneplus",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "OnePlus",
+      "model": "OnePlus phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "oneplus.com",
+        "oneplus.net",
+        "h2os.com",
+        "cm.oppo.com"
+      ]
+    },
+    {
+      "id": "xiaomi",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Xiaomi",
+      "model": "Xiaomi phone (MIUI)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "xiaomi.com",
+        "mi.com",
+        "miui.com",
+        "mistat.xiaomi.com",
+        "tracking.miui.com",
+        "mistat.eu.xiaomi.com"
+      ]
+    },
+    {
+      "id": "redmi",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Xiaomi",
+      "model": "Redmi phone",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "redmi.com",
+        "ad.intl.xiaomi.com",
+        "tracking.intl.miui.com"
+      ]
+    },
+    {
+      "id": "oppo",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Oppo",
+      "model": "Oppo phone (ColorOS)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "oppo.com",
+        "coloros.com",
+        "oppomobile.com",
+        "heytap.com",
+        "iot-logserver.heytapmobi.com"
+      ]
+    },
+    {
+      "id": "vivo",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Vivo",
+      "model": "Vivo phone (FuntouchOS/OriginOS)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vivo.com.cn",
+        "vivo.com",
+        "vivoglobal.com",
+        "vivoxglobal.com"
+      ]
+    },
+    {
+      "id": "huawei",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Huawei",
+      "model": "Huawei phone (HarmonyOS/EMUI)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "huawei.com",
+        "hicloud.com",
+        "hiroaming.com",
+        "vmall.com",
+        "hms.hicloud.com",
+        "dbankcdn.com"
+      ]
+    },
+    {
+      "id": "honor",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Honor",
+      "model": "Honor phone (Magic OS)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "hihonor.com",
+        "honor.cn",
+        "magicos.com"
+      ]
+    },
+    {
+      "id": "motorola",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Motorola",
+      "model": "Motorola phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "motorola.com",
+        "mot.com",
+        "lenovo.com",
+        "motorolasolutions.com"
+      ]
+    },
+    {
+      "id": "nokia_hmd",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Nokia/HMD",
+      "model": "Nokia phone (HMD Global)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "nokia.com",
+        "nokiamobile.com",
+        "hmdglobal.com"
+      ]
+    },
+    {
+      "id": "realme",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Realme",
+      "model": "Realme phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "realme.com",
+        "realmemobile.com",
+        "oppomobile.com"
+      ]
+    },
+    {
+      "id": "asus_rog",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Asus",
+      "model": "ASUS ROG / Zenfone",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "asus.com",
+        "rog.asus.com",
+        "zentalk.asus.com"
+      ]
+    },
+    {
+      "id": "pixel",
+      "device_type": "Mobile",
+      "subtype": "Phone",
+      "vendor": "Google",
+      "model": "Google Pixel",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "pixel.com",
+        "fi.google.com",
+        "supplychain.google.com",
+        "android.googleapis.com",
+        "clients3.google.com",
+        "connectivitycheck.gstatic.com"
+      ]
+    },
+    {
+      "id": "apple_airtag",
+      "device_type": "Mobile",
+      "subtype": "Tracker",
+      "vendor": "Apple",
+      "model": "Apple AirTag",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "findmy.icloud.com",
+        "fmip.icloud.com",
+        "gsa.apple.com"
+      ]
+    },
+    {
+      "id": "garmin_fenix",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Garmin",
+      "model": "Garmin Fenix series",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "garmin.com",
+        "fenix.garmin.com",
+        "connect.garmin.com",
+        "services.garmin.com"
+      ]
+    },
+    {
+      "id": "garmin_venu",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Garmin",
+      "model": "Garmin Venu series",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "garmin.com",
+        "omt.garmin.com",
+        "gcs.garmin.com"
+      ]
+    },
+    {
+      "id": "garmin_forerunner",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Garmin",
+      "model": "Garmin Forerunner",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "garmin.com",
+        "forerunner.garmin.com",
+        "gcs.garmin.com"
+      ]
+    },
+    {
+      "id": "polar_watch",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Polar",
+      "model": "Polar fitness watch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "polar.com",
+        "polaraccesslink.com",
+        "flow.polar.com"
+      ]
+    },
+    {
+      "id": "suunto_watch",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Suunto",
+      "model": "Suunto watch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "suunto.com",
+        "movescount.com"
+      ]
+    },
+    {
+      "id": "whoop_band",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "WHOOP",
+      "model": "WHOOP fitness band",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "whoop.com",
+        "prod.whoop.com"
+      ]
+    },
+    {
+      "id": "oura_ring",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Oura",
+      "model": "Oura Ring",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ouraring.com",
+        "cloud.ouraring.com"
+      ]
+    },
+    {
+      "id": "amazfit_watch",
+      "device_type": "Mobile",
+      "subtype": "Wearable",
+      "vendor": "Amazfit",
+      "model": "Amazfit watch",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "amazfit.com",
+        "huami.com",
+        "zepp.com"
+      ]
+    },
+    {
+      "id": "roku_ultra",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Roku",
+      "model": "Roku Ultra",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "roku.com",
+        "sr.roku.com",
+        "cooper.logs.roku.com",
+        "scribe.logs.roku.com",
+        "scribe-collector.production.roku.com"
+      ]
+    },
+    {
+      "id": "roku_express",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Roku",
+      "model": "Roku Express",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "roku.com",
+        "express.logs.roku.com",
+        "sr.roku.com",
+        "static.acr.roku.com"
+      ]
+    },
+    {
+      "id": "roku_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Roku",
+      "model": "Roku TV (TCL/Hisense)",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "roku.com",
+        "tcl.roku.com",
+        "hisense.roku.com",
+        "sr.roku.com",
+        "scribe.logs.roku.com"
+      ]
+    },
+    {
+      "id": "firetv_cube",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Amazon",
+      "model": "Fire TV Cube",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "fireoscaptiveportal.com",
+        "amazonalexa.com",
+        "amazon.com",
+        "softwareupdates.amazon.com",
+        "device-metrics-us.amazon.com"
+      ]
+    },
+    {
+      "id": "firetv_4kmax",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Amazon",
+      "model": "Fire TV Stick 4K Max",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "amazon.com",
+        "atv-ext-eu.amazon.com",
+        "atv-ps-eu.amazon.com",
+        "softwareupdates.amazon.com"
+      ]
+    },
+    {
+      "id": "apple_tv_4k",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Apple",
+      "model": "Apple TV 4K",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "mesu.apple.com",
+        "apple-tv.com",
+        "appletv.apple.com",
+        "configuration.apple.com",
+        "atv-ext.apple.com",
+        "tv.apple.com"
+      ]
+    },
+    {
+      "id": "chromecast_4k",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Google",
+      "model": "Chromecast with Google TV (4K)",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "googlecast.com",
+        "cast.googleapis.com",
+        "googleapis.com",
+        "tv.youtube.com"
+      ]
+    },
+    {
+      "id": "steam_link",
+      "device_type": "Entertainment",
+      "subtype": "Streaming Stick",
+      "vendor": "Valve",
+      "model": "Steam Link",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "steamcontent.com",
+        "steampowered.com",
+        "steamserver.net"
+      ]
+    },
+    {
+      "id": "vizio_smartcast",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Vizio",
+      "model": "Vizio SmartCast TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vizio.com",
+        "tv.vizio.com",
+        "smartcast.vizio.com",
+        "scfs.vizio.com",
+        "inscape.tv"
+      ]
+    },
+    {
+      "id": "hisense_vidaa",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Hisense",
+      "model": "Hisense Vidaa TV",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vidaa.com",
+        "hisense.com",
+        "vidaaos.com",
+        "cloud.vidaa.com"
+      ]
+    },
+    {
+      "id": "philips_androidtv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Philips",
+      "model": "Philips Android TV",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "philips.com",
+        "tpvision.com",
+        "px-tv.com",
+        "pcis.philips.com"
+      ]
+    },
+    {
+      "id": "toshiba_fire_tv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Toshiba",
+      "model": "Toshiba Fire TV",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "toshiba-tv.com",
+        "amazon.com",
+        "atv-ext-eu.amazon.com"
+      ]
+    },
+    {
+      "id": "sharp_aquos",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "Sharp",
+      "model": "Sharp Aquos TV",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "sharp.com",
+        "sharpusa.com",
+        "aquos-net.com",
+        "tv.sharp.eu"
+      ]
+    },
+    {
+      "id": "tcl_googletv",
+      "device_type": "Entertainment",
+      "subtype": "Smart TV",
+      "vendor": "TCL",
+      "model": "TCL Google TV",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "tcl.com",
+        "tclpalmtv.com",
+        "fitbit.com"
+      ]
+    },
+    {
+      "id": "xbox_series_x",
+      "device_type": "Entertainment",
+      "subtype": "Gaming Console",
+      "vendor": "Microsoft",
+      "model": "Xbox Series X/S",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "xboxlive.com",
+        "gamertag.xboxlive.com",
+        "xbox.com",
+        "xbox-mbr.xboxlive.com",
+        "title.mgt.xboxlive.com",
+        "titlescedge.xboxlive.com"
+      ]
+    },
+    {
+      "id": "ps5_pro",
+      "device_type": "Entertainment",
+      "subtype": "Gaming Console",
+      "vendor": "Sony",
+      "model": "PlayStation 5 (incl. Slim/Pro)",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "playstation.net",
+        "auth.api.sonyentertainmentnetwork.com",
+        "transact.sonyentertainmentnetwork.com",
+        "ena.net.playstation.net",
+        "update.scea.com"
+      ]
+    },
+    {
+      "id": "meta_quest",
+      "device_type": "Entertainment",
+      "subtype": "VR Headset",
+      "vendor": "Meta",
+      "model": "Meta Quest 2/3/Pro",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "oculus.com",
+        "facebook.com",
+        "graph.oculus.com",
+        "graph.facebook.com",
+        "scontent.oculuscdn.com"
+      ]
+    },
+    {
+      "id": "valve_index",
+      "device_type": "Entertainment",
+      "subtype": "VR Headset",
+      "vendor": "Valve",
+      "model": "Valve Index",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "steamcontent.com",
+        "steampowered.com"
+      ]
+    },
+    {
+      "id": "eero_mesh",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Amazon (Eero)",
+      "model": "Eero mesh",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "eero.com",
+        "gateway.api.eero.com",
+        "tags.eero.com"
+      ]
+    },
+    {
+      "id": "linksys_velop",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Linksys",
+      "model": "Linksys Velop mesh",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "linksys.com",
+        "linksyssmartwifi.com",
+        "linksyssupport.com"
+      ]
+    },
+    {
+      "id": "tplink_deco",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "TP-Link",
+      "model": "TP-Link Deco mesh",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "tplinkdeco.com",
+        "tplinkcloud.com",
+        "tplinkid.com"
+      ]
+    },
+    {
+      "id": "google_nest_wifi",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Google",
+      "model": "Nest WiFi",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "onhub.net",
+        "clients3.google.com",
+        "onhub.googleapis.com",
+        "googlewifi.com"
+      ]
+    },
+    {
+      "id": "asus_aimesh",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Asus",
+      "model": "Asus AiMesh",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "asus.com",
+        "asusrouter.com",
+        "asuscomm.com",
+        "router.asus.com"
+      ]
+    },
+    {
+      "id": "netgear_orbi",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Netgear",
+      "model": "Netgear Orbi",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "netgear.com",
+        "orbilogin.com",
+        "orbilogin.net",
+        "routerlogin.net"
+      ]
+    },
+    {
+      "id": "amplifi_mesh",
+      "device_type": "Network Infrastructure",
+      "subtype": "Router",
+      "vendor": "Ubiquiti",
+      "model": "AmpliFi Alien/HD",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "amplifi.com",
+        "unifi.ui.com"
+      ]
+    },
+    {
+      "id": "nanoleaf",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug/Bulb",
+      "vendor": "Nanoleaf",
+      "model": "Nanoleaf panels/Shapes",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "nanoleaf.me",
+        "api.nanoleaf.me"
+      ]
+    },
+    {
+      "id": "govee",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug/Bulb",
+      "vendor": "Govee",
+      "model": "Govee lights/devices",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "govee.com",
+        "app2.govee.com",
+        "openapi.govee.com"
+      ]
+    },
+    {
+      "id": "wyze_bulb",
+      "device_type": "Smart Home",
+      "subtype": "Smart Plug/Bulb",
+      "vendor": "Wyze",
+      "model": "Wyze bulb/plug",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "wyze.com",
+        "wyzecam.com",
+        "api.wyzecam.com"
+      ]
+    },
+    {
+      "id": "roomba",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "iRobot",
+      "model": "iRobot Roomba",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "irobot.com",
+        "irobotapi.com",
+        "prod.iot.irobotapi.com"
+      ]
+    },
+    {
+      "id": "eufy_vacuum",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "Eufy",
+      "model": "Eufy RoboVac",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "eufylife.com",
+        "mqtt-eu.eufylife.com",
+        "mqtt-us.eufylife.com"
+      ]
+    },
+    {
+      "id": "shark_vacuum",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "Shark",
+      "model": "Shark IQ Robot",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "sharkninja.com",
+        "sharkclean.com"
+      ]
+    },
+    {
+      "id": "ecovacs_deebot",
+      "device_type": "Smart Home",
+      "subtype": "Robot Vacuum",
+      "vendor": "Ecovacs",
+      "model": "Ecovacs Deebot",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ecovacs.com",
+        "ecouser.net",
+        "ecovacs.cn"
+      ]
+    },
+    {
+      "id": "august_lock",
+      "device_type": "Security & Cameras",
+      "subtype": "Smart Lock",
+      "vendor": "August",
+      "model": "August Smart Lock",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "august.com",
+        "api-production.august.com"
+      ]
+    },
+    {
+      "id": "yale_lock",
+      "device_type": "Security & Cameras",
+      "subtype": "Smart Lock",
+      "vendor": "Yale",
+      "model": "Yale smart lock",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "yalehome.com",
+        "yaleconnect.com",
+        "august.com"
+      ]
+    },
+    {
+      "id": "schlage",
+      "device_type": "Security & Cameras",
+      "subtype": "Smart Lock",
+      "vendor": "Schlage",
+      "model": "Schlage Encode/Connect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "schlage.com",
+        "schlageconnect.com",
+        "allegion.com"
+      ]
+    },
+    {
+      "id": "level_lock",
+      "device_type": "Security & Cameras",
+      "subtype": "Smart Lock",
+      "vendor": "Level",
+      "model": "Level Lock",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "level.co",
+        "api.level.co"
+      ]
+    },
+    {
+      "id": "smartthings",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub",
+      "vendor": "Samsung",
+      "model": "SmartThings Hub",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "smartthings.com",
+        "api.smartthings.com",
+        "fw-update.smartthings.com",
+        "scapi.smartthings.com"
+      ]
+    },
+    {
+      "id": "hubitat",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub",
+      "vendor": "Hubitat",
+      "model": "Hubitat Elevation",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "hubitat.com",
+        "cloud.hubitat.com"
+      ]
+    },
+    {
+      "id": "homeassistant",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub",
+      "vendor": "Home Assistant",
+      "model": "Home Assistant",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "home-assistant.io",
+        "supervisor.home-assistant.io",
+        "version.home-assistant.io",
+        "analytics.home-assistant.io"
+      ]
+    },
+    {
+      "id": "aqara_hub",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub",
+      "vendor": "Aqara",
+      "model": "Aqara Hub",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "aqara.com",
+        "aqara.cn",
+        "app.aqara.com"
+      ]
+    },
+    {
+      "id": "lutron_caseta",
+      "device_type": "Smart Home",
+      "subtype": "Smart Hub",
+      "vendor": "Lutron",
+      "model": "Lutron Caseta hub",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lutron.com",
+        "lutron.io",
+        "myhomelutron.com"
+      ]
+    },
+    {
+      "id": "blink_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "Amazon (Blink)",
+      "model": "Blink camera/doorbell",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "immedia-semi.com",
+        "blinkforhome.com",
+        "amazon.com"
+      ]
+    },
+    {
+      "id": "ezviz",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "Ezviz",
+      "model": "Ezviz camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ezvizlife.com",
+        "ezviz.com",
+        "i.ezvizlife.com"
+      ]
+    },
+    {
+      "id": "tapo_camera",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "TP-Link",
+      "model": "TP-Link Tapo camera",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "tapo.com",
+        "tplinkcloud.com",
+        "n-deventry-tplinkcloud.com"
+      ]
+    },
+    {
+      "id": "lorex",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "Lorex",
+      "model": "Lorex camera/DVR",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lorextechnology.com",
+        "lorex.com"
+      ]
+    },
+    {
+      "id": "swann",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "Swann",
+      "model": "Swann camera/NVR",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "swann.com",
+        "mysecure-cdn.com",
+        "secure.swann.com"
+      ]
+    },
+    {
+      "id": "simplisafe",
+      "device_type": "Security & Cameras",
+      "subtype": "Alarm System",
+      "vendor": "SimpliSafe",
+      "model": "SimpliSafe security",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "simplisafe.com",
+        "auth.simplisafe.com",
+        "api.simplisafe.com"
+      ]
+    },
+    {
+      "id": "vivint",
+      "device_type": "Security & Cameras",
+      "subtype": "Alarm System",
+      "vendor": "Vivint",
+      "model": "Vivint Smart Home",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vivint.com",
+        "vivintsky.com",
+        "panel.vivint.com"
+      ]
+    },
+    {
+      "id": "adt",
+      "device_type": "Security & Cameras",
+      "subtype": "Alarm System",
+      "vendor": "ADT",
+      "model": "ADT Security",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "adt.com",
+        "portal.adt.com",
+        "mss.adt.com"
+      ]
+    },
+    {
+      "id": "annke",
+      "device_type": "Security & Cameras",
+      "subtype": "Security Camera",
+      "vendor": "Annke",
+      "model": "Annke NVR/camera",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "annke.com",
+        "annke-vision.com"
+      ]
+    },
+    {
+      "id": "lexmark",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Lexmark",
+      "model": "Lexmark printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "lexmark.com",
+        "mc.lexmark.com",
+        "ic.lexmark.com"
+      ]
+    },
+    {
+      "id": "kyocera",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Kyocera",
+      "model": "Kyocera printer",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "kyoceradocumentsolutions.com",
+        "kyocera-fleet.com",
+        "kyocera.com"
+      ]
+    },
+    {
+      "id": "ricoh",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Ricoh",
+      "model": "Ricoh printer/MFP",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ricoh.com",
+        "smart-integration.ricoh.com",
+        "ricohusa.com"
+      ]
+    },
+    {
+      "id": "konica_minolta",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "Konica Minolta",
+      "model": "Konica Minolta MFP",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "konicaminolta.com",
+        "mykonicaminolta.com",
+        "kmbs.konicaminolta.us"
+      ]
+    },
+    {
+      "id": "oki_printer",
+      "device_type": "Office",
+      "subtype": "Printer",
+      "vendor": "OKI",
+      "model": "OKI printer",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "okidata.com",
+        "oki.com"
+      ]
+    },
+    {
+      "id": "3cx",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "3CX",
+      "model": "3CX VoIP phone/PBX",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "3cx.com",
+        "sip.3cx.com"
+      ]
+    },
+    {
+      "id": "grandstream",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "Grandstream",
+      "model": "Grandstream VoIP",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "grandstream.com",
+        "gdms.cloud",
+        "fw.gdms.cloud"
+      ]
+    },
+    {
+      "id": "ringcentral",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "RingCentral",
+      "model": "RingCentral phone",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ringcentral.com",
+        "pa.ringcentral.com",
+        "sip.ringcentral.com"
+      ]
+    },
+    {
+      "id": "vonage",
+      "device_type": "Office",
+      "subtype": "VoIP Phone",
+      "vendor": "Vonage",
+      "model": "Vonage Business",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vonage.com",
+        "vbc.vonage.com",
+        "sip.vonage.net"
+      ]
+    },
+    {
+      "id": "toast_pos",
+      "device_type": "Point of Sale",
+      "subtype": "POS Terminal",
+      "vendor": "Toast",
+      "model": "Toast POS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "toasttab.com",
+        "toastservices.com"
+      ]
+    },
+    {
+      "id": "clover_pos",
+      "device_type": "Point of Sale",
+      "subtype": "POS Terminal",
+      "vendor": "Clover",
+      "model": "Clover POS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "clover.com",
+        "clover.network"
+      ]
+    },
+    {
+      "id": "sumup_pos",
+      "device_type": "Point of Sale",
+      "subtype": "Card Reader",
+      "vendor": "SumUp",
+      "model": "SumUp Reader",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "sumup.com",
+        "api.sumup.com"
+      ]
+    },
+    {
+      "id": "stripe_terminal",
+      "device_type": "Point of Sale",
+      "subtype": "Card Reader",
+      "vendor": "Stripe",
+      "model": "Stripe Terminal",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "stripe.com",
+        "api.stripe.com",
+        "terminal.stripe.com"
+      ]
+    },
+    {
+      "id": "lightspeed_pos",
+      "device_type": "Point of Sale",
+      "subtype": "POS Terminal",
+      "vendor": "Lightspeed",
+      "model": "Lightspeed POS",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "lightspeedhq.com",
+        "retail.lightspeed.app"
+      ]
+    },
+    {
+      "id": "ford_sync",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Ford",
+      "model": "Ford SYNC connected",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ford.com",
+        "sync.ford.com",
+        "fordpass.com"
+      ]
+    },
+    {
+      "id": "toyota_connected",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Toyota",
+      "model": "Toyota connected services",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "toyota.com",
+        "toyotaowners.com",
+        "entune.com",
+        "toyota-connect.com"
+      ]
+    },
+    {
+      "id": "honda_link",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Honda",
+      "model": "Honda HondaLink",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "honda.com",
+        "hondalink.com",
+        "drivehonda.com"
+      ]
+    },
+    {
+      "id": "hyundai_bluelink",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Hyundai",
+      "model": "Hyundai Bluelink",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "hyundaiusa.com",
+        "bluelink.hyundaiusa.com",
+        "myhyundai.com"
+      ]
+    },
+    {
+      "id": "kia_connect",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Kia",
+      "model": "Kia Connect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "kia.com",
+        "owners-aem.kia.com",
+        "connect.kia.com"
+      ]
+    },
+    {
+      "id": "audi_mmi",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Audi",
+      "model": "Audi MMI connect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "audi.com",
+        "mmiconnect.com",
+        "audi-connect.com"
+      ]
+    },
+    {
+      "id": "vw_carnet",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Volkswagen",
+      "model": "VW Car-Net",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "vw.com",
+        "car-net.com",
+        "vw-car-net.com"
+      ]
+    },
+    {
+      "id": "volvo_oncall",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Volvo",
+      "model": "Volvo On Call",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "volvocars.com",
+        "volvoid.eu.volvocars.com"
+      ]
+    },
+    {
+      "id": "mercedes_me",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Mercedes-Benz",
+      "model": "Mercedes me connect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "mercedes-benz.com",
+        "mercedes-benz.io",
+        "api.mercedes-benz.com"
+      ]
+    },
+    {
+      "id": "nissan_connect",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Nissan",
+      "model": "NissanConnect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "nissan-na.com",
+        "nissanusa.com",
+        "carwings.com",
+        "nissan-cv.eu"
+      ]
+    },
+    {
+      "id": "polestar",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Polestar",
+      "model": "Polestar 2/3",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "polestar.com",
+        "app.polestar.com"
+      ]
+    },
+    {
+      "id": "rivian",
+      "device_type": "Vehicle",
+      "subtype": "Connected Car",
+      "vendor": "Rivian",
+      "model": "Rivian R1T/R1S",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "rivian.com",
+        "mobile-api.rivian.com"
+      ]
+    },
+    {
+      "id": "linux_mint",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Linux",
+      "model": "Linux Mint",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "linuxmint.com",
+        "packages.linuxmint.com",
+        "community.linuxmint.com"
+      ]
+    },
+    {
+      "id": "manjaro",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Linux",
+      "model": "Manjaro Linux",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "manjaro.org",
+        "mirror.manjaro.org",
+        "forum.manjaro.org"
+      ]
+    },
+    {
+      "id": "popos",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Linux",
+      "model": "Pop!_OS (System76)",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "pop-os.org",
+        "system76.com",
+        "apt.pop-os.org"
+      ]
+    },
+    {
+      "id": "opensuse",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Linux",
+      "model": "openSUSE",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "opensuse.org",
+        "download.opensuse.org",
+        "susecloud.net"
+      ]
+    },
+    {
+      "id": "alpine",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Linux",
+      "model": "Alpine Linux",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "alpinelinux.org",
+        "dl-cdn.alpinelinux.org"
+      ]
+    },
+    {
+      "id": "freebsd",
+      "device_type": "Computers",
+      "subtype": "Workstation",
+      "vendor": "FreeBSD",
+      "model": "FreeBSD",
+      "match_threshold": 2,
+      "confidence": "medium",
+      "signature_domains": [
+        "freebsd.org",
+        "pkg.freebsd.org",
+        "update.freebsd.org"
+      ]
+    },
+    {
+      "id": "raspberry_pi_os",
+      "device_type": "Computers",
+      "subtype": "Desktop",
+      "vendor": "Raspberry Pi",
+      "model": "Raspberry Pi OS",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "raspberrypi.org",
+        "raspberrypi.com",
+        "archive.raspberrypi.org"
+      ]
+    },
+    {
+      "id": "ledger_wallet",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "Ledger",
+      "model": "Ledger hardware wallet (Live)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ledger.com",
+        "ledger.fr",
+        "ledgerwallet.com",
+        "manager.ledger.com"
+      ]
+    },
+    {
+      "id": "trezor_wallet",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "Trezor",
+      "model": "Trezor hardware wallet (Suite)",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "trezor.io",
+        "data.trezor.io",
+        "wallet.trezor.io"
+      ]
+    },
+    {
+      "id": "pihole",
+      "device_type": "Network Infrastructure",
+      "subtype": "Network Storage",
+      "vendor": "Pi-hole",
+      "model": "Pi-hole DNS sinkhole",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "pi-hole.net",
+        "discourse.pi-hole.net"
+      ]
+    },
+    {
+      "id": "netatmo",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "Netatmo",
+      "model": "Netatmo weather station",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "netatmo.com",
+        "app.netatmo.net"
+      ]
+    },
+    {
+      "id": "ecowitt",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "Ecowitt",
+      "model": "Ecowitt weather station",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "ecowitt.net",
+        "api.ecowitt.net",
+        "aprs.ecowitt.net"
+      ]
+    },
+    {
+      "id": "purpleair",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "PurpleAir",
+      "model": "PurpleAir AQ monitor",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "purpleair.com",
+        "api.purpleair.com",
+        "map.purpleair.com"
+      ]
+    },
+    {
+      "id": "awair",
+      "device_type": "Smart Home",
+      "subtype": "IoT Hub",
+      "vendor": "Awair",
+      "model": "Awair air quality",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "getawair.com",
+        "developer-apis.awair.is"
+      ]
+    },
+    {
+      "id": "homepod_mini",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Apple",
+      "model": "HomePod mini",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "apple.com",
+        "mesu.apple.com",
+        "setup.icloud.com",
+        "configuration.apple.com"
+      ]
+    },
+    {
+      "id": "sonos_arc",
+      "device_type": "Smart Home",
+      "subtype": "Smart Speaker",
+      "vendor": "Sonos",
+      "model": "Sonos Arc/Beam/Era",
+      "match_threshold": 2,
+      "confidence": "high",
+      "signature_domains": [
+        "sonos.com",
+        "ws.sonos.com",
+        "update.sonos.com"
+      ]
+    },
+    {
+      "id": "whirlpool_smart",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Whirlpool",
+      "model": "Whirlpool smart appliance",
+      "match_threshold": 1,
+      "confidence": "medium",
+      "signature_domains": [
+        "whirlpool.com",
+        "whrcloud.com",
+        "api.whrcloud.com"
+      ]
+    },
+    {
+      "id": "miele",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Miele",
+      "model": "Miele@home appliance",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "miele.com",
+        "api.mcs3.miele.com",
+        "mcs3.miele.com"
+      ]
+    },
+    {
+      "id": "bosch_homeconnect",
+      "device_type": "Smart Home",
+      "subtype": "Smart Appliance",
+      "vendor": "Bosch",
+      "model": "Bosch Home Connect",
+      "match_threshold": 1,
+      "confidence": "high",
+      "signature_domains": [
+        "home-connect.com",
+        "singlekey-id.com",
+        "api.home-connect.com"
+      ]
+    }
+  ]
+}

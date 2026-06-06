@@ -1,0 +1,3631 @@
+{
+  "version": "2.0.0",
+  "description": "Expanded cloud/SaaS/CDN/streaming/gaming/communication identification: static_ips for public DNS resolvers, cidr_ranges for cloud-provider IP space, rdns_patterns for content provider identification by reverse DNS. Israeli ISPs/banks/services and global crypto/AI/streaming/gaming added.",
+  "static_ips": {
+    "1.1.1.1": {
+      "provider": "Cloudflare",
+      "service": "Cloudflare DNS",
+      "type": "DNS"
+    },
+    "1.0.0.1": {
+      "provider": "Cloudflare",
+      "service": "Cloudflare DNS",
+      "type": "DNS"
+    },
+    "8.8.8.8": {
+      "provider": "Google",
+      "service": "Google Public DNS",
+      "type": "DNS"
+    },
+    "8.8.4.4": {
+      "provider": "Google",
+      "service": "Google Public DNS",
+      "type": "DNS"
+    },
+    "9.9.9.9": {
+      "provider": "Quad9",
+      "service": "Quad9 DNS",
+      "type": "DNS"
+    },
+    "208.67.222.222": {
+      "provider": "OpenDNS",
+      "service": "OpenDNS",
+      "type": "DNS"
+    },
+    "208.67.220.220": {
+      "provider": "OpenDNS",
+      "service": "OpenDNS",
+      "type": "DNS"
+    },
+    "4.2.2.1": {
+      "provider": "Level 3",
+      "service": "Level 3 DNS",
+      "type": "DNS"
+    },
+    "4.2.2.2": {
+      "provider": "Level 3",
+      "service": "Level 3 DNS",
+      "type": "DNS"
+    },
+    "94.140.14.14": {
+      "provider": "AdGuard",
+      "service": "AdGuard DNS",
+      "type": "DNS"
+    },
+    "94.140.15.15": {
+      "provider": "AdGuard",
+      "service": "AdGuard DNS",
+      "type": "DNS"
+    },
+    "194.242.2.2": {
+      "provider": "Mullvad",
+      "service": "Mullvad DNS",
+      "type": "DNS"
+    },
+    "45.90.28.0": {
+      "provider": "NextDNS",
+      "service": "NextDNS",
+      "type": "DNS"
+    },
+    "45.90.30.0": {
+      "provider": "NextDNS",
+      "service": "NextDNS",
+      "type": "DNS"
+    },
+    "1.1.1.2": {
+      "provider": "Cloudflare",
+      "service": "Cloudflare for Families",
+      "type": "DNS"
+    },
+    "1.1.1.3": {
+      "provider": "Cloudflare",
+      "service": "Cloudflare for Families",
+      "type": "DNS"
+    },
+    "8.26.56.26": {
+      "provider": "Comodo",
+      "service": "Comodo Secure DNS",
+      "type": "DNS"
+    },
+    "8.20.247.20": {
+      "provider": "Comodo",
+      "service": "Comodo Secure DNS",
+      "type": "DNS"
+    },
+    "185.228.168.9": {
+      "provider": "CleanBrowsing",
+      "service": "CleanBrowsing DNS",
+      "type": "DNS"
+    },
+    "185.228.169.9": {
+      "provider": "CleanBrowsing",
+      "service": "CleanBrowsing DNS",
+      "type": "DNS"
+    },
+    "77.88.8.8": {
+      "provider": "Yandex",
+      "service": "Yandex DNS",
+      "type": "DNS"
+    },
+    "77.88.8.1": {
+      "provider": "Yandex",
+      "service": "Yandex DNS",
+      "type": "DNS"
+    },
+    "64.6.64.6": {
+      "provider": "Verisign",
+      "service": "Verisign Public DNS",
+      "type": "DNS"
+    },
+    "64.6.65.6": {
+      "provider": "Verisign",
+      "service": "Verisign Public DNS",
+      "type": "DNS"
+    },
+    "129.250.35.250": {
+      "provider": "NTT",
+      "service": "NTT DNS",
+      "type": "DNS"
+    },
+    "199.203.56.1": {
+      "provider": "Bezeq",
+      "service": "Bezeq DNS",
+      "type": "DNS"
+    },
+    "199.203.56.135": {
+      "provider": "Bezeq",
+      "service": "Bezeq DNS",
+      "type": "DNS"
+    }
+  },
+  "cidr_ranges": [
+    {
+      "cidr": "13.32.0.0/15",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "13.224.0.0/14",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "52.84.0.0/15",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "54.192.0.0/16",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "54.230.0.0/16",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "54.239.128.0/18",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "204.246.164.0/22",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "205.251.249.0/24",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "cidr": "3.0.0.0/9",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "3.128.0.0/9",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "18.32.0.0/11",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "18.128.0.0/9",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "34.192.0.0/10",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.152.0.0/13",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "44.192.0.0/11",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "52.0.0.0/10",
+      "provider": "AWS",
+      "service": "EC2/S3",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "52.64.0.0/12",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.144.0.0/12",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.160.0.0/11",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.196.0.0/15",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.208.0.0/13",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.232.0.0/14",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "54.240.0.0/12",
+      "provider": "AWS",
+      "service": "SES/EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.33.0.0/16",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.34.0.0/15",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.36.0.0/14",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.40.0.0/13",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.48.0.0/12",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.64.0.0/10",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.128.0.0/16",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.150.0.0/15",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "20.184.0.0/13",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "40.64.0.0/10",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "52.96.0.0/12",
+      "provider": "Microsoft",
+      "service": "Office 365",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "52.112.0.0/14",
+      "provider": "Microsoft",
+      "service": "Microsoft Teams",
+      "type": "Communications"
+    },
+    {
+      "cidr": "52.120.0.0/14",
+      "provider": "Microsoft",
+      "service": "Microsoft Teams",
+      "type": "Communications"
+    },
+    {
+      "cidr": "104.40.0.0/13",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "131.107.0.0/16",
+      "provider": "Microsoft",
+      "service": "Microsoft Corp",
+      "type": "Software Vendor"
+    },
+    {
+      "cidr": "204.79.197.0/24",
+      "provider": "Microsoft",
+      "service": "Bing",
+      "type": "Search"
+    },
+    {
+      "cidr": "8.34.208.0/20",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "8.35.192.0/20",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "23.236.48.0/20",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "23.251.128.0/19",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "34.64.0.0/10",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "34.128.0.0/10",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.184.0.0/13",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.192.0.0/14",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.196.0.0/15",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.198.0.0/16",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.199.0.0/17",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.200.0.0/13",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.208.0.0/12",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.224.0.0/12",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "35.240.0.0/13",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "cidr": "64.233.160.0/19",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "66.102.0.0/20",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "66.249.64.0/19",
+      "provider": "Google",
+      "service": "Googlebot",
+      "type": "Web Crawler"
+    },
+    {
+      "cidr": "72.14.192.0/18",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "74.125.0.0/16",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "108.177.0.0/17",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "142.250.0.0/15",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "172.217.0.0/16",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "173.194.0.0/16",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "209.85.128.0/17",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "216.58.192.0/19",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "216.239.32.0/19",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "cidr": "104.16.0.0/12",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "172.64.0.0/13",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "162.158.0.0/15",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "173.245.48.0/20",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "188.114.96.0/20",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "190.93.240.0/20",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "197.234.240.0/22",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "198.41.128.0/17",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "23.32.0.0/11",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "23.192.0.0/11",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "104.64.0.0/10",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "184.24.0.0/13",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "184.50.0.0/15",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "2.16.0.0/13",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "95.100.0.0/15",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "96.6.0.0/15",
+      "provider": "Akamai",
+      "service": "Akamai CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "151.101.0.0/16",
+      "provider": "Fastly",
+      "service": "Fastly CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "199.232.0.0/16",
+      "provider": "Fastly",
+      "service": "Fastly CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "146.75.0.0/16",
+      "provider": "Fastly",
+      "service": "Fastly CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "23.246.0.0/18",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "37.77.184.0/21",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "45.57.0.0/17",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "108.175.32.0/20",
+      "provider": "Netflix",
+      "service": "Netflix",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "185.2.108.0/22",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "192.173.64.0/18",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "198.38.96.0/19",
+      "provider": "Netflix",
+      "service": "Netflix CDN",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "208.65.152.0/22",
+      "provider": "YouTube",
+      "service": "YouTube",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "208.117.224.0/19",
+      "provider": "YouTube",
+      "service": "YouTube",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "31.13.24.0/21",
+      "provider": "Meta",
+      "service": "Facebook/Instagram",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "31.13.64.0/18",
+      "provider": "Meta",
+      "service": "Facebook/Instagram",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "66.220.144.0/20",
+      "provider": "Meta",
+      "service": "Facebook",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "69.63.176.0/20",
+      "provider": "Meta",
+      "service": "Facebook",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "157.240.0.0/16",
+      "provider": "Meta",
+      "service": "Facebook/Instagram",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "173.252.64.0/18",
+      "provider": "Meta",
+      "service": "Facebook",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "179.60.192.0/22",
+      "provider": "Meta",
+      "service": "Facebook",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "185.60.216.0/22",
+      "provider": "Meta",
+      "service": "Facebook/Instagram",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "17.0.0.0/8",
+      "provider": "Apple",
+      "service": "Apple Inc.",
+      "type": "Software Vendor"
+    },
+    {
+      "cidr": "147.243.0.0/16",
+      "provider": "Spotify",
+      "service": "Spotify",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "151.101.64.0/22",
+      "provider": "Spotify",
+      "service": "Spotify (Fastly)",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "104.244.40.0/21",
+      "provider": "Twitter/X",
+      "service": "Twitter/X",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "199.16.156.0/22",
+      "provider": "Twitter/X",
+      "service": "Twitter/X",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "199.59.148.0/22",
+      "provider": "Twitter/X",
+      "service": "Twitter/X",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "151.101.65.0/24",
+      "provider": "Reddit",
+      "service": "Reddit",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "13.107.6.152/31",
+      "provider": "Microsoft",
+      "service": "Microsoft 365",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "52.108.0.0/14",
+      "provider": "Microsoft",
+      "service": "Office 365",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "52.244.0.0/15",
+      "provider": "Microsoft",
+      "service": "Office 365",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "170.114.0.0/16",
+      "provider": "Zoom",
+      "service": "Zoom",
+      "type": "Communications"
+    },
+    {
+      "cidr": "170.115.0.0/16",
+      "provider": "Zoom",
+      "service": "Zoom",
+      "type": "Communications"
+    },
+    {
+      "cidr": "104.131.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "159.65.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "159.89.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "165.227.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "167.71.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "167.99.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "46.101.0.0/16",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud (EU)",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "129.146.0.0/15",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "132.226.0.0/16",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "140.91.0.0/16",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "150.230.0.0/16",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "152.67.0.0/16",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "158.101.0.0/16",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "47.74.0.0/15",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "47.76.0.0/14",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "47.88.0.0/15",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "47.90.0.0/15",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "47.110.0.0/15",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "8.208.0.0/12",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "116.202.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "136.243.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "138.201.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "142.132.128.0/17",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "159.69.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "167.235.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "176.9.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "188.40.0.0/16",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "213.133.96.0/19",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.68.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.75.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.79.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.81.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.83.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.89.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "51.91.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "141.94.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "145.239.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "149.202.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "164.132.0.0/16",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "178.32.0.0/15",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "198.27.64.0/18",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "213.186.32.0/19",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.33.0.0/17",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.79.0.0/16",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "50.116.0.0/16",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "66.175.208.0/20",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "69.164.192.0/19",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "96.126.96.0/19",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "104.200.16.0/20",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "172.104.0.0/15",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "173.255.192.0/18",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "198.58.96.0/19",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.32.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.63.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.76.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "45.77.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "66.42.32.0/19",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "108.61.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "136.244.96.0/19",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "149.28.0.0/16",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "cidr": "76.76.21.0/24",
+      "provider": "Vercel",
+      "service": "Vercel",
+      "type": "Hosting/CDN"
+    },
+    {
+      "cidr": "167.99.128.0/19",
+      "provider": "Netlify",
+      "service": "Netlify",
+      "type": "Hosting/CDN"
+    },
+    {
+      "cidr": "75.2.60.0/24",
+      "provider": "Netlify",
+      "service": "Netlify CDN",
+      "type": "Hosting/CDN"
+    },
+    {
+      "cidr": "99.83.190.0/24",
+      "provider": "Netlify",
+      "service": "Netlify CDN",
+      "type": "Hosting/CDN"
+    },
+    {
+      "cidr": "23.92.20.0/24",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "23.92.61.0/24",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "23.92.62.0/24",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "89.187.160.0/19",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "138.199.0.0/16",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "cidr": "103.10.124.0/22",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "103.28.54.0/24",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "146.66.152.0/21",
+      "provider": "Valve",
+      "service": "Steam CDN",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "155.133.224.0/19",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "162.254.192.0/21",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "185.25.180.0/22",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "190.217.33.0/24",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "205.196.6.0/24",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "208.78.164.0/22",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "104.160.128.0/19",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "162.249.72.0/21",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "173.224.176.0/20",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "185.40.64.0/22",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "192.64.169.0/24",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "162.159.128.0/22",
+      "provider": "Discord",
+      "service": "Discord",
+      "type": "Communication"
+    },
+    {
+      "cidr": "162.159.132.0/24",
+      "provider": "Discord",
+      "service": "Discord",
+      "type": "Communication"
+    },
+    {
+      "cidr": "162.159.135.0/24",
+      "provider": "Discord",
+      "service": "Discord",
+      "type": "Communication"
+    },
+    {
+      "cidr": "91.108.4.0/22",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "cidr": "91.108.8.0/21",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "cidr": "91.108.16.0/21",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "cidr": "91.108.56.0/22",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "cidr": "149.154.160.0/20",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "cidr": "47.246.0.0/16",
+      "provider": "ByteDance",
+      "service": "TikTok",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "161.117.0.0/16",
+      "provider": "ByteDance",
+      "service": "TikTok",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "163.181.0.0/16",
+      "provider": "ByteDance",
+      "service": "TikTok",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "199.96.56.0/21",
+      "provider": "ByteDance",
+      "service": "TikTok",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "31.13.64.0/19",
+      "provider": "Snap",
+      "service": "Snapchat",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "18.198.0.0/15",
+      "provider": "Snap",
+      "service": "Snapchat (AWS Frankfurt)",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "108.174.0.0/20",
+      "provider": "LinkedIn",
+      "service": "LinkedIn",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "144.2.0.0/16",
+      "provider": "LinkedIn",
+      "service": "LinkedIn",
+      "type": "Social Media"
+    },
+    {
+      "cidr": "162.125.0.0/16",
+      "provider": "Dropbox",
+      "service": "Dropbox",
+      "type": "Cloud Storage"
+    },
+    {
+      "cidr": "199.47.216.0/22",
+      "provider": "Dropbox",
+      "service": "Dropbox",
+      "type": "Cloud Storage"
+    },
+    {
+      "cidr": "45.58.64.0/18",
+      "provider": "Dropbox",
+      "service": "Dropbox",
+      "type": "Cloud Storage"
+    },
+    {
+      "cidr": "74.112.184.0/22",
+      "provider": "Box",
+      "service": "Box",
+      "type": "Cloud Storage"
+    },
+    {
+      "cidr": "107.152.24.0/21",
+      "provider": "Box",
+      "service": "Box",
+      "type": "Cloud Storage"
+    },
+    {
+      "cidr": "96.43.144.0/20",
+      "provider": "Salesforce",
+      "service": "Salesforce",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "136.146.0.0/15",
+      "provider": "Salesforce",
+      "service": "Salesforce",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "204.14.232.0/21",
+      "provider": "Salesforce",
+      "service": "Salesforce",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "104.16.0.0/14",
+      "provider": "Cloudflare",
+      "service": "HubSpot (Cloudflare)",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "199.180.226.0/24",
+      "provider": "HubSpot",
+      "service": "HubSpot",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "13.59.0.0/16",
+      "provider": "Atlassian",
+      "service": "Atlassian Cloud",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "104.192.136.0/21",
+      "provider": "Atlassian",
+      "service": "Atlassian Bitbucket",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "192.150.16.0/20",
+      "provider": "Adobe",
+      "service": "Adobe Cloud",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "193.104.215.0/24",
+      "provider": "Adobe",
+      "service": "Adobe Cloud",
+      "type": "SaaS"
+    },
+    {
+      "cidr": "104.18.0.0/16",
+      "provider": "Cloudflare",
+      "service": "Coinbase (Cloudflare)",
+      "type": "Finance"
+    },
+    {
+      "cidr": "162.247.242.0/24",
+      "provider": "Coinbase",
+      "service": "Coinbase",
+      "type": "Finance"
+    },
+    {
+      "cidr": "13.213.0.0/16",
+      "provider": "Binance",
+      "service": "Binance (AWS APAC)",
+      "type": "Finance"
+    },
+    {
+      "cidr": "128.116.0.0/16",
+      "provider": "Roblox",
+      "service": "Roblox",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "18.211.0.0/16",
+      "provider": "Epic Games",
+      "service": "Epic Games (AWS)",
+      "type": "Gaming"
+    },
+    {
+      "cidr": "172.115.0.0/16",
+      "provider": "Plex",
+      "service": "Plex",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "23.46.0.0/15",
+      "provider": "Hulu",
+      "service": "Hulu",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "99.86.0.0/16",
+      "provider": "WarnerBros",
+      "service": "HBO Max (AWS)",
+      "type": "Streaming"
+    },
+    {
+      "cidr": "185.70.40.0/22",
+      "provider": "Proton",
+      "service": "ProtonMail/VPN",
+      "type": "VPN/Email"
+    },
+    {
+      "cidr": "185.159.156.0/22",
+      "provider": "Proton",
+      "service": "ProtonMail/VPN",
+      "type": "VPN/Email"
+    },
+    {
+      "cidr": "185.231.204.0/22",
+      "provider": "NordVPN",
+      "service": "NordVPN",
+      "type": "VPN"
+    },
+    {
+      "cidr": "185.196.220.0/22",
+      "provider": "NordVPN",
+      "service": "NordVPN",
+      "type": "VPN"
+    },
+    {
+      "cidr": "173.252.64.0/19",
+      "provider": "Meta",
+      "service": "WhatsApp",
+      "type": "Communication"
+    },
+    {
+      "cidr": "13.248.212.0/22",
+      "provider": "Signal",
+      "service": "Signal Messenger",
+      "type": "Communication"
+    },
+    {
+      "cidr": "199.203.0.0/16",
+      "provider": "Bezeq",
+      "service": "Bezeq International",
+      "type": "ISP"
+    },
+    {
+      "cidr": "212.235.0.0/16",
+      "provider": "Bezeq",
+      "service": "Bezeq",
+      "type": "ISP"
+    },
+    {
+      "cidr": "212.179.0.0/16",
+      "provider": "HOT",
+      "service": "HOT Telecom",
+      "type": "ISP"
+    },
+    {
+      "cidr": "213.57.0.0/16",
+      "provider": "Partner",
+      "service": "Partner Communications",
+      "type": "ISP"
+    },
+    {
+      "cidr": "87.69.0.0/16",
+      "provider": "Hot Mobile",
+      "service": "Hot Mobile",
+      "type": "ISP"
+    },
+    {
+      "cidr": "80.179.0.0/16",
+      "provider": "Cellcom",
+      "service": "Cellcom Israel",
+      "type": "ISP"
+    }
+  ],
+  "rdns_patterns": [
+    {
+      "pattern": "\\.cloudfront\\.net$",
+      "provider": "AWS",
+      "service": "CloudFront",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.amazonaws\\.com$",
+      "provider": "AWS",
+      "service": "EC2/S3",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.compute\\.amazonaws\\.com$",
+      "provider": "AWS",
+      "service": "EC2",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.s3\\.amazonaws\\.com$",
+      "provider": "AWS",
+      "service": "S3",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.elb\\.amazonaws\\.com$",
+      "provider": "AWS",
+      "service": "Elastic LB",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.azure\\.com$",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.azurewebsites\\.net$",
+      "provider": "Microsoft",
+      "service": "Azure App",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.cloudapp\\.azure\\.com$",
+      "provider": "Microsoft",
+      "service": "Azure",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.microsoft\\.com$",
+      "provider": "Microsoft",
+      "service": "Microsoft Corp",
+      "type": "Software Vendor"
+    },
+    {
+      "pattern": "\\.live\\.com$",
+      "provider": "Microsoft",
+      "service": "Microsoft Live",
+      "type": "Web"
+    },
+    {
+      "pattern": "\\.office\\.com$",
+      "provider": "Microsoft",
+      "service": "Office 365",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.outlook\\.com$",
+      "provider": "Microsoft",
+      "service": "Outlook",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.teams\\.microsoft\\.com$",
+      "provider": "Microsoft",
+      "service": "Microsoft Teams",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.googleusercontent\\.com$",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.bc\\.googleusercontent\\.com$",
+      "provider": "Google",
+      "service": "Google Cloud",
+      "type": "Cloud Compute"
+    },
+    {
+      "pattern": "\\.googlevideo\\.com$",
+      "provider": "YouTube",
+      "service": "YouTube CDN",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.google\\.com$",
+      "provider": "Google",
+      "service": "Google Services",
+      "type": "Web"
+    },
+    {
+      "pattern": "\\.googleapis\\.com$",
+      "provider": "Google",
+      "service": "Google APIs",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.gstatic\\.com$",
+      "provider": "Google",
+      "service": "Google Static",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.googleadservices\\.com$",
+      "provider": "Google",
+      "service": "Google Ads",
+      "type": "Advertising"
+    },
+    {
+      "pattern": "\\.doubleclick\\.net$",
+      "provider": "Google",
+      "service": "DoubleClick",
+      "type": "Advertising"
+    },
+    {
+      "pattern": "\\.cloudflare\\.com$",
+      "provider": "Cloudflare",
+      "service": "Cloudflare",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.cdn\\.cloudflare\\.net$",
+      "provider": "Cloudflare",
+      "service": "Cloudflare CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "akamaiedge\\.net$",
+      "provider": "Akamai",
+      "service": "Akamai Edge",
+      "type": "CDN"
+    },
+    {
+      "pattern": "akamaitechnologies\\.com$",
+      "provider": "Akamai",
+      "service": "Akamai",
+      "type": "CDN"
+    },
+    {
+      "pattern": "akamaihd\\.net$",
+      "provider": "Akamai",
+      "service": "Akamai HD",
+      "type": "CDN"
+    },
+    {
+      "pattern": "akamaized\\.net$",
+      "provider": "Akamai",
+      "service": "Akamai",
+      "type": "CDN"
+    },
+    {
+      "pattern": "fastly\\.net$",
+      "provider": "Fastly",
+      "service": "Fastly CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "fastlylb\\.net$",
+      "provider": "Fastly",
+      "service": "Fastly LB",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.nflxvideo\\.net$",
+      "provider": "Netflix",
+      "service": "Netflix Video",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.nflxso\\.net$",
+      "provider": "Netflix",
+      "service": "Netflix",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.netflix\\.com$",
+      "provider": "Netflix",
+      "service": "Netflix",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.youtube\\.com$",
+      "provider": "YouTube",
+      "service": "YouTube",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.ytimg\\.com$",
+      "provider": "YouTube",
+      "service": "YouTube Static",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.facebook\\.com$",
+      "provider": "Meta",
+      "service": "Facebook",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.fbcdn\\.net$",
+      "provider": "Meta",
+      "service": "Facebook CDN",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.instagram\\.com$",
+      "provider": "Meta",
+      "service": "Instagram",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.whatsapp\\.net$",
+      "provider": "Meta",
+      "service": "WhatsApp",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.cdninstagram\\.com$",
+      "provider": "Meta",
+      "service": "Instagram CDN",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.apple\\.com$",
+      "provider": "Apple",
+      "service": "Apple",
+      "type": "Software Vendor"
+    },
+    {
+      "pattern": "\\.icloud\\.com$",
+      "provider": "Apple",
+      "service": "iCloud",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.itunes\\.apple\\.com$",
+      "provider": "Apple",
+      "service": "iTunes",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.aaplimg\\.com$",
+      "provider": "Apple",
+      "service": "Apple CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.twimg\\.com$",
+      "provider": "Twitter/X",
+      "service": "Twitter Images",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.twitter\\.com$",
+      "provider": "Twitter/X",
+      "service": "Twitter/X",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.spotify\\.com$",
+      "provider": "Spotify",
+      "service": "Spotify",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.scdn\\.co$",
+      "provider": "Spotify",
+      "service": "Spotify CDN",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.zoom\\.us$",
+      "provider": "Zoom",
+      "service": "Zoom",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.zoomgov\\.com$",
+      "provider": "Zoom",
+      "service": "Zoom",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.slack\\.com$",
+      "provider": "Slack",
+      "service": "Slack",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.slack-edge\\.com$",
+      "provider": "Slack",
+      "service": "Slack",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.discord\\.com$",
+      "provider": "Discord",
+      "service": "Discord",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.discordapp\\.net$",
+      "provider": "Discord",
+      "service": "Discord",
+      "type": "Communications"
+    },
+    {
+      "pattern": "\\.twitch\\.tv$",
+      "provider": "Twitch",
+      "service": "Twitch",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.ttvnw\\.net$",
+      "provider": "Twitch",
+      "service": "Twitch Video",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.reddit\\.com$",
+      "provider": "Reddit",
+      "service": "Reddit",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.redd\\.it$",
+      "provider": "Reddit",
+      "service": "Reddit Static",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.tiktokcdn\\.com$",
+      "provider": "TikTok",
+      "service": "TikTok CDN",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.tiktok\\.com$",
+      "provider": "TikTok",
+      "service": "TikTok",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.bytedance\\.com$",
+      "provider": "ByteDance",
+      "service": "ByteDance",
+      "type": "Software Vendor"
+    },
+    {
+      "pattern": "\\.linkedin\\.com$",
+      "provider": "LinkedIn",
+      "service": "LinkedIn",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.licdn\\.com$",
+      "provider": "LinkedIn",
+      "service": "LinkedIn CDN",
+      "type": "Social Media"
+    },
+    {
+      "pattern": "\\.opendns\\.com$",
+      "provider": "OpenDNS",
+      "service": "OpenDNS",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.quad9\\.net$",
+      "provider": "Quad9",
+      "service": "Quad9 DNS",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.github\\.com$",
+      "provider": "GitHub",
+      "service": "GitHub",
+      "type": "Developer"
+    },
+    {
+      "pattern": "\\.githubusercontent\\.com$",
+      "provider": "GitHub",
+      "service": "GitHub Content",
+      "type": "Developer"
+    },
+    {
+      "pattern": "\\.ynet\\.co\\.il$",
+      "provider": "Ynet",
+      "service": "Ynet News",
+      "type": "News (IL)"
+    },
+    {
+      "pattern": "\\.walla\\.co\\.il$",
+      "provider": "Walla",
+      "service": "Walla News",
+      "type": "News (IL)"
+    },
+    {
+      "pattern": "\\.haaretz\\.co\\.il$",
+      "provider": "Haaretz",
+      "service": "Haaretz",
+      "type": "News (IL)"
+    },
+    {
+      "pattern": "\\.calcalist\\.co\\.il$",
+      "provider": "Calcalist",
+      "service": "Calcalist",
+      "type": "News (IL)"
+    },
+    {
+      "pattern": "\\.bezeq\\.co\\.il$",
+      "provider": "Bezeq",
+      "service": "Bezeq ISP",
+      "type": "ISP (IL)"
+    },
+    {
+      "pattern": "\\.cellcom\\.co\\.il$",
+      "provider": "Cellcom",
+      "service": "Cellcom ISP",
+      "type": "ISP (IL)"
+    },
+    {
+      "pattern": "\\.partner\\.co\\.il$",
+      "provider": "Partner",
+      "service": "Partner ISP",
+      "type": "ISP (IL)"
+    },
+    {
+      "pattern": "\\.hot\\.net\\.il$",
+      "provider": "HOT",
+      "service": "HOT ISP",
+      "type": "ISP (IL)"
+    },
+    {
+      "pattern": "\\.digitalocean\\.com$",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.do-user-fra\\d+\\.com$",
+      "provider": "DigitalOcean",
+      "service": "DigitalOcean (EU)",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.linode\\.com$",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.linodeusercontent\\.com$",
+      "provider": "Linode",
+      "service": "Linode Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.vultr\\.com$",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.vultrusercontent\\.com$",
+      "provider": "Vultr",
+      "service": "Vultr Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.hetzner\\.com$",
+      "provider": "Hetzner",
+      "service": "Hetzner Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.your-server\\.de$",
+      "provider": "Hetzner",
+      "service": "Hetzner Server",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.ovh\\.net$",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.ovhcloud\\.com$",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.ovh\\.com$",
+      "provider": "OVH",
+      "service": "OVH Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.oraclecloud\\.com$",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.oraclevcn\\.com$",
+      "provider": "Oracle",
+      "service": "Oracle Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.aliyun\\.com$",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.aliyuncs\\.com$",
+      "provider": "Alibaba",
+      "service": "Alibaba Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.alicdn\\.com$",
+      "provider": "Alibaba",
+      "service": "Alibaba CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.tencent\\.com$",
+      "provider": "Tencent",
+      "service": "Tencent Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.tencentcloud\\.com$",
+      "provider": "Tencent",
+      "service": "Tencent Cloud",
+      "type": "Cloud"
+    },
+    {
+      "pattern": "\\.qq\\.com$",
+      "provider": "Tencent",
+      "service": "QQ/Tencent",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.vercel\\.app$",
+      "provider": "Vercel",
+      "service": "Vercel",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.vercel-dns\\.com$",
+      "provider": "Vercel",
+      "service": "Vercel",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.netlify\\.app$",
+      "provider": "Netlify",
+      "service": "Netlify",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.netlify\\.com$",
+      "provider": "Netlify",
+      "service": "Netlify",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.herokuapp\\.com$",
+      "provider": "Heroku",
+      "service": "Heroku",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.render\\.com$",
+      "provider": "Render",
+      "service": "Render",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.railway\\.app$",
+      "provider": "Railway",
+      "service": "Railway",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.fly\\.dev$",
+      "provider": "Fly.io",
+      "service": "Fly.io",
+      "type": "Hosting"
+    },
+    {
+      "pattern": "\\.b-cdn\\.net$",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.bunnycdn\\.com$",
+      "provider": "Bunny.net",
+      "service": "Bunny CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.kxcdn\\.com$",
+      "provider": "KeyCDN",
+      "service": "KeyCDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.jsdelivr\\.net$",
+      "provider": "jsDelivr",
+      "service": "jsDelivr",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.cdn77\\.org$",
+      "provider": "CDN77",
+      "service": "CDN77",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.cdn77\\.com$",
+      "provider": "CDN77",
+      "service": "CDN77",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.stackpathcdn\\.com$",
+      "provider": "StackPath",
+      "service": "StackPath CDN",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.stackpathdns\\.com$",
+      "provider": "StackPath",
+      "service": "StackPath",
+      "type": "CDN"
+    },
+    {
+      "pattern": "\\.dropbox\\.com$",
+      "provider": "Dropbox",
+      "service": "Dropbox",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.dbox\\.com$",
+      "provider": "Dropbox",
+      "service": "Dropbox",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.box\\.com$",
+      "provider": "Box",
+      "service": "Box",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.boxcdn\\.net$",
+      "provider": "Box",
+      "service": "Box CDN",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.notion\\.so$",
+      "provider": "Notion",
+      "service": "Notion",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.figma\\.com$",
+      "provider": "Figma",
+      "service": "Figma",
+      "type": "Design"
+    },
+    {
+      "pattern": "\\.canva\\.com$",
+      "provider": "Canva",
+      "service": "Canva",
+      "type": "Design"
+    },
+    {
+      "pattern": "\\.adobe\\.com$",
+      "provider": "Adobe",
+      "service": "Adobe Cloud",
+      "type": "Design"
+    },
+    {
+      "pattern": "\\.adobeexc\\.com$",
+      "provider": "Adobe",
+      "service": "Adobe Experience",
+      "type": "Design"
+    },
+    {
+      "pattern": "\\.creativecloud\\.com$",
+      "provider": "Adobe",
+      "service": "Adobe Creative Cloud",
+      "type": "Design"
+    },
+    {
+      "pattern": "\\.asana\\.com$",
+      "provider": "Asana",
+      "service": "Asana",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.trello\\.com$",
+      "provider": "Atlassian",
+      "service": "Trello",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.atlassian\\.com$",
+      "provider": "Atlassian",
+      "service": "Atlassian",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.atlassian\\.net$",
+      "provider": "Atlassian",
+      "service": "Atlassian Cloud",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.bitbucket\\.org$",
+      "provider": "Atlassian",
+      "service": "Bitbucket",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.monday\\.com$",
+      "provider": "Monday",
+      "service": "Monday.com",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.airtable\\.com$",
+      "provider": "Airtable",
+      "service": "Airtable",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.clickup\\.com$",
+      "provider": "ClickUp",
+      "service": "ClickUp",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.zendesk\\.com$",
+      "provider": "Zendesk",
+      "service": "Zendesk",
+      "type": "Support"
+    },
+    {
+      "pattern": "\\.intercom\\.io$",
+      "provider": "Intercom",
+      "service": "Intercom",
+      "type": "Support"
+    },
+    {
+      "pattern": "\\.salesforce\\.com$",
+      "provider": "Salesforce",
+      "service": "Salesforce",
+      "type": "CRM"
+    },
+    {
+      "pattern": "\\.force\\.com$",
+      "provider": "Salesforce",
+      "service": "Salesforce",
+      "type": "CRM"
+    },
+    {
+      "pattern": "\\.hubspot\\.com$",
+      "provider": "HubSpot",
+      "service": "HubSpot",
+      "type": "CRM"
+    },
+    {
+      "pattern": "\\.hs-sites\\.com$",
+      "provider": "HubSpot",
+      "service": "HubSpot",
+      "type": "CRM"
+    },
+    {
+      "pattern": "\\.servicenow\\.com$",
+      "provider": "ServiceNow",
+      "service": "ServiceNow",
+      "type": "SaaS"
+    },
+    {
+      "pattern": "\\.protonmail\\.ch$",
+      "provider": "Proton",
+      "service": "ProtonMail",
+      "type": "Email"
+    },
+    {
+      "pattern": "\\.proton\\.me$",
+      "provider": "Proton",
+      "service": "Proton",
+      "type": "Email"
+    },
+    {
+      "pattern": "\\.yahoo\\.com$",
+      "provider": "Yahoo",
+      "service": "Yahoo",
+      "type": "Email/Web"
+    },
+    {
+      "pattern": "\\.yahoodns\\.net$",
+      "provider": "Yahoo",
+      "service": "Yahoo",
+      "type": "Email/Web"
+    },
+    {
+      "pattern": "\\.aol\\.com$",
+      "provider": "Yahoo",
+      "service": "AOL/Yahoo",
+      "type": "Email"
+    },
+    {
+      "pattern": "\\.fastmail\\.com$",
+      "provider": "Fastmail",
+      "service": "Fastmail",
+      "type": "Email"
+    },
+    {
+      "pattern": "\\.yandex\\.net$",
+      "provider": "Yandex",
+      "service": "Yandex",
+      "type": "Email/Web"
+    },
+    {
+      "pattern": "\\.zoho\\.com$",
+      "provider": "Zoho",
+      "service": "Zoho",
+      "type": "Email/SaaS"
+    },
+    {
+      "pattern": "\\.disney-plus\\.net$",
+      "provider": "Disney",
+      "service": "Disney+",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.bamgrid\\.com$",
+      "provider": "Disney",
+      "service": "Disney+ (BAMTech)",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.disneyplus\\.com$",
+      "provider": "Disney",
+      "service": "Disney+",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.disney\\.com$",
+      "provider": "Disney",
+      "service": "Disney",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.hulu\\.com$",
+      "provider": "Hulu",
+      "service": "Hulu",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.huluim\\.com$",
+      "provider": "Hulu",
+      "service": "Hulu Images",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.hbomax\\.com$",
+      "provider": "WarnerBros",
+      "service": "HBO Max",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.max\\.com$",
+      "provider": "WarnerBros",
+      "service": "Max (HBO)",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.paramount\\.com$",
+      "provider": "Paramount",
+      "service": "Paramount+",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.pluto\\.tv$",
+      "provider": "Paramount",
+      "service": "Pluto TV",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.peacocktv\\.com$",
+      "provider": "NBCUniversal",
+      "service": "Peacock",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.plex\\.tv$",
+      "provider": "Plex",
+      "service": "Plex",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.plex\\.direct$",
+      "provider": "Plex",
+      "service": "Plex (P2P)",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.tv\\.apple\\.com$",
+      "provider": "Apple",
+      "service": "Apple TV+",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.crunchyroll\\.com$",
+      "provider": "Crunchyroll",
+      "service": "Crunchyroll",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.viki\\.com$",
+      "provider": "Rakuten",
+      "service": "Viki",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.vudu\\.com$",
+      "provider": "Vudu",
+      "service": "Vudu",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.music\\.apple\\.com$",
+      "provider": "Apple",
+      "service": "Apple Music",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.pandora\\.com$",
+      "provider": "Pandora",
+      "service": "Pandora",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.soundcloud\\.com$",
+      "provider": "SoundCloud",
+      "service": "SoundCloud",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.sndcdn\\.com$",
+      "provider": "SoundCloud",
+      "service": "SoundCloud CDN",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.tidal\\.com$",
+      "provider": "Tidal",
+      "service": "Tidal",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.deezer\\.com$",
+      "provider": "Deezer",
+      "service": "Deezer",
+      "type": "Music"
+    },
+    {
+      "pattern": "\\.audible\\.com$",
+      "provider": "Audible",
+      "service": "Audible",
+      "type": "Audiobook"
+    },
+    {
+      "pattern": "\\.steamcontent\\.com$",
+      "provider": "Valve",
+      "service": "Steam CDN",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.steampowered\\.com$",
+      "provider": "Valve",
+      "service": "Steam",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.steamserver\\.net$",
+      "provider": "Valve",
+      "service": "Steam Servers",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.steamstatic\\.com$",
+      "provider": "Valve",
+      "service": "Steam Static",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.epicgames\\.com$",
+      "provider": "Epic Games",
+      "service": "Epic Games",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.unrealengine\\.com$",
+      "provider": "Epic Games",
+      "service": "Unreal Engine",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.ea\\.com$",
+      "provider": "EA",
+      "service": "Electronic Arts",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.easports\\.com$",
+      "provider": "EA",
+      "service": "EA Sports",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.origin\\.com$",
+      "provider": "EA",
+      "service": "EA Origin",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.activision\\.com$",
+      "provider": "Activision",
+      "service": "Activision",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.blizzard\\.com$",
+      "provider": "Activision",
+      "service": "Battle.net",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.battle\\.net$",
+      "provider": "Activision",
+      "service": "Battle.net",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.ubisoft\\.com$",
+      "provider": "Ubisoft",
+      "service": "Ubisoft",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.ubi\\.com$",
+      "provider": "Ubisoft",
+      "service": "Ubisoft",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.riotgames\\.com$",
+      "provider": "Riot Games",
+      "service": "Riot Games",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.leagueoflegends\\.com$",
+      "provider": "Riot Games",
+      "service": "League of Legends",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.roblox\\.com$",
+      "provider": "Roblox",
+      "service": "Roblox",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.rbxcdn\\.com$",
+      "provider": "Roblox",
+      "service": "Roblox CDN",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.minecraft\\.net$",
+      "provider": "Microsoft",
+      "service": "Minecraft",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.mojang\\.com$",
+      "provider": "Microsoft",
+      "service": "Mojang/Minecraft",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.nintendo\\.net$",
+      "provider": "Nintendo",
+      "service": "Nintendo Network",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.nintendo\\.com$",
+      "provider": "Nintendo",
+      "service": "Nintendo",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.playstation\\.net$",
+      "provider": "Sony",
+      "service": "PlayStation Network",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.sonyentertainmentnetwork\\.com$",
+      "provider": "Sony",
+      "service": "Sony Entertainment",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.xboxlive\\.com$",
+      "provider": "Microsoft",
+      "service": "Xbox Live",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.gamertag\\.xboxlive\\.com$",
+      "provider": "Microsoft",
+      "service": "Xbox Live",
+      "type": "Gaming"
+    },
+    {
+      "pattern": "\\.telegram\\.org$",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.t\\.me$",
+      "provider": "Telegram",
+      "service": "Telegram",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.tdesktop\\.com$",
+      "provider": "Telegram",
+      "service": "Telegram Desktop",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.signal\\.org$",
+      "provider": "Signal",
+      "service": "Signal Messenger",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.line\\.me$",
+      "provider": "Line",
+      "service": "Line Messenger",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.line-apps\\.com$",
+      "provider": "Line",
+      "service": "Line Messenger",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.naver\\.com$",
+      "provider": "Naver",
+      "service": "Naver",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.kakao\\.com$",
+      "provider": "Kakao",
+      "service": "KakaoTalk",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.viber\\.com$",
+      "provider": "Viber",
+      "service": "Viber",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.wechat\\.com$",
+      "provider": "Tencent",
+      "service": "WeChat",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.weixin\\.com$",
+      "provider": "Tencent",
+      "service": "WeChat",
+      "type": "Communication"
+    },
+    {
+      "pattern": "\\.webex\\.com$",
+      "provider": "Cisco",
+      "service": "Webex",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.gotomeeting\\.com$",
+      "provider": "LogMeIn",
+      "service": "GoToMeeting",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.gotomeet\\.me$",
+      "provider": "LogMeIn",
+      "service": "GoToMeeting",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.bluejeans\\.com$",
+      "provider": "Verizon",
+      "service": "BlueJeans",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.ringcentral\\.com$",
+      "provider": "RingCentral",
+      "service": "RingCentral",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.whereby\\.com$",
+      "provider": "Whereby",
+      "service": "Whereby",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.jitsi\\.net$",
+      "provider": "Jitsi",
+      "service": "Jitsi",
+      "type": "Conferencing"
+    },
+    {
+      "pattern": "\\.nordvpn\\.com$",
+      "provider": "NordVPN",
+      "service": "NordVPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.expressvpn\\.com$",
+      "provider": "ExpressVPN",
+      "service": "ExpressVPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.protonvpn\\.com$",
+      "provider": "Proton",
+      "service": "ProtonVPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.protonvpn\\.ch$",
+      "provider": "Proton",
+      "service": "ProtonVPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.surfshark\\.com$",
+      "provider": "Surfshark",
+      "service": "Surfshark",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.mullvad\\.net$",
+      "provider": "Mullvad",
+      "service": "Mullvad VPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.cyberghostvpn\\.com$",
+      "provider": "CyberGhost",
+      "service": "CyberGhost VPN",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.pia\\.com$",
+      "provider": "PIA",
+      "service": "Private Internet Access",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.windscribe\\.com$",
+      "provider": "Windscribe",
+      "service": "Windscribe",
+      "type": "VPN"
+    },
+    {
+      "pattern": "\\.adguard-dns\\.com$",
+      "provider": "AdGuard",
+      "service": "AdGuard DNS",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.adguard\\.com$",
+      "provider": "AdGuard",
+      "service": "AdGuard",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.nextdns\\.io$",
+      "provider": "NextDNS",
+      "service": "NextDNS",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.cleanbrowsing\\.org$",
+      "provider": "CleanBrowsing",
+      "service": "CleanBrowsing",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.controld\\.com$",
+      "provider": "Control D",
+      "service": "Control D DNS",
+      "type": "DNS"
+    },
+    {
+      "pattern": "\\.coinbase\\.com$",
+      "provider": "Coinbase",
+      "service": "Coinbase",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.binance\\.com$",
+      "provider": "Binance",
+      "service": "Binance",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.kraken\\.com$",
+      "provider": "Kraken",
+      "service": "Kraken",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.crypto\\.com$",
+      "provider": "Crypto.com",
+      "service": "Crypto.com",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.duckduckgo\\.com$",
+      "provider": "DuckDuckGo",
+      "service": "DuckDuckGo",
+      "type": "Search"
+    },
+    {
+      "pattern": "\\.duckduckgo-owned-servers\\.com$",
+      "provider": "DuckDuckGo",
+      "service": "DuckDuckGo",
+      "type": "Search"
+    },
+    {
+      "pattern": "\\.ecosia\\.org$",
+      "provider": "Ecosia",
+      "service": "Ecosia",
+      "type": "Search"
+    },
+    {
+      "pattern": "\\.startpage\\.com$",
+      "provider": "Startpage",
+      "service": "Startpage",
+      "type": "Search"
+    },
+    {
+      "pattern": "\\.brave\\.com$",
+      "provider": "Brave",
+      "service": "Brave Search",
+      "type": "Search"
+    },
+    {
+      "pattern": "\\.gitlab\\.com$",
+      "provider": "GitLab",
+      "service": "GitLab",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.gitlab\\.io$",
+      "provider": "GitLab",
+      "service": "GitLab Pages",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.npmjs\\.org$",
+      "provider": "GitHub",
+      "service": "npm Registry",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.npmjs\\.com$",
+      "provider": "GitHub",
+      "service": "npm Registry",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.pypi\\.org$",
+      "provider": "PyPI",
+      "service": "Python Package Index",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.pythonhosted\\.org$",
+      "provider": "PyPI",
+      "service": "Python Package Index",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.docker\\.com$",
+      "provider": "Docker",
+      "service": "Docker Hub",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.dockerhub\\.io$",
+      "provider": "Docker",
+      "service": "Docker Hub",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.docker\\.io$",
+      "provider": "Docker",
+      "service": "Docker",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.crates\\.io$",
+      "provider": "Rust",
+      "service": "Rust crates.io",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.rubygems\\.org$",
+      "provider": "Ruby",
+      "service": "RubyGems",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.huggingface\\.co$",
+      "provider": "Hugging Face",
+      "service": "Hugging Face",
+      "type": "AI/ML"
+    },
+    {
+      "pattern": "\\.anaconda\\.com$",
+      "provider": "Anaconda",
+      "service": "Anaconda",
+      "type": "DevOps"
+    },
+    {
+      "pattern": "\\.openai\\.com$",
+      "provider": "OpenAI",
+      "service": "OpenAI",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.chatgpt\\.com$",
+      "provider": "OpenAI",
+      "service": "ChatGPT",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.anthropic\\.com$",
+      "provider": "Anthropic",
+      "service": "Anthropic",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.claude\\.ai$",
+      "provider": "Anthropic",
+      "service": "Claude",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.gemini\\.google\\.com$",
+      "provider": "Google",
+      "service": "Gemini",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.bard\\.google\\.com$",
+      "provider": "Google",
+      "service": "Bard",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.midjourney\\.com$",
+      "provider": "Midjourney",
+      "service": "Midjourney",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.stability\\.ai$",
+      "provider": "Stability AI",
+      "service": "Stability AI",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.replicate\\.com$",
+      "provider": "Replicate",
+      "service": "Replicate",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.perplexity\\.ai$",
+      "provider": "Perplexity",
+      "service": "Perplexity AI",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.character\\.ai$",
+      "provider": "Character.AI",
+      "service": "Character.AI",
+      "type": "AI"
+    },
+    {
+      "pattern": "\\.bankhapoalim\\.co\\.il$",
+      "provider": "Bank Hapoalim",
+      "service": "Bank Hapoalim",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.poalim\\.co\\.il$",
+      "provider": "Bank Hapoalim",
+      "service": "Bank Hapoalim",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.bankleumi\\.co\\.il$",
+      "provider": "Bank Leumi",
+      "service": "Bank Leumi",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.leumi\\.co\\.il$",
+      "provider": "Bank Leumi",
+      "service": "Bank Leumi",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.mizrahi-tefahot\\.co\\.il$",
+      "provider": "Mizrahi",
+      "service": "Mizrahi-Tefahot Bank",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.discountbank\\.co\\.il$",
+      "provider": "Discount",
+      "service": "Discount Bank",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.fibi\\.co\\.il$",
+      "provider": "FIBI",
+      "service": "FIBI Bank",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.bitpayments\\.co\\.il$",
+      "provider": "bit",
+      "service": "bit (Hapoalim)",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.paybox\\.co\\.il$",
+      "provider": "paybox",
+      "service": "paybox (Discount)",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.btl\\.gov\\.il$",
+      "provider": "Bituach Leumi",
+      "service": "Bituach Leumi",
+      "type": "Government"
+    },
+    {
+      "pattern": "\\.gov\\.il$",
+      "provider": "Israel Gov",
+      "service": "Israeli Government",
+      "type": "Government"
+    },
+    {
+      "pattern": "\\.health\\.gov\\.il$",
+      "provider": "Israel MoH",
+      "service": "Ministry of Health",
+      "type": "Government"
+    },
+    {
+      "pattern": "\\.misim\\.gov\\.il$",
+      "provider": "Tax Authority",
+      "service": "Israeli Tax Authority",
+      "type": "Government"
+    },
+    {
+      "pattern": "\\.yad2\\.co\\.il$",
+      "provider": "Yad2",
+      "service": "Yad2",
+      "type": "Classifieds"
+    },
+    {
+      "pattern": "\\.zap\\.co\\.il$",
+      "provider": "Zap",
+      "service": "Zap",
+      "type": "Shopping"
+    },
+    {
+      "pattern": "\\.wolt\\.com$",
+      "provider": "Wolt",
+      "service": "Wolt",
+      "type": "Delivery"
+    },
+    {
+      "pattern": "\\.tenbis\\.co\\.il$",
+      "provider": "10bis",
+      "service": "10bis",
+      "type": "Delivery"
+    },
+    {
+      "pattern": "\\.cibus\\.co\\.il$",
+      "provider": "Cibus",
+      "service": "Cibus",
+      "type": "Delivery"
+    },
+    {
+      "pattern": "\\.mako\\.co\\.il$",
+      "provider": "Mako",
+      "service": "Mako News",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.n12\\.co\\.il$",
+      "provider": "N12",
+      "service": "N12 News",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.globes\\.co\\.il$",
+      "provider": "Globes",
+      "service": "Globes",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.themarker\\.com$",
+      "provider": "TheMarker",
+      "service": "TheMarker",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.timesofisrael\\.com$",
+      "provider": "ToI",
+      "service": "Times of Israel",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.kan\\.org\\.il$",
+      "provider": "Kan",
+      "service": "Kan Public Broadcasting",
+      "type": "News"
+    },
+    {
+      "pattern": "\\.013net\\.net$",
+      "provider": "013",
+      "service": "013 ISP",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.netvision\\.net\\.il$",
+      "provider": "Netvision",
+      "service": "Netvision",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.012net\\.net$",
+      "provider": "012",
+      "service": "012 ISP",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.018\\.net\\.il$",
+      "provider": "018",
+      "service": "018 ISP",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.cellcom\\.net\\.il$",
+      "provider": "Cellcom",
+      "service": "Cellcom",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.bezeq\\.com$",
+      "provider": "Bezeq",
+      "service": "Bezeq",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.bezeqint\\.net$",
+      "provider": "Bezeq",
+      "service": "Bezeq International",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.sting\\.tv$",
+      "provider": "Yes/Sting",
+      "service": "Sting TV (Yes)",
+      "type": "Streaming"
+    },
+    {
+      "pattern": "\\.yes\\.co\\.il$",
+      "provider": "Yes",
+      "service": "Yes (Cellcom)",
+      "type": "ISP"
+    },
+    {
+      "pattern": "\\.paypal\\.com$",
+      "provider": "PayPal",
+      "service": "PayPal",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.paypalobjects\\.com$",
+      "provider": "PayPal",
+      "service": "PayPal Assets",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.stripe\\.com$",
+      "provider": "Stripe",
+      "service": "Stripe",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.venmo\\.com$",
+      "provider": "PayPal",
+      "service": "Venmo",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.cash\\.app$",
+      "provider": "Block",
+      "service": "Cash App",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.revolut\\.com$",
+      "provider": "Revolut",
+      "service": "Revolut",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.wise\\.com$",
+      "provider": "Wise",
+      "service": "Wise",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.robinhood\\.com$",
+      "provider": "Robinhood",
+      "service": "Robinhood",
+      "type": "Finance"
+    },
+    {
+      "pattern": "\\.evernote\\.com$",
+      "provider": "Evernote",
+      "service": "Evernote",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.miro\\.com$",
+      "provider": "Miro",
+      "service": "Miro",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.mural\\.co$",
+      "provider": "Mural",
+      "service": "Mural",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.calendly\\.com$",
+      "provider": "Calendly",
+      "service": "Calendly",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.docusign\\.com$",
+      "provider": "DocuSign",
+      "service": "DocuSign",
+      "type": "Productivity"
+    },
+    {
+      "pattern": "\\.shopify\\.com$",
+      "provider": "Shopify",
+      "service": "Shopify",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.myshopify\\.com$",
+      "provider": "Shopify",
+      "service": "Shopify Stores",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.shopifycdn\\.com$",
+      "provider": "Shopify",
+      "service": "Shopify CDN",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.aliexpress\\.com$",
+      "provider": "Alibaba",
+      "service": "AliExpress",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.alibaba\\.com$",
+      "provider": "Alibaba",
+      "service": "Alibaba.com",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.ebay\\.com$",
+      "provider": "eBay",
+      "service": "eBay",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.etsy\\.com$",
+      "provider": "Etsy",
+      "service": "Etsy",
+      "type": "E-commerce"
+    },
+    {
+      "pattern": "\\.google-analytics\\.com$",
+      "provider": "Google",
+      "service": "Google Analytics",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.googletagmanager\\.com$",
+      "provider": "Google",
+      "service": "Google Tag Manager",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.mixpanel\\.com$",
+      "provider": "Mixpanel",
+      "service": "Mixpanel",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.segment\\.com$",
+      "provider": "Twilio",
+      "service": "Segment",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.amplitude\\.com$",
+      "provider": "Amplitude",
+      "service": "Amplitude",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.hotjar\\.com$",
+      "provider": "Hotjar",
+      "service": "Hotjar",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.fullstory\\.com$",
+      "provider": "FullStory",
+      "service": "FullStory",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.logrocket\\.com$",
+      "provider": "LogRocket",
+      "service": "LogRocket",
+      "type": "Analytics"
+    },
+    {
+      "pattern": "\\.sentry\\.io$",
+      "provider": "Sentry",
+      "service": "Sentry",
+      "type": "Monitoring"
+    },
+    {
+      "pattern": "\\.datadoghq\\.com$",
+      "provider": "Datadog",
+      "service": "Datadog",
+      "type": "Monitoring"
+    },
+    {
+      "pattern": "\\.newrelic\\.com$",
+      "provider": "New Relic",
+      "service": "New Relic",
+      "type": "Monitoring"
+    },
+    {
+      "pattern": "\\.splunk\\.com$",
+      "provider": "Splunk",
+      "service": "Splunk",
+      "type": "Monitoring"
+    },
+    {
+      "pattern": "\\.airbnb\\.com$",
+      "provider": "Airbnb",
+      "service": "Airbnb",
+      "type": "Travel"
+    },
+    {
+      "pattern": "\\.booking\\.com$",
+      "provider": "Booking",
+      "service": "Booking.com",
+      "type": "Travel"
+    },
+    {
+      "pattern": "\\.uber\\.com$",
+      "provider": "Uber",
+      "service": "Uber",
+      "type": "Transport"
+    },
+    {
+      "pattern": "\\.lyft\\.com$",
+      "provider": "Lyft",
+      "service": "Lyft",
+      "type": "Transport"
+    },
+    {
+      "pattern": "\\.tinder\\.com$",
+      "provider": "Match",
+      "service": "Tinder",
+      "type": "Dating"
+    },
+    {
+      "pattern": "\\.bumble\\.com$",
+      "provider": "Bumble",
+      "service": "Bumble",
+      "type": "Dating"
+    },
+    {
+      "pattern": "\\.hinge\\.co$",
+      "provider": "Match",
+      "service": "Hinge",
+      "type": "Dating"
+    },
+    {
+      "pattern": "\\.mega\\.nz$",
+      "provider": "MEGA",
+      "service": "MEGA",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.mega\\.co\\.nz$",
+      "provider": "MEGA",
+      "service": "MEGA",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.icloud\\.com\\.akadns\\.net$",
+      "provider": "Apple",
+      "service": "iCloud (Akamai)",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.pcloud\\.com$",
+      "provider": "pCloud",
+      "service": "pCloud",
+      "type": "Cloud Storage"
+    },
+    {
+      "pattern": "\\.sync\\.com$",
+      "provider": "Sync.com",
+      "service": "Sync.com",
+      "type": "Cloud Storage"
+    }
+  ]
+}
