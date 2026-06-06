@@ -1,0 +1,3589 @@
+{
+  "version": "2.0.0",
+  "description": "Expanded rule-based device classification: covers Apple/Samsung/Google phones+wearables, OnePlus/Xiaomi/Oppo/Vivo/Huawei/Honor/Motorola/Nokia/Realme, trackers (AirTag/Tile), wearables (Garmin/Polar/Suunto/WHOOP/Oura/Amazfit), streaming sticks (Roku/Apple TV 4K/Nvidia Shield/Fire TV Cube/Chromecast), TVs by brand (Vizio/Hisense/Philips/Sharp/TCL/Roku TV), consoles (Xbox Series/PS5/Quest), mesh routers (eero/Velop/Deco/Orbi/Nest WiFi/AmpliFi/AiMesh), lighting (Hue/LIFX/Nanoleaf/Govee/Kasa), vacuums (Roomba/Roborock/Eufy/Shark/Ecovacs), locks (August/Yale/Schlage/Level), hubs (SmartThings/Hubitat/HA/Aqara/Lutron), cameras (Blink/Ezviz/Tapo/Lorex/Swann/SimpliSafe/Vivint/ADT/Axis/Bosch), printers (Lexmark/Kyocera/Ricoh/Konica/OKI), VoIP (3CX/Grandstream/RingCentral/Vonage), POS (Toast/Clover/SumUp/Stripe/Lightspeed), vehicles (Ford/Toyota/Honda/Hyundai/Kia/Audi/VW/Volvo/Mercedes/Nissan/Polestar/Rivian), Pi-hole/RPi, hardware wallets.",
+  "hierarchy": {
+    "Computers": [
+      "Laptop",
+      "Desktop",
+      "Workstation"
+    ],
+    "Mobile": [
+      "Phone",
+      "Tablet",
+      "Wearable",
+      "E-Reader",
+      "Tracker"
+    ],
+    "Entertainment": [
+      "Smart TV",
+      "Streaming Stick",
+      "Gaming Console",
+      "Media Player",
+      "VR Headset"
+    ],
+    "Smart Home": [
+      "Smart Speaker",
+      "Smart Plug/Bulb",
+      "Thermostat",
+      "Smart Hub",
+      "Robot Vacuum",
+      "Smart Display",
+      "Smart Appliance",
+      "Smart Lighting"
+    ],
+    "Security & Cameras": [
+      "Security Camera",
+      "Video Doorbell",
+      "Alarm System",
+      "Smart Lock"
+    ],
+    "Network Infrastructure": [
+      "Router",
+      "Switch",
+      "Access Point",
+      "Modem",
+      "Network Storage"
+    ],
+    "Office": [
+      "Printer",
+      "Scanner",
+      "VoIP Phone",
+      "Conference System"
+    ],
+    "Medical": [
+      "Patient Monitor",
+      "Infusion Pump",
+      "Medical IoT",
+      "Imaging Device"
+    ],
+    "Point of Sale": [
+      "Card Reader",
+      "POS Terminal",
+      "Receipt Printer"
+    ],
+    "Industrial IoT": [
+      "Sensor",
+      "PLC/Controller",
+      "SCADA Device"
+    ],
+    "Vehicle": [
+      "Connected Car",
+      "Tesla",
+      "EV Charger"
+    ],
+    "Generic Endpoint": [
+      "Network Endpoint",
+      "Endpoint"
+    ]
+  },
+  "rules": [
+    {
+      "id": "apple-watch-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "watch"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Apple",
+        "model": "Apple Watch"
+      }
+    },
+    {
+      "id": "apple-iphone-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "iphone"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Apple",
+        "model": "iPhone"
+      }
+    },
+    {
+      "id": "apple-ipad-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "ipad"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Tablet",
+        "vendor": "Apple",
+        "model": "iPad"
+      }
+    },
+    {
+      "id": "apple-macbook-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "macbook"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Apple",
+        "model": "MacBook"
+      }
+    },
+    {
+      "id": "apple-imac-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "imac"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Apple",
+        "model": "iMac"
+      }
+    },
+    {
+      "id": "apple-mac-mini-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "mac.?mini"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Apple",
+        "model": "Mac mini"
+      }
+    },
+    {
+      "id": "apple-tv-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "apple.?tv"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Apple",
+        "model": "Apple TV"
+      }
+    },
+    {
+      "id": "apple-homepod-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "homepod"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Apple",
+        "model": "HomePod"
+      }
+    },
+    {
+      "id": "apple-iphone-port",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Apple",
+        "ports_any": [
+          62078
+        ]
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Apple",
+        "model": "iPhone (port-detected)"
+      }
+    },
+    {
+      "id": "samsung-galaxy-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Samsung",
+        "mdns_regex": "galaxy"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Samsung",
+        "model": "Galaxy phone"
+      }
+    },
+    {
+      "id": "samsung-tab-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Samsung",
+        "mdns_regex": "tab"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Tablet",
+        "vendor": "Samsung",
+        "model": "Galaxy Tab"
+      }
+    },
+    {
+      "id": "samsung-watch-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Samsung",
+        "mdns_regex": "watch|gear"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Samsung",
+        "model": "Galaxy Watch"
+      }
+    },
+    {
+      "id": "samsung-tv-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Samsung",
+        "dns_regex": "samsungcloudsolution|samsungelectronics|samsungotn|samsungtizen"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Samsung",
+        "model": "Samsung Smart TV"
+      }
+    },
+    {
+      "id": "samsung-fridge-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Samsung",
+        "dns_regex": "samsungiotcloud|smartthings"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Appliance",
+        "vendor": "Samsung",
+        "model": "Samsung SmartThings device"
+      }
+    },
+    {
+      "id": "google-pixel-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Google",
+        "mdns_regex": "pixel"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Google",
+        "model": "Pixel"
+      }
+    },
+    {
+      "id": "google-chromecast-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Google",
+        "mdns_regex": "chromecast|cast|chrome.?cast"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Google",
+        "model": "Chromecast"
+      }
+    },
+    {
+      "id": "google-cast-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Google",
+        "ports_any": [
+          8008,
+          8009,
+          8443
+        ]
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Google",
+        "model": "Chromecast (port-detected)"
+      }
+    },
+    {
+      "id": "google-home-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Google",
+        "mdns_regex": "home|nest"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Google",
+        "model": "Google Home / Nest"
+      }
+    },
+    {
+      "id": "google-nest-cam-dns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Google",
+        "dns_regex": "nestcam|dropcam"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Google",
+        "model": "Nest Cam"
+      }
+    },
+    {
+      "id": "google-thermostat-dns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Nest",
+        "dns_regex": "nest\\.com|nestlabs"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Thermostat",
+        "vendor": "Google Nest",
+        "model": "Nest Thermostat"
+      }
+    },
+    {
+      "id": "amazon-echo-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "mdns_regex": "echo|alexa"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Amazon",
+        "model": "Echo"
+      }
+    },
+    {
+      "id": "amazon-echo-dns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "dns_regex": "amazonalexa|alexa\\.amazon|avs-alexa"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Amazon",
+        "model": "Echo (DNS-detected)"
+      }
+    },
+    {
+      "id": "amazon-firetv-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "mdns_regex": "fire.?tv|firestick"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Amazon",
+        "model": "Fire TV"
+      }
+    },
+    {
+      "id": "amazon-firetv-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "dns_regex": "amazonvideo|primevideo|aiv-cdn"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Amazon",
+        "model": "Fire TV (DNS-detected)"
+      }
+    },
+    {
+      "id": "amazon-kindle-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "mdns_regex": "kindle"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "E-Reader",
+        "vendor": "Amazon",
+        "model": "Kindle"
+      }
+    },
+    {
+      "id": "amazon-ring-dns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Amazon",
+        "dns_regex": "ring\\.com|ringapp"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Video Doorbell",
+        "vendor": "Ring (Amazon)",
+        "model": "Ring Doorbell"
+      }
+    },
+    {
+      "id": "ring-vendor",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Ring"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Video Doorbell",
+        "vendor": "Ring",
+        "model": "Ring device"
+      }
+    },
+    {
+      "id": "roku-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Roku",
+        "mdns_regex": ".*"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Roku",
+        "model": "Roku"
+      }
+    },
+    {
+      "id": "roku-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Roku",
+        "ports_any": [
+          8060
+        ]
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Roku",
+        "model": "Roku (port-detected)"
+      }
+    },
+    {
+      "id": "roku-vendor",
+      "priority": 500,
+      "conditions": {
+        "vendor_match": "Roku"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Roku",
+        "model": "Roku"
+      }
+    },
+    {
+      "id": "sony-playstation-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Sony",
+        "mdns_regex": "playstation|ps[45]"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Sony",
+        "model": "PlayStation"
+      }
+    },
+    {
+      "id": "sony-playstation-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Sony",
+        "ports_any": [
+          9295,
+          9296,
+          9297,
+          9303
+        ]
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Sony",
+        "model": "PlayStation (port-detected)"
+      }
+    },
+    {
+      "id": "sony-bravia-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Sony",
+        "dns_regex": "bravia|sonyentertainmentnetwork"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Sony",
+        "model": "Bravia TV"
+      }
+    },
+    {
+      "id": "microsoft-xbox-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Microsoft",
+        "mdns_regex": "xbox"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Microsoft",
+        "model": "Xbox"
+      }
+    },
+    {
+      "id": "microsoft-xbox-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Microsoft",
+        "dns_regex": "xboxlive|xbox\\.com"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Microsoft",
+        "model": "Xbox (DNS-detected)"
+      }
+    },
+    {
+      "id": "microsoft-surface-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Microsoft",
+        "mdns_regex": "surface"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Microsoft",
+        "model": "Surface"
+      }
+    },
+    {
+      "id": "nintendo-switch",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Nintendo"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Nintendo",
+        "model": "Switch"
+      }
+    },
+    {
+      "id": "lg-tv-dns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "LG Electronics",
+        "dns_regex": "lge\\.com|lgtvsdp|lgsmartplatform|webostv"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "LG",
+        "model": "LG WebOS TV"
+      }
+    },
+    {
+      "id": "lg-tv-mdns",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "LG Electronics",
+        "mdns_regex": "webos|lgtv"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "LG",
+        "model": "LG WebOS TV"
+      }
+    },
+    {
+      "id": "tcl-tv",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "TCL",
+        "dns_regex": "tclhd|tclking|roku"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "TCL",
+        "model": "TCL Smart TV"
+      }
+    },
+    {
+      "id": "hisense-tv",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Hisense",
+        "dns_regex": ".*"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Hisense",
+        "model": "Hisense Smart TV"
+      }
+    },
+    {
+      "id": "vizio-tv",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "VIZIO"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Vizio",
+        "model": "Vizio SmartCast TV"
+      }
+    },
+    {
+      "id": "xiaomi-mdns",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Xiaomi",
+        "mdns_regex": "mi|xiaomi|redmi|poco"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Xiaomi",
+        "model": "Xiaomi phone"
+      }
+    },
+    {
+      "id": "xiaomi-iot-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Xiaomi",
+        "dns_regex": "miio|xiaomi\\.com|mi\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Xiaomi",
+        "model": "Xiaomi IoT device"
+      }
+    },
+    {
+      "id": "oneplus",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "OnePlus"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "OnePlus",
+        "model": "OnePlus phone"
+      }
+    },
+    {
+      "id": "huawei-mdns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Huawei"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Huawei",
+        "model": "Huawei phone"
+      }
+    },
+    {
+      "id": "oppo",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "OPPO"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "OPPO",
+        "model": "OPPO phone"
+      }
+    },
+    {
+      "id": "vivo",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Vivo"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Vivo",
+        "model": "Vivo phone"
+      }
+    },
+    {
+      "id": "motorola",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Motorola"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Motorola",
+        "model": "Motorola phone"
+      }
+    },
+    {
+      "id": "dell-laptop-mdns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Dell",
+        "mdns_regex": ".*"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Dell",
+        "model": "Dell computer"
+      }
+    },
+    {
+      "id": "dell-vendor",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "Dell"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Dell",
+        "model": "Dell computer"
+      }
+    },
+    {
+      "id": "lenovo-vendor",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "Lenovo"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Lenovo",
+        "model": "Lenovo (likely ThinkPad)"
+      }
+    },
+    {
+      "id": "hp-printer-port",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Hewlett",
+        "ports_any": [
+          9100,
+          631,
+          515
+        ]
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "HP",
+        "model": "HP Printer"
+      }
+    },
+    {
+      "id": "hp-printer-mdns",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Hewlett",
+        "mdns_regex": "printer|hp|envy|officejet|laserjet|deskjet"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "HP",
+        "model": "HP Printer"
+      }
+    },
+    {
+      "id": "hp-laptop",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "Hewlett"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "HP",
+        "model": "HP computer"
+      }
+    },
+    {
+      "id": "asus-vendor",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "ASUSTek"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "ASUS",
+        "model": "ASUS device"
+      }
+    },
+    {
+      "id": "acer-vendor",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "Acer"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Acer",
+        "model": "Acer device"
+      }
+    },
+    {
+      "id": "intel-nuc",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "Intel"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Intel",
+        "model": "Intel-based device"
+      }
+    },
+    {
+      "id": "canon-printer-mdns",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Canon",
+        "mdns_regex": "printer|canon|pixma|imageclass"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Canon",
+        "model": "Canon Printer"
+      }
+    },
+    {
+      "id": "canon-printer-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Canon",
+        "ports_any": [
+          9100,
+          631,
+          515
+        ]
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Canon",
+        "model": "Canon Printer"
+      }
+    },
+    {
+      "id": "brother-printer",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Brother"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Brother",
+        "model": "Brother Printer"
+      }
+    },
+    {
+      "id": "epson-printer-mdns",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Seiko Epson",
+        "mdns_regex": "epson|printer|ecotank"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Epson",
+        "model": "Epson Printer"
+      }
+    },
+    {
+      "id": "epson-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Seiko Epson",
+        "ports_any": [
+          9100,
+          631,
+          515
+        ]
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Epson",
+        "model": "Epson Printer"
+      }
+    },
+    {
+      "id": "xerox-printer",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Xerox"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Xerox",
+        "model": "Xerox Printer"
+      }
+    },
+    {
+      "id": "lexmark-printer",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Lexmark"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Lexmark",
+        "model": "Lexmark Printer"
+      }
+    },
+    {
+      "id": "wyze-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Wyze"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Wyze",
+        "model": "Wyze Cam"
+      }
+    },
+    {
+      "id": "arlo-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Arlo"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Arlo",
+        "model": "Arlo Camera"
+      }
+    },
+    {
+      "id": "hikvision-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Hikvision"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Hikvision",
+        "model": "Hikvision IP Camera"
+      }
+    },
+    {
+      "id": "dahua-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Dahua"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Dahua",
+        "model": "Dahua IP Camera"
+      }
+    },
+    {
+      "id": "reolink-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Reolink"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Reolink",
+        "model": "Reolink Camera"
+      }
+    },
+    {
+      "id": "axis-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Axis Communications"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Axis",
+        "model": "Axis Network Camera"
+      }
+    },
+    {
+      "id": "ezviz-camera",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "EZVIZ"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "EZVIZ",
+        "model": "EZVIZ Camera"
+      }
+    },
+    {
+      "id": "philips-hue-vendor",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Philips"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Philips Hue",
+        "model": "Hue bridge or bulb"
+      }
+    },
+    {
+      "id": "tp-link-kasa-dns",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "TP-Link",
+        "dns_regex": "kasa|tplinkcloud|tplinkra"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "TP-Link",
+        "model": "Kasa Smart device"
+      }
+    },
+    {
+      "id": "belkin-wemo",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Belkin"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Belkin WeMo",
+        "model": "WeMo device"
+      }
+    },
+    {
+      "id": "ecobee-thermostat",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "ecobee"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Thermostat",
+        "vendor": "ecobee",
+        "model": "ecobee Thermostat"
+      }
+    },
+    {
+      "id": "irobot-vacuum",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "iRobot"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "iRobot",
+        "model": "Roomba"
+      }
+    },
+    {
+      "id": "lifx-bulb",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "LIFX"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "LIFX",
+        "model": "LIFX Bulb"
+      }
+    },
+    {
+      "id": "sonos-speaker",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Sonos"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Sonos",
+        "model": "Sonos Speaker"
+      }
+    },
+    {
+      "id": "bose-speaker",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Bose"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Bose",
+        "model": "Bose Speaker"
+      }
+    },
+    {
+      "id": "cisco-router",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Cisco"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Cisco",
+        "model": "Cisco device (likely router/switch)"
+      }
+    },
+    {
+      "id": "ubiquiti-network",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Ubiquiti"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Access Point",
+        "vendor": "Ubiquiti",
+        "model": "UniFi device"
+      }
+    },
+    {
+      "id": "tp-link-router",
+      "priority": 400,
+      "conditions": {
+        "vendor_match": "TP-Link"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "TP-Link",
+        "model": "TP-Link router/AP"
+      }
+    },
+    {
+      "id": "netgear-router",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Netgear"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Netgear",
+        "model": "Netgear router"
+      }
+    },
+    {
+      "id": "asus-router-dns",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "ASUSTek",
+        "dns_regex": "asusrouter|asuscomm"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "ASUS",
+        "model": "ASUS router"
+      }
+    },
+    {
+      "id": "aruba-network",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Aruba"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Access Point",
+        "vendor": "Aruba",
+        "model": "Aruba AP/Switch"
+      }
+    },
+    {
+      "id": "ruckus-network",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Ruckus"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Access Point",
+        "vendor": "Ruckus",
+        "model": "Ruckus AP"
+      }
+    },
+    {
+      "id": "meraki-network",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Meraki"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Access Point",
+        "vendor": "Cisco Meraki",
+        "model": "Meraki AP/Switch"
+      }
+    },
+    {
+      "id": "mikrotik-router",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "MikroTik"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "MikroTik",
+        "model": "MikroTik device"
+      }
+    },
+    {
+      "id": "synology-nas",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Synology"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Network Storage",
+        "vendor": "Synology",
+        "model": "Synology NAS"
+      }
+    },
+    {
+      "id": "qnap-nas",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "QNAP"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Network Storage",
+        "vendor": "QNAP",
+        "model": "QNAP NAS"
+      }
+    },
+    {
+      "id": "fitbit-wearable",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Fitbit"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Fitbit",
+        "model": "Fitbit"
+      }
+    },
+    {
+      "id": "garmin-wearable",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Garmin"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Garmin",
+        "model": "Garmin device"
+      }
+    },
+    {
+      "id": "tesla-vehicle",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Tesla"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Tesla",
+        "vendor": "Tesla",
+        "model": "Tesla vehicle"
+      }
+    },
+    {
+      "id": "polycom-voip",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Polycom"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Polycom",
+        "model": "Polycom IP Phone"
+      }
+    },
+    {
+      "id": "yealink-voip",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Yealink"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Yealink",
+        "model": "Yealink IP Phone"
+      }
+    },
+    {
+      "id": "cisco-voip-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Cisco",
+        "ports_any": [
+          5060,
+          5061,
+          2000
+        ]
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Cisco",
+        "model": "Cisco IP Phone"
+      }
+    },
+    {
+      "id": "square-pos",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Square"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "Card Reader",
+        "vendor": "Square",
+        "model": "Square Reader"
+      }
+    },
+    {
+      "id": "ingenico-pos",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Ingenico"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "POS Terminal",
+        "vendor": "Ingenico",
+        "model": "Ingenico Terminal"
+      }
+    },
+    {
+      "id": "verifone-pos",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "VeriFone"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "POS Terminal",
+        "vendor": "VeriFone",
+        "model": "VeriFone Terminal"
+      }
+    },
+    {
+      "id": "ge-medical",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "GE Healthcare"
+      },
+      "classification": {
+        "category": "Medical",
+        "subcategory": "Medical IoT",
+        "vendor": "GE Healthcare",
+        "model": "GE medical device"
+      }
+    },
+    {
+      "id": "philips-medical",
+      "priority": 500,
+      "conditions": {
+        "vendor_match": "Philips Medical"
+      },
+      "classification": {
+        "category": "Medical",
+        "subcategory": "Patient Monitor",
+        "vendor": "Philips Healthcare",
+        "model": "Philips medical monitor"
+      }
+    },
+    {
+      "id": "medtronic-medical",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Medtronic"
+      },
+      "classification": {
+        "category": "Medical",
+        "subcategory": "Medical IoT",
+        "vendor": "Medtronic",
+        "model": "Medtronic device"
+      }
+    },
+    {
+      "id": "baxter-medical",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Baxter"
+      },
+      "classification": {
+        "category": "Medical",
+        "subcategory": "Infusion Pump",
+        "vendor": "Baxter",
+        "model": "Baxter pump"
+      }
+    },
+    {
+      "id": "siemens-industrial",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Siemens"
+      },
+      "classification": {
+        "category": "Industrial IoT",
+        "subcategory": "PLC/Controller",
+        "vendor": "Siemens",
+        "model": "Siemens PLC"
+      }
+    },
+    {
+      "id": "rockwell-industrial",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Rockwell"
+      },
+      "classification": {
+        "category": "Industrial IoT",
+        "subcategory": "PLC/Controller",
+        "vendor": "Rockwell Automation",
+        "model": "Allen-Bradley PLC"
+      }
+    },
+    {
+      "id": "schneider-industrial",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Schneider"
+      },
+      "classification": {
+        "category": "Industrial IoT",
+        "subcategory": "PLC/Controller",
+        "vendor": "Schneider Electric",
+        "model": "Schneider device"
+      }
+    },
+    {
+      "id": "raspberry-pi",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Raspberry Pi"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Workstation",
+        "vendor": "Raspberry Pi",
+        "model": "Raspberry Pi"
+      }
+    },
+    {
+      "id": "espressif-iot",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Espressif"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Espressif (ESP32/8266)",
+        "model": "ESP-based IoT device"
+      }
+    },
+    {
+      "id": "mdns-printer-generic",
+      "priority": 300,
+      "conditions": {
+        "mdns_regex": "printer|ipp|pdl-datastream",
+        "ports_any": [
+          9100,
+          631,
+          515
+        ]
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Unknown",
+        "model": "Network printer (port-detected)"
+      }
+    },
+    {
+      "id": "mdns-camera-generic",
+      "priority": 300,
+      "conditions": {
+        "mdns_regex": "camera|webcam|ipcam"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Unknown",
+        "model": "Network camera (mDNS-detected)"
+      }
+    },
+    {
+      "id": "port-rtsp-camera",
+      "priority": 200,
+      "conditions": {
+        "ports_any": [
+          554
+        ]
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Unknown",
+        "model": "RTSP camera (port-detected)"
+      }
+    },
+    {
+      "id": "ssdp-iot",
+      "priority": 100,
+      "conditions": {
+        "ports_any": [
+          1900
+        ]
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Unknown",
+        "model": "UPnP/SSDP device"
+      }
+    },
+    {
+      "id": "iphone-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "iphone"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Apple (mDNS)",
+        "model": "iPhone"
+      }
+    },
+    {
+      "id": "ipad-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "ipad"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Tablet",
+        "vendor": "Apple (mDNS)",
+        "model": "iPad"
+      }
+    },
+    {
+      "id": "macbook-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "macbook"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Apple (mDNS)",
+        "model": "MacBook"
+      }
+    },
+    {
+      "id": "applewatch-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "apple.?watch|\\bwatch\\b"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Apple (mDNS)",
+        "model": "Apple Watch"
+      }
+    },
+    {
+      "id": "chromecast-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "chromecast|chrome.?cast"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Google (mDNS)",
+        "model": "Chromecast"
+      }
+    },
+    {
+      "id": "google-home-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "google.?home|nest.?hub"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Google (mDNS)",
+        "model": "Google Home / Nest Hub"
+      }
+    },
+    {
+      "id": "playstation-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "playstation|\\bps[45]\\b"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Sony (mDNS)",
+        "model": "PlayStation"
+      }
+    },
+    {
+      "id": "xbox-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "xbox"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Microsoft (mDNS)",
+        "model": "Xbox"
+      }
+    },
+    {
+      "id": "samsung-mdns-only",
+      "priority": 350,
+      "conditions": {
+        "mdns_regex": "galaxy|samsung"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Samsung (mDNS)",
+        "model": "Galaxy device"
+      }
+    },
+    {
+      "id": "pixel-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "pixel"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Google (mDNS)",
+        "model": "Pixel"
+      }
+    },
+    {
+      "id": "kindle-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "kindle"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "E-Reader",
+        "vendor": "Amazon (mDNS)",
+        "model": "Kindle"
+      }
+    },
+    {
+      "id": "echo-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "\\becho\\b|alexa"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Amazon (mDNS)",
+        "model": "Echo"
+      }
+    },
+    {
+      "id": "firetv-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "fire.?tv|firestick"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Amazon (mDNS)",
+        "model": "Fire TV"
+      }
+    },
+    {
+      "id": "roku-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "\\broku\\b"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Roku (mDNS)",
+        "model": "Roku"
+      }
+    },
+    {
+      "id": "hp-printer-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "hp[-_].*printer|officejet|laserjet|deskjet|envy"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "HP (mDNS)",
+        "model": "HP Printer"
+      }
+    },
+    {
+      "id": "canon-printer-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "pixma|imageclass|canon.*printer"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Canon (mDNS)",
+        "model": "Canon Printer"
+      }
+    },
+    {
+      "id": "epson-printer-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "epson|ecotank"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Epson (mDNS)",
+        "model": "Epson Printer"
+      }
+    },
+    {
+      "id": "ring-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "\\bring\\b.*doorbell|ring.?doorbell"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Video Doorbell",
+        "vendor": "Ring (mDNS)",
+        "model": "Ring Doorbell"
+      }
+    },
+    {
+      "id": "sonos-mdns-only",
+      "priority": 400,
+      "conditions": {
+        "mdns_regex": "sonos"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Sonos (mDNS)",
+        "model": "Sonos Speaker"
+      }
+    },
+    {
+      "id": "smart-tv-mdns-fallback",
+      "priority": 350,
+      "conditions": {
+        "mdns_regex": "smart.?tv|tizen|webos|bravia"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Unknown (mDNS)",
+        "model": "Smart TV"
+      }
+    },
+    {
+      "id": "apple-studio-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "studio"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Apple",
+        "model": "Mac Studio"
+      }
+    },
+    {
+      "id": "apple-mac-pro-mdns",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "mac.?pro"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Workstation",
+        "vendor": "Apple",
+        "model": "Mac Pro"
+      }
+    },
+    {
+      "id": "framework-laptop",
+      "priority": 700,
+      "conditions": {
+        "mdns_regex": "framework",
+        "ports_any": [
+          5353,
+          80,
+          443
+        ]
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Framework",
+        "model": "Framework Laptop"
+      }
+    },
+    {
+      "id": "thinkpad-vendor",
+      "priority": 500,
+      "conditions": {
+        "vendor_match": "Lenovo"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Laptop",
+        "vendor": "Lenovo",
+        "model": "ThinkPad/IdeaPad laptop"
+      }
+    },
+    {
+      "id": "alienware-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Dell",
+        "mdns_regex": "alien"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Dell",
+        "model": "Alienware gaming PC"
+      }
+    },
+    {
+      "id": "oneplus-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "OnePlus"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "OnePlus",
+        "model": "OnePlus phone"
+      }
+    },
+    {
+      "id": "oneplus-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "oneplus\\.com|h2os\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "OnePlus",
+        "model": "OnePlus phone"
+      }
+    },
+    {
+      "id": "xiaomi-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "Xiaomi"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Xiaomi",
+        "model": "Xiaomi/Redmi phone (MIUI)"
+      }
+    },
+    {
+      "id": "xiaomi-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "xiaomi\\.com|miui\\.com|mi\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Xiaomi",
+        "model": "Xiaomi/Redmi phone (MIUI)"
+      }
+    },
+    {
+      "id": "oppo-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "Oppo"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Oppo",
+        "model": "Oppo phone (ColorOS)"
+      }
+    },
+    {
+      "id": "oppo-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "oppo\\.com|coloros\\.com|heytap\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Oppo",
+        "model": "Oppo phone (ColorOS)"
+      }
+    },
+    {
+      "id": "vivo-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "vivo\\.com|vivoxglobal\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Vivo",
+        "model": "Vivo phone (FuntouchOS)"
+      }
+    },
+    {
+      "id": "huawei-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "Huawei"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Huawei",
+        "model": "Huawei phone (HarmonyOS/EMUI)"
+      }
+    },
+    {
+      "id": "huawei-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "huawei\\.com|hicloud\\.com|dbankcdn\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Huawei",
+        "model": "Huawei phone (HarmonyOS/EMUI)"
+      }
+    },
+    {
+      "id": "honor-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "hihonor\\.com|magicos\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Honor",
+        "model": "Honor phone (Magic OS)"
+      }
+    },
+    {
+      "id": "motorola-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Motorola"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Motorola",
+        "model": "Motorola phone"
+      }
+    },
+    {
+      "id": "nokia-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "nokiamobile\\.com|hmdglobal\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Nokia/HMD",
+        "model": "Nokia phone (HMD)"
+      }
+    },
+    {
+      "id": "google-pixel-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "fi\\.google\\.com|pixel\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Phone",
+        "vendor": "Google",
+        "model": "Google Pixel"
+      }
+    },
+    {
+      "id": "airtag",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Apple",
+        "dns_regex": "findmy\\.icloud\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Tracker",
+        "vendor": "Apple",
+        "model": "Apple AirTag"
+      }
+    },
+    {
+      "id": "tile-tracker",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "tile-network\\.com|thetileapp\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Tracker",
+        "vendor": "Tile",
+        "model": "Tile tracker"
+      }
+    },
+    {
+      "id": "garmin-fenix",
+      "priority": 820,
+      "conditions": {
+        "vendor_match": "Garmin",
+        "dns_regex": "fenix\\.garmin"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Garmin",
+        "model": "Garmin Fenix"
+      }
+    },
+    {
+      "id": "garmin-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Garmin"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Garmin",
+        "model": "Garmin watch/wearable"
+      }
+    },
+    {
+      "id": "polar-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "flow\\.polar|polaraccesslink"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Polar",
+        "model": "Polar fitness watch"
+      }
+    },
+    {
+      "id": "suunto-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "suunto\\.com|movescount\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Suunto",
+        "model": "Suunto watch"
+      }
+    },
+    {
+      "id": "whoop-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "whoop\\.com|prod\\.whoop"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "WHOOP",
+        "model": "WHOOP band"
+      }
+    },
+    {
+      "id": "oura-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "ouraring\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Oura",
+        "model": "Oura Ring"
+      }
+    },
+    {
+      "id": "amazfit-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "amazfit\\.com|huami\\.com|zepp\\.com"
+      },
+      "classification": {
+        "category": "Mobile",
+        "subcategory": "Wearable",
+        "vendor": "Amazfit",
+        "model": "Amazfit/Zepp watch"
+      }
+    },
+    {
+      "id": "roku-ultra-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "cooper\\.logs\\.roku|sr\\.roku"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Roku",
+        "model": "Roku Ultra"
+      }
+    },
+    {
+      "id": "roku-tv-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "tcl\\.roku|hisense\\.roku"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Roku",
+        "model": "Roku TV (TCL/Hisense)"
+      }
+    },
+    {
+      "id": "nvidia-shield-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "shield\\.nvidia|shieldhub"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Nvidia",
+        "model": "Nvidia Shield TV"
+      }
+    },
+    {
+      "id": "firetv-cube-dns",
+      "priority": 750,
+      "conditions": {
+        "dns_regex": "atv-ext-eu\\.amazon|fireoscaptiveportal"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Amazon",
+        "model": "Fire TV Cube/Stick 4K Max"
+      }
+    },
+    {
+      "id": "apple-tv-4k",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Apple",
+        "dns_regex": "appletv\\.apple|atv-ext\\.apple"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Streaming Stick",
+        "vendor": "Apple",
+        "model": "Apple TV 4K"
+      }
+    },
+    {
+      "id": "vizio-tv-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "smartcast\\.vizio|inscape\\.tv"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Vizio",
+        "model": "Vizio SmartCast TV"
+      }
+    },
+    {
+      "id": "vizio-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Vizio"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Vizio",
+        "model": "Vizio TV"
+      }
+    },
+    {
+      "id": "hisense-vidaa-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "vidaa\\.com|vidaaos"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Hisense",
+        "model": "Hisense Vidaa TV"
+      }
+    },
+    {
+      "id": "hisense-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Hisense"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Hisense",
+        "model": "Hisense TV"
+      }
+    },
+    {
+      "id": "philips-tv-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "tpvision|px-tv\\.com|pcis\\.philips"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Philips",
+        "model": "Philips Android TV"
+      }
+    },
+    {
+      "id": "sharp-aquos-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "aquos-net|sharp-tv"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "Sharp",
+        "model": "Sharp Aquos TV"
+      }
+    },
+    {
+      "id": "tcl-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "TCL"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Smart TV",
+        "vendor": "TCL",
+        "model": "TCL TV"
+      }
+    },
+    {
+      "id": "xbox-series",
+      "priority": 900,
+      "conditions": {
+        "vendor_match": "Microsoft",
+        "dns_regex": "xboxlive\\.com"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Microsoft",
+        "model": "Xbox Series X/S"
+      }
+    },
+    {
+      "id": "xbox-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Microsoft",
+        "ports_any": [
+          3074
+        ]
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Microsoft",
+        "model": "Xbox console"
+      }
+    },
+    {
+      "id": "ps5-port",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Sony",
+        "ports_any": [
+          3478,
+          3479,
+          3480
+        ]
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "Gaming Console",
+        "vendor": "Sony",
+        "model": "PlayStation 5"
+      }
+    },
+    {
+      "id": "meta-quest-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "oculuscdn|graph\\.oculus"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "VR Headset",
+        "vendor": "Meta",
+        "model": "Meta Quest 2/3/Pro"
+      }
+    },
+    {
+      "id": "meta-quest-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Meta"
+      },
+      "classification": {
+        "category": "Entertainment",
+        "subcategory": "VR Headset",
+        "vendor": "Meta",
+        "model": "Meta device"
+      }
+    },
+    {
+      "id": "eero-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "eero\\.com"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Amazon",
+        "model": "Eero mesh router"
+      }
+    },
+    {
+      "id": "eero-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Eero"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Amazon",
+        "model": "Eero mesh router"
+      }
+    },
+    {
+      "id": "linksys-velop-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "linksyssmartwifi|linksyssupport"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Linksys",
+        "model": "Linksys Velop mesh"
+      }
+    },
+    {
+      "id": "linksys-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Linksys"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Linksys",
+        "model": "Linksys router"
+      }
+    },
+    {
+      "id": "tplink-deco-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "tplinkdeco|tplinkcloud"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "TP-Link",
+        "model": "TP-Link Deco mesh"
+      }
+    },
+    {
+      "id": "google-nest-wifi",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Google",
+        "dns_regex": "onhub|googlewifi"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Google",
+        "model": "Nest WiFi / Google WiFi"
+      }
+    },
+    {
+      "id": "netgear-orbi-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "orbilogin|routerlogin"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Netgear",
+        "model": "Netgear Orbi mesh"
+      }
+    },
+    {
+      "id": "amplifi-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "amplifi\\.com"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Ubiquiti",
+        "model": "AmpliFi mesh router"
+      }
+    },
+    {
+      "id": "mikrotik-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "MikroTik"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "MikroTik",
+        "model": "MikroTik RouterBoard"
+      }
+    },
+    {
+      "id": "fortinet-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "Fortinet"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "Fortinet",
+        "model": "FortiGate firewall"
+      }
+    },
+    {
+      "id": "sonicwall-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "SonicWall"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Router",
+        "vendor": "SonicWall",
+        "model": "SonicWall firewall"
+      }
+    },
+    {
+      "id": "meraki-vendor",
+      "priority": 750,
+      "conditions": {
+        "vendor_match": "Cisco",
+        "mdns_regex": "meraki"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Access Point",
+        "vendor": "Cisco",
+        "model": "Cisco Meraki AP"
+      }
+    },
+    {
+      "id": "hue-bridge-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "meethue\\.com|philips-hue"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Philips",
+        "model": "Philips Hue Bridge"
+      }
+    },
+    {
+      "id": "hue-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Philips",
+        "mdns_regex": "hue"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Philips",
+        "model": "Philips Hue Bridge"
+      }
+    },
+    {
+      "id": "lifx-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "lifx\\.co|cloud\\.lifx"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "LIFX",
+        "model": "LIFX smart bulb"
+      }
+    },
+    {
+      "id": "nanoleaf-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "nanoleaf\\.me"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Nanoleaf",
+        "model": "Nanoleaf panels/Shapes"
+      }
+    },
+    {
+      "id": "govee-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "govee\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Govee",
+        "model": "Govee lights/sensors"
+      }
+    },
+    {
+      "id": "wemo-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "belkin\\.com|wemo"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Plug/Bulb",
+        "vendor": "Belkin",
+        "model": "Belkin Wemo smart plug"
+      }
+    },
+    {
+      "id": "roomba-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "irobotapi\\.com|irobot\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "iRobot",
+        "model": "iRobot Roomba"
+      }
+    },
+    {
+      "id": "roborock-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "roborock\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "Roborock",
+        "model": "Roborock vacuum"
+      }
+    },
+    {
+      "id": "eufy-vacuum-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "eufylife\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "Eufy",
+        "model": "Eufy RoboVac"
+      }
+    },
+    {
+      "id": "shark-vacuum-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "sharkclean|sharkninja"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "Shark",
+        "model": "Shark IQ Robot"
+      }
+    },
+    {
+      "id": "ecovacs-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "ecovacs\\.com|ecouser\\.net"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Robot Vacuum",
+        "vendor": "Ecovacs",
+        "model": "Ecovacs Deebot"
+      }
+    },
+    {
+      "id": "august-lock-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "api-production\\.august|august\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Smart Lock",
+        "vendor": "August",
+        "model": "August Smart Lock"
+      }
+    },
+    {
+      "id": "yale-lock-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "yalehome|yaleconnect"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Smart Lock",
+        "vendor": "Yale",
+        "model": "Yale smart lock"
+      }
+    },
+    {
+      "id": "schlage-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "schlageconnect|schlage\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Smart Lock",
+        "vendor": "Schlage",
+        "model": "Schlage Encode/Connect"
+      }
+    },
+    {
+      "id": "level-lock-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "api\\.level\\.co|level\\.co"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Smart Lock",
+        "vendor": "Level",
+        "model": "Level Lock"
+      }
+    },
+    {
+      "id": "smartthings-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "smartthings\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Samsung",
+        "model": "SmartThings Hub"
+      }
+    },
+    {
+      "id": "hubitat-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "hubitat\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Hubitat",
+        "model": "Hubitat Elevation"
+      }
+    },
+    {
+      "id": "homeassistant-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "home-assistant\\.io"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Home Assistant",
+        "model": "Home Assistant"
+      }
+    },
+    {
+      "id": "aqara-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "aqara\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Aqara",
+        "model": "Aqara hub"
+      }
+    },
+    {
+      "id": "lutron-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "lutron\\.io|myhomelutron"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Hub",
+        "vendor": "Lutron",
+        "model": "Lutron Caseta hub"
+      }
+    },
+    {
+      "id": "blink-camera-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "immedia-semi|blinkforhome"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Amazon",
+        "model": "Blink camera/doorbell"
+      }
+    },
+    {
+      "id": "ezviz-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "ezvizlife\\.com|ezviz\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Ezviz",
+        "model": "Ezviz camera"
+      }
+    },
+    {
+      "id": "tapo-camera-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "tapo\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "TP-Link",
+        "model": "TP-Link Tapo camera"
+      }
+    },
+    {
+      "id": "lorex-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "lorextechnology\\.com|lorex\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Lorex",
+        "model": "Lorex camera/DVR"
+      }
+    },
+    {
+      "id": "swann-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "swann\\.com|mysecure-cdn"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Swann",
+        "model": "Swann camera/NVR"
+      }
+    },
+    {
+      "id": "simplisafe-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "simplisafe\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Alarm System",
+        "vendor": "SimpliSafe",
+        "model": "SimpliSafe security system"
+      }
+    },
+    {
+      "id": "vivint-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "vivintsky|vivint\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Alarm System",
+        "vendor": "Vivint",
+        "model": "Vivint Smart Home"
+      }
+    },
+    {
+      "id": "adt-dns",
+      "priority": 750,
+      "conditions": {
+        "dns_regex": "mss\\.adt|adt\\.com"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Alarm System",
+        "vendor": "ADT",
+        "model": "ADT Security"
+      }
+    },
+    {
+      "id": "annke-dns",
+      "priority": 750,
+      "conditions": {
+        "dns_regex": "annke"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Annke",
+        "model": "Annke NVR/camera"
+      }
+    },
+    {
+      "id": "axis-camera-vendor",
+      "priority": 800,
+      "conditions": {
+        "vendor_match": "Axis"
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Axis",
+        "model": "Axis IP camera"
+      }
+    },
+    {
+      "id": "bosch-camera",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Bosch",
+        "ports_any": [
+          554
+        ]
+      },
+      "classification": {
+        "category": "Security & Cameras",
+        "subcategory": "Security Camera",
+        "vendor": "Bosch",
+        "model": "Bosch IP camera"
+      }
+    },
+    {
+      "id": "lexmark-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "lexmark"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Lexmark",
+        "model": "Lexmark printer"
+      }
+    },
+    {
+      "id": "lexmark-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Lexmark"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Lexmark",
+        "model": "Lexmark printer"
+      }
+    },
+    {
+      "id": "kyocera-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "kyocera"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Kyocera",
+        "model": "Kyocera printer"
+      }
+    },
+    {
+      "id": "ricoh-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "ricoh\\.com"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Ricoh",
+        "model": "Ricoh printer/MFP"
+      }
+    },
+    {
+      "id": "konica-minolta-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "konicaminolta"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "Konica Minolta",
+        "model": "Konica Minolta MFP"
+      }
+    },
+    {
+      "id": "oki-printer",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "okidata"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "Printer",
+        "vendor": "OKI",
+        "model": "OKI printer"
+      }
+    },
+    {
+      "id": "3cx-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "3cx\\.com"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "3CX",
+        "model": "3CX VoIP phone/PBX"
+      }
+    },
+    {
+      "id": "grandstream-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "grandstream\\.com|gdms\\.cloud"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Grandstream",
+        "model": "Grandstream VoIP"
+      }
+    },
+    {
+      "id": "grandstream-vendor",
+      "priority": 700,
+      "conditions": {
+        "vendor_match": "Grandstream"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Grandstream",
+        "model": "Grandstream VoIP"
+      }
+    },
+    {
+      "id": "ringcentral-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "ringcentral\\.com"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "RingCentral",
+        "model": "RingCentral phone"
+      }
+    },
+    {
+      "id": "vonage-dns",
+      "priority": 750,
+      "conditions": {
+        "dns_regex": "vonage\\.com|vbc\\.vonage"
+      },
+      "classification": {
+        "category": "Office",
+        "subcategory": "VoIP Phone",
+        "vendor": "Vonage",
+        "model": "Vonage Business"
+      }
+    },
+    {
+      "id": "toast-pos",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "toasttab|toastservices"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "POS Terminal",
+        "vendor": "Toast",
+        "model": "Toast POS"
+      }
+    },
+    {
+      "id": "clover-pos",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "clover\\.com|clover\\.network"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "POS Terminal",
+        "vendor": "Clover",
+        "model": "Clover POS"
+      }
+    },
+    {
+      "id": "sumup-pos",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "sumup\\.com"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "Card Reader",
+        "vendor": "SumUp",
+        "model": "SumUp Reader"
+      }
+    },
+    {
+      "id": "stripe-terminal",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "terminal\\.stripe|stripe\\.com"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "Card Reader",
+        "vendor": "Stripe",
+        "model": "Stripe Terminal"
+      }
+    },
+    {
+      "id": "lightspeed-pos",
+      "priority": 750,
+      "conditions": {
+        "dns_regex": "lightspeedhq|retail\\.lightspeed"
+      },
+      "classification": {
+        "category": "Point of Sale",
+        "subcategory": "POS Terminal",
+        "vendor": "Lightspeed",
+        "model": "Lightspeed POS"
+      }
+    },
+    {
+      "id": "ford-sync-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "fordpass|sync\\.ford"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Ford",
+        "model": "Ford SYNC"
+      }
+    },
+    {
+      "id": "toyota-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "toyotaowners|entune\\.com|toyota-connect"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Toyota",
+        "model": "Toyota connected"
+      }
+    },
+    {
+      "id": "honda-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "hondalink|drivehonda"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Honda",
+        "model": "Honda HondaLink"
+      }
+    },
+    {
+      "id": "hyundai-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "bluelink\\.hyundai|myhyundai"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Hyundai",
+        "model": "Hyundai Bluelink"
+      }
+    },
+    {
+      "id": "kia-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "owners-aem\\.kia|connect\\.kia"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Kia",
+        "model": "Kia Connect"
+      }
+    },
+    {
+      "id": "audi-mmi-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "mmiconnect|audi-connect"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Audi",
+        "model": "Audi MMI"
+      }
+    },
+    {
+      "id": "vw-carnet-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "car-net|vw-car-net"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Volkswagen",
+        "model": "VW Car-Net"
+      }
+    },
+    {
+      "id": "volvo-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "volvoid|volvocars"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Volvo",
+        "model": "Volvo On Call"
+      }
+    },
+    {
+      "id": "mercedes-me-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "mercedes-benz\\.io|mercedes-benz\\.com"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Mercedes-Benz",
+        "model": "Mercedes me connect"
+      }
+    },
+    {
+      "id": "nissan-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "carwings|nissan-cv"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Nissan",
+        "model": "NissanConnect"
+      }
+    },
+    {
+      "id": "polestar-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "polestar\\.com"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Polestar",
+        "model": "Polestar 2/3"
+      }
+    },
+    {
+      "id": "rivian-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "rivian\\.com"
+      },
+      "classification": {
+        "category": "Vehicle",
+        "subcategory": "Connected Car",
+        "vendor": "Rivian",
+        "model": "Rivian R1T/R1S"
+      }
+    },
+    {
+      "id": "sonos-arc-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "ws\\.sonos|update\\.sonos"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Sonos",
+        "model": "Sonos Arc/Beam/Era"
+      }
+    },
+    {
+      "id": "homepod-mini",
+      "priority": 850,
+      "conditions": {
+        "vendor_match": "Apple",
+        "mdns_regex": "homepod"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Speaker",
+        "vendor": "Apple",
+        "model": "HomePod mini"
+      }
+    },
+    {
+      "id": "lg-thinq-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "lgthinq|lgaccount"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Appliance",
+        "vendor": "LG",
+        "model": "LG ThinQ appliance"
+      }
+    },
+    {
+      "id": "miele-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "miele\\.com|mcs3\\.miele"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Appliance",
+        "vendor": "Miele",
+        "model": "Miele@home"
+      }
+    },
+    {
+      "id": "bosch-homeconnect-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "home-connect|singlekey-id"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "Smart Appliance",
+        "vendor": "Bosch",
+        "model": "Bosch Home Connect"
+      }
+    },
+    {
+      "id": "netatmo-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "netatmo\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "Netatmo",
+        "model": "Netatmo weather station"
+      }
+    },
+    {
+      "id": "ecowitt-dns",
+      "priority": 800,
+      "conditions": {
+        "dns_regex": "ecowitt\\.net"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "Ecowitt",
+        "model": "Ecowitt weather station"
+      }
+    },
+    {
+      "id": "purpleair-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "purpleair\\.com"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "PurpleAir",
+        "model": "PurpleAir AQ monitor"
+      }
+    },
+    {
+      "id": "awair-dns",
+      "priority": 850,
+      "conditions": {
+        "dns_regex": "getawair|developer-apis\\.awair"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "Awair",
+        "model": "Awair air quality"
+      }
+    },
+    {
+      "id": "pi-hole-dns",
+      "priority": 700,
+      "conditions": {
+        "dns_regex": "pi-hole\\.net"
+      },
+      "classification": {
+        "category": "Network Infrastructure",
+        "subcategory": "Network Storage",
+        "vendor": "Pi-hole",
+        "model": "Pi-hole DNS sinkhole"
+      }
+    },
+    {
+      "id": "raspberry-pi-vendor",
+      "priority": 600,
+      "conditions": {
+        "vendor_match": "Raspberry Pi"
+      },
+      "classification": {
+        "category": "Computers",
+        "subcategory": "Desktop",
+        "vendor": "Raspberry Pi",
+        "model": "Raspberry Pi"
+      }
+    },
+    {
+      "id": "ledger-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "ledger\\.com|ledgerwallet"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "Ledger",
+        "model": "Ledger hardware wallet"
+      }
+    },
+    {
+      "id": "trezor-dns",
+      "priority": 900,
+      "conditions": {
+        "dns_regex": "trezor\\.io"
+      },
+      "classification": {
+        "category": "Smart Home",
+        "subcategory": "IoT Hub",
+        "vendor": "Trezor",
+        "model": "Trezor hardware wallet"
+      }
+    }
+  ]
+}
