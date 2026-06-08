@@ -33,6 +33,8 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `cloud_ranges.json` | CIDR ranges → cloud provider lookup |
 | `device_rules.json` | 261 hostname / OUI / port rules for device classification |
 | `dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
+| `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs) |
+| `legacy/Network_Security_Dashboard_V5_baseline.ipynb` | The V5 baseline notebook the current version was built from — kept for diff / reference |
 
 ## How to run on a laptop
 
