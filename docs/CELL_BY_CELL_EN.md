@@ -217,7 +217,7 @@ Anomaly threshold = `mean(val_err) + 2 * std(val_err)` — uses validation error
 
 ## Cell 37 — Classification Engine
 
-The most complex non-dashboard cell. Loads three JSON files via `_find_config(name)` (searches cwd, parent, `/mnt/data`, `/home/claude`):
+The most complex non-dashboard cell. Loads three JSON files via `_find_config(name)` (searches cwd, parent, `/mnt/data`, `~/`):
 
 1. `device_rules.json` → `DEVICE_RULES` (261 rules, 12 hierarchy categories)
 2. `cloud_ranges.json` → `CLOUD_RANGES` (27 static + 247 CIDR + 334 rDNS)
