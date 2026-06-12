@@ -217,7 +217,7 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ## תא 37 — מנוע סיווג
 
-התא הכי מורכב מחוץ לדשבורד. טוען שלושה קבצי JSON דרך `_find_config(name)` (מחפש ב-cwd, parent, `/mnt/data`, `/home/claude`):
+התא הכי מורכב מחוץ לדשבורד. טוען שלושה קבצי JSON דרך `_find_config(name)` (מחפש ב-cwd, parent, `/mnt/data`, `~/`):
 
 1. `device_rules.json` → `DEVICE_RULES` (261 חוקים, 12 קטגוריות hierarchy)
 2. `cloud_ranges.json` → `CLOUD_RANGES` (27 static + 247 CIDR + 334 rDNS)
