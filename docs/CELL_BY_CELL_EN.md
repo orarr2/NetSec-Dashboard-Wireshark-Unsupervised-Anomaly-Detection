@@ -1,4 +1,4 @@
-# Cell-by-Cell Guide — Network Security Dashboard
+# Cell-by-Cell Guide - Network Security Dashboard
 
 The notebook contains 50 cells (25 code, 25 markdown). This document explains what each code cell does.
 
@@ -7,16 +7,16 @@ The notebook contains 50 cells (25 code, 25 markdown). This document explains wh
 The notebook is structured so that up to (but not including) cell 47, only **function definitions and library imports** run. No data analysis happens automatically on cell execution. Real analysis only starts when the user clicks "Load PCAP" or records live in the dashboard (cell 47).
 
 ```
-Cells 0-3:   Markdown — title, intro, TCP/IP layer explanations
-Cell 4:      Imports — auto-install libraries, locate tshark
-Cell 5:      Markdown — explains PCAP paths
+Cells 0-3:   Markdown - title, intro, TCP/IP layer explanations
+Cell 4:      Imports - auto-install libraries, locate tshark
+Cell 5:      Markdown - explains PCAP paths
 Cell 6:      Empty PCAP slots + PySide6 picker function
-Cell 7:      Markdown — explains the analysis engine
-Cell 8:      _analyze_pcap_tshark / _analyze_pcap_scapy — fast loaders
+Cell 7:      Markdown - explains the analysis engine
+Cell 8:      _analyze_pcap_tshark / _analyze_pcap_scapy - fast loaders
 Cell 9:      Markdown
 Cell 10:     Empty state init + load_session_from_pcap
 Cell 11:     Markdown
-Cell 12:     run_ml_on_session — IsolationForest + DBSCAN
+Cell 12:     run_ml_on_session - IsolationForest + DBSCAN
 Cell 13:     Markdown
 Cell 14:     compute_z_scores
 Cell 15:     Markdown
@@ -28,27 +28,27 @@ Cell 20:     generate_insights_lines + process_session + compute_pair_state
 Cell 21:     Markdown
 Cell 22:     LSTMModel class
 Cell 23:     Markdown
-Cell 24:     run_lstm_on_session — training loop with early stopping
+Cell 24:     run_lstm_on_session - training loop with early stopping
 Cell 25:     Markdown
 Cell 26:     evaluate_lstm
 Cell 27:     Markdown
 Cells 28-36: Markdown + empty cells (sections moved into other cells)
-Cell 37:     Classification engine — OUI lookup + 3-tier classify_local_device
+Cell 37:     Classification engine - OUI lookup + 3-tier classify_local_device
 Cell 38:     Markdown
 Cell 39:     Device inventory builder + coverage metrics
 Cell 40:     Markdown
-Cell 41:     LiveCaptureWorker — background tshark subprocess
+Cell 41:     LiveCaptureWorker - background tshark subprocess
 Cell 42:     Markdown
 Cell 43:     Browsing analysis (category + hour) + device map (PCA)
 Cell 44:     Markdown
-Cell 45:     make_figures + _build_proximity_map_figure — 34 Plotly figures
+Cell 45:     make_figures + _build_proximity_map_figure - 34 Plotly figures
 Cell 46:     Markdown
-Cell 47:     Dash app — Aurora theme + CRT splash + 7 nav sections
+Cell 47:     Dash app - Aurora theme + CRT splash + 7 nav sections
 ```
 
 ---
 
-## Cell 4 — Imports & Environment
+## Cell 4 - Imports & Environment
 
 **Purpose:** Ensure every required library is installed; locate `tshark` on disk.
 
@@ -63,17 +63,17 @@ The found path is stored in `TSHARK_PATH`; if nothing is found, `TSHARK_PATH = N
 
 ---
 
-## Cell 6 — Empty PCAP slots + file picker
+## Cell 6 - Empty PCAP slots + file picker
 
 **Purpose:** Initialise placeholder variables and define the PySide6-based file picker that the dashboard's Upload button calls.
 
-Variables: `PCAP1 = None`, `PCAP2 = None`, `CSV1 = None`, `CSV2 = None`, `MY_DEVICE_IP = "192.168.1.50"` (placeholder — user changes this).
+Variables: `PCAP1 = None`, `PCAP2 = None`, `CSV1 = None`, `CSV2 = None`, `MY_DEVICE_IP = "192.168.1.50"` (placeholder - user changes this).
 
 `pick_pcap_files()` writes a small PySide6 script to a tempfile and runs it via `subprocess.run`. The script displays a native file picker and prints the chosen paths to stdout. The function reads stdout and returns a list of paths. This indirection avoids loading PySide6 into the notebook process itself (which can crash Jupyter on some setups).
 
 ---
 
-## Cell 8 — Intake Engine
+## Cell 8 - Intake Engine
 
 **Purpose:** The most important cell. Parses a PCAP into a structured dict that the rest of the pipeline consumes.
 
@@ -122,19 +122,19 @@ Dispatcher: calls `_analyze_pcap_tshark` if `TSHARK_PATH` is set, else `_analyze
 
 ---
 
-## Cell 10 — Empty session slots
+## Cell 10 - Empty session slots
 
 Initialises `S1 = None`, `S2 = None`. The dashboard mutates these when the user loads a PCAP.
 
 ---
 
-## Cell 12 — Unsupervised ML
+## Cell 12 - Unsupervised ML
 
 `run_ml_on_session(S)` builds a 7-feature matrix from `ip_agg` (`mean_len`, `std_len`, `count`, `burst_score`, `unique_dsts`, `syn_count`, `rst_count`), runs `StandardScaler` on it, then:
 
-**IsolationForest** with a 20-point contamination sweep from 0.02 to 0.30. For each value, fits the model and records the mean anomaly score of the flagged group. Selects the contamination whose flagged group has the **lowest mean score** (most extreme — points isolated fastest by the trees). Stores the chosen value in `ip_agg.attrs['chosen_contamination']`.
+**IsolationForest** with a 20-point contamination sweep from 0.02 to 0.30. For each value, fits the model and records the mean anomaly score of the flagged group. Selects the contamination whose flagged group has the **lowest mean score** (most extreme - points isolated fastest by the trees). Stores the chosen value in `ip_agg.attrs['chosen_contamination']`.
 
-**DBSCAN** with `eps` from k-distance elbow: `NearestNeighbors(n_neighbors=2)`, sort the 2-NN distances descending, find the maximum second derivative — that's the elbow. Use `min_samples=2` because in 7-dim space with 50–150 points, density is naturally low.
+**DBSCAN** with `eps` from k-distance elbow: `NearestNeighbors(n_neighbors=2)`, sort the 2-NN distances descending, find the maximum second derivative - that's the elbow. Use `min_samples=2` because in 7-dim space with 50–150 points, density is naturally low.
 
 **Hopkins statistic H** computed alongside. H ≈ 0.5 = data is random; H > 0.65 = real cluster structure exists.
 
@@ -142,7 +142,7 @@ Writes `iso_flag`, `iso_score`, `dbscan_label` columns into `ip_agg`.
 
 ---
 
-## Cell 14 — Z-Scores Against Local Peers
+## Cell 14 - Z-Scores Against Local Peers
 
 `compute_z_scores(S, my_ip)` filters `ip_agg` to private IPs only (via `is_private`), computes mean and std per feature, then `(value − mean) / std` for the row matching `my_ip`. Returns a Series.
 
@@ -150,27 +150,27 @@ The local-peer filter is critical: without it, the baseline includes CDN/cloud I
 
 ---
 
-## Cell 16 — Rule-Based Security Scans
+## Cell 16 - Rule-Based Security Scans
 
 `run_security_scans(S)` runs 5 scans against `df_pkts` and the raw packet list:
 
-1. **FTP/SMTP credentials** — searches packet payloads for `USER`, `PASS`, `MAIL FROM`, `RCPT TO` lines on the appropriate ports.
-2. **TCP SYN flood/scan** — flags IPs with `syn_count > 100`.
-3. **ARP spoofing** — flags IPs that appear with more than one MAC in `arp_ip_to_macs`.
-4. **DNS NXDOMAIN spike** — flags sessions with >50 NXDOMAIN responses.
-5. **DNS tunnelling** — flags queries longer than 60 characters or on non-standard DNS ports.
+1. **FTP/SMTP credentials** - searches packet payloads for `USER`, `PASS`, `MAIL FROM`, `RCPT TO` lines on the appropriate ports.
+2. **TCP SYN flood/scan** - flags IPs with `syn_count > 100`.
+3. **ARP spoofing** - flags IPs that appear with more than one MAC in `arp_ip_to_macs`.
+4. **DNS NXDOMAIN spike** - flags sessions with >50 NXDOMAIN responses.
+5. **DNS tunnelling** - flags queries longer than 60 characters or on non-standard DNS ports.
 
 Returns a dict of scan name → list of flagged items.
 
 ---
 
-## Cell 18 — Session Comparison
+## Cell 18 - Session Comparison
 
 `compute_session_compare(S1, S2)` does set arithmetic: `new = ips2 − ips1`, `gone = ips1 − ips2`, `both = ips1 ∩ ips2`. Builds a comparison DataFrame with per-IP byte volumes for both sessions and status labels.
 
 ---
 
-## Cell 20 — Intelligence Insights + Pipeline Glue
+## Cell 20 - Intelligence Insights + Pipeline Glue
 
 `generate_insights_lines(s1, s2, local_ip_agg_df, compare_df_arg, my_ip)` produces 8 auto-generated findings from runtime data:
 
@@ -189,9 +189,9 @@ Returns a dict of scan name → list of flagged items.
 
 ---
 
-## Cell 22 — LSTM Architecture
+## Cell 22 - LSTM Architecture
 
-`class LSTMModel(nn.Module)` — a small LSTM with:
+`class LSTMModel(nn.Module)` - a small LSTM with:
 - Input dim 1 (packet size only)
 - Hidden dim 32
 - 1 layer
@@ -199,23 +199,23 @@ Returns a dict of scan name → list of flagged items.
 
 ---
 
-## Cell 24 — LSTM Training
+## Cell 24 - LSTM Training
 
 `SEQ_LEN = 10`, `BATCH = 64`, `EPOCHS = 30`, `PATIENCE = 2`.
 
-`run_lstm_on_session(S, label)` builds time-binned sequences (1-second bins, mean packet size), splits 80/20 chronologically (no random shuffling — that would leak future into past), trains with MSE loss + Adam, monitors val loss every epoch, stops early if val loss doesn't improve for `PATIENCE` consecutive epochs. Restores best weights at end.
+`run_lstm_on_session(S, label)` builds time-binned sequences (1-second bins, mean packet size), splits 80/20 chronologically (no random shuffling - that would leak future into past), trains with MSE loss + Adam, monitors val loss every epoch, stops early if val loss doesn't improve for `PATIENCE` consecutive epochs. Restores best weights at end.
 
-Anomaly threshold = `mean(val_err) + 2 * std(val_err)` — uses validation errors not training errors (so it reflects generalisation, not memorisation).
+Anomaly threshold = `mean(val_err) + 2 * std(val_err)` - uses validation errors not training errors (so it reflects generalisation, not memorisation).
 
 ---
 
-## Cell 26 — LSTM Evaluation
+## Cell 26 - LSTM Evaluation
 
 `evaluate_lstm(...)` runs the trained model over the full sequence, computes per-prediction error, returns the error array and threshold for the histogram plot.
 
 ---
 
-## Cell 37 — Classification Engine
+## Cell 37 - Classification Engine
 
 The most complex non-dashboard cell. Loads three JSON files via `_find_config(name)` (searches cwd, parent, `/mnt/data`, `~/`):
 
@@ -266,17 +266,17 @@ The three-tier dispatcher. Returns a dict with `category`, `subcategory`, `vendo
 
 ---
 
-## Cell 39 — Device Inventory & Coverage Metrics
+## Cell 39 - Device Inventory & Coverage Metrics
 
-`_is_private(ip)` — checks RFC 1918 ranges via `ipaddress.ip_address(ip).is_private`.
+`_is_private(ip)` - checks RFC 1918 ranges via `ipaddress.ip_address(ip).is_private`.
 
-`build_device_inventory(session, my_ip)` — iterates `session['ip_agg']`, classifies every private IP via `classify_local_device(...)`, attaches the result to each row. Builds a DataFrame with columns: IP, MAC, vendor, category, subcategory, model, confidence, total_bytes, packet_count.
+`build_device_inventory(session, my_ip)` - iterates `session['ip_agg']`, classifies every private IP via `classify_local_device(...)`, attaches the result to each row. Builds a DataFrame with columns: IP, MAC, vendor, category, subcategory, model, confidence, total_bytes, packet_count.
 
 Coverage metrics computed: how many devices got Tier-1 vs Tier-2 vs Tier-3 classification; how many have known vendor; how many use random MAC.
 
 ---
 
-## Cell 41 — Live Capture Worker
+## Cell 41 - Live Capture Worker
 
 `LiveCaptureWorker` is a thread-safe accumulator:
 
@@ -314,27 +314,27 @@ class LiveCaptureWorker:
         ...
 ```
 
-`LIVE_SESSIONS = {'S1': LiveCaptureWorker(), 'S2': LiveCaptureWorker()}` — one worker per session slot.
+`LIVE_SESSIONS = {'S1': LiveCaptureWorker(), 'S2': LiveCaptureWorker()}` - one worker per session slot.
 
 `list_capture_interfaces()` runs `tshark -D` and parses the output into `[(name, description), ...]` for the dashboard dropdown.
 
 ---
 
-## Cell 43 — Browsing Analysis + Device Map
+## Cell 43 - Browsing Analysis + Device Map
 
 `CATEGORY_RULES` is a list of regex patterns mapping DNS queries to categories (Streaming, Work, Google/Cloud, Cloud Infra, Social, Security/Update, News/Media, CDN/Infra).
 
 `categorize_dns_query(q)` returns the first matching category, or "Other".
 
-`build_browse_by_category(s)` — for each device with mDNS name, computes the percentage of its DNS queries per category. Returns a DataFrame for the stacked bar chart.
+`build_browse_by_category(s)` - for each device with mDNS name, computes the percentage of its DNS queries per category. Returns a DataFrame for the stacked bar chart.
 
-`build_browse_by_hour(s)` — for each device, bins its DNS timeline by hour-of-day. Returns a DataFrame for the heatmap.
+`build_browse_by_hour(s)` - for each device, bins its DNS timeline by hour-of-day. Returns a DataFrame for the heatmap.
 
-`_build_device_map_figure(session, label)` — runs PCA on the classified device feature matrix (one-hot category + numeric features) and produces a 2D scatter coloured by category.
+`_build_device_map_figure(session, label)` - runs PCA on the classified device feature matrix (one-hot category + numeric features) and produces a 2D scatter coloured by category.
 
 ---
 
-## Cell 45 — Build All Figures
+## Cell 45 - Build All Figures
 
 ```python
 import plotly.io as _pio
@@ -363,19 +363,19 @@ Then per-session calls to `_build_device_map_figure()` and `_build_proximity_map
 
 ---
 
-## Cell 47 — Dashboard (Aurora theme + CRT splash)
+## Cell 47 - Dashboard (Aurora theme + CRT splash)
 
 The largest cell in the notebook. Defines:
 
 - Colour palette: `INK`, `INK_DIM`, `INK_MUTE`, `VIOLET`, `CYAN`, `MAGENTA`, etc.
 - CSS in `AURORA_INDEX_STRING` (typography, animations, glass-panel utility classes)
-- `_NETSEC_LETTERS` — pixel-grid coordinates for N, E, T, S, C
-- `_build_netsec_crt_logo()` — returns Base64 SVG data URL for the pink pixel-art logo
-- `_build_intro_splash()` — assembles the CRT terminal splash (green CLI prompt, pink NETSEC logo, fake directory tree, blinking cursor, scanline overlay)
-- `build_intro_view()` — the educational/welcome view that contains the splash
-- `build_choice_view()` — the upload/capture chooser
-- `build_main_view()` — the analysis dashboard with sidebar + topbar + chart panel
-- `_build_second_pcap_modal()` — the "Load Second PCAP" modal
+- `_NETSEC_LETTERS` - pixel-grid coordinates for N, E, T, S, C
+- `_build_netsec_crt_logo()` - returns Base64 SVG data URL for the pink pixel-art logo
+- `_build_intro_splash()` - assembles the CRT terminal splash (green CLI prompt, pink NETSEC logo, fake directory tree, blinking cursor, scanline overlay)
+- `build_intro_view()` - the educational/welcome view that contains the splash
+- `build_choice_view()` - the upload/capture chooser
+- `build_main_view()` - the analysis dashboard with sidebar + topbar + chart panel
+- `_build_second_pcap_modal()` - the "Load Second PCAP" modal
 - Topbar with 6 live KPIs + Load Second PCAP button
 - Sidebar with `NAV_ITEMS` (28 entries across 7 sections)
 - Dash callbacks: `splash_to_choice`, `choice_to_main`, `click_nav`, `render_chart`, `brand_to_home`, `restart_app`, `open_second_pcap_modal`, plus the live-capture callback chain
@@ -386,6 +386,6 @@ The app is launched via `app.run(host='127.0.0.1', port=8050, jupyter_mode='exte
 
 ---
 
-## Cells 48-49 — Empty
+## Cells 48-49 - Empty
 
 Reserved for future extensions.
