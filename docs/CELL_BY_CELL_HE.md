@@ -1,4 +1,4 @@
-# מדריך תא-תא — לוח בקרה לניתוח אבטחת רשת
+# מדריך תא-תא - לוח בקרה לניתוח אבטחת רשת
 
 המחברת מכילה 50 תאים (25 קוד, 25 markdown). המסמך הזה מסביר מה כל תא קוד עושה.
 
@@ -7,16 +7,16 @@
 המחברת בנויה כך שעד תא 47 (לא כולל), רצות רק **הגדרות פונקציות וייבוא ספריות**. אין שום ניתוח נתונים שמתבצע אוטומטית כשמריצים את התאים. ניתוח אמיתי מתחיל רק כשהמשתמש לוחץ "Load PCAP" או מקליט בלייב מהדשבורד (תא 47).
 
 ```
-תאים 0-3:   Markdown — כותרת, מבוא, הסבר על שכבות TCP/IP
-תא 4:       ייבוא — התקנה אוטומטית של ספריות, איתור tshark
-תא 5:       Markdown — מסביר על נתיבי PCAP
+תאים 0-3:   Markdown - כותרת, מבוא, הסבר על שכבות TCP/IP
+תא 4:       ייבוא - התקנה אוטומטית של ספריות, איתור tshark
+תא 5:       Markdown - מסביר על נתיבי PCAP
 תא 6:       משתני PCAP ריקים + פונקציית בורר קבצים PySide6
-תא 7:       Markdown — מסביר את מנוע הניתוח
-תא 8:       _analyze_pcap_tshark / _analyze_pcap_scapy — טוענים מהירים
+תא 7:       Markdown - מסביר את מנוע הניתוח
+תא 8:       _analyze_pcap_tshark / _analyze_pcap_scapy - טוענים מהירים
 תא 9:       Markdown
 תא 10:      איפוס מצב + load_session_from_pcap
 תא 11:      Markdown
-תא 12:      run_ml_on_session — IsolationForest + DBSCAN
+תא 12:      run_ml_on_session - IsolationForest + DBSCAN
 תא 13:      Markdown
 תא 14:      compute_z_scores
 תא 15:      Markdown
@@ -28,27 +28,27 @@
 תא 21:      Markdown
 תא 22:      מחלקת LSTMModel
 תא 23:      Markdown
-תא 24:      run_lstm_on_session — לולאת אימון עם early stopping
+תא 24:      run_lstm_on_session - לולאת אימון עם early stopping
 תא 25:      Markdown
 תא 26:      evaluate_lstm
 תא 27:      Markdown
 תאים 28-36: Markdown + תאים ריקים (חלקים שעברו לתאים אחרים)
-תא 37:      מנוע סיווג — OUI lookup + classify_local_device בשלושה שלבים
+תא 37:      מנוע סיווג - OUI lookup + classify_local_device בשלושה שלבים
 תא 38:      Markdown
 תא 39:      בונה מצאי המכשירים + מדדי כיסוי
 תא 40:      Markdown
-תא 41:      LiveCaptureWorker — תהליך tshark משנה ברקע
+תא 41:      LiveCaptureWorker - תהליך tshark משנה ברקע
 תא 42:      Markdown
 תא 43:      ניתוח גלישה (קטגוריה + שעה) + מפת מכשירים (PCA)
 תא 44:      Markdown
-תא 45:      make_figures + _build_proximity_map_figure — 34 גרפי Plotly
+תא 45:      make_figures + _build_proximity_map_figure - 34 גרפי Plotly
 תא 46:      Markdown
-תא 47:      אפליקציית Dash — עיצוב Aurora + מסך פתיחה CRT + 7 חלקי ניווט
+תא 47:      אפליקציית Dash - עיצוב Aurora + מסך פתיחה CRT + 7 חלקי ניווט
 ```
 
 ---
 
-## תא 4 — ייבוא וסביבה
+## תא 4 - ייבוא וסביבה
 
 **מטרה:** לוודא שכל ספרייה נדרשת מותקנת; לאתר את `tshark` על הדיסק.
 
@@ -63,17 +63,17 @@
 
 ---
 
-## תא 6 — משתני PCAP ריקים + בורר קבצים
+## תא 6 - משתני PCAP ריקים + בורר קבצים
 
 **מטרה:** לאתחל משתני placeholder ולהגדיר את בורר הקבצים מבוסס PySide6 שכפתור Upload שבדשבורד קורא אליו.
 
-משתנים: `PCAP1 = None`, `PCAP2 = None`, `CSV1 = None`, `CSV2 = None`, `MY_DEVICE_IP = "192.168.1.50"` (placeholder — המשתמש משנה את זה).
+משתנים: `PCAP1 = None`, `PCAP2 = None`, `CSV1 = None`, `CSV2 = None`, `MY_DEVICE_IP = "192.168.1.50"` (placeholder - המשתמש משנה את זה).
 
 `pick_pcap_files()` כותב סקריפט PySide6 קטן ל-tempfile ומריץ אותו דרך `subprocess.run`. הסקריפט מציג בורר קבצים מקומי ומדפיס את הנתיבים שנבחרו ל-stdout. הפונקציה קוראת את ה-stdout ומחזירה רשימת נתיבים. העקיפות הזו נמנעת מטעינת PySide6 לתוך תהליך המחברת עצמו (מה שיכול לקרוס את Jupyter בחלק מההתקנות).
 
 ---
 
-## תא 8 — מנוע קליטה
+## תא 8 - מנוע קליטה
 
 **מטרה:** התא החשוב ביותר. מנתח PCAP ל-dict מובנה שכל יתר הצינור צורך.
 
@@ -122,19 +122,19 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 10 — משבצות session ריקות
+## תא 10 - משבצות session ריקות
 
 מאתחל `S1 = None`, `S2 = None`. הדשבורד משנה את אלה כשהמשתמש טוען PCAP.
 
 ---
 
-## תא 12 — ML לא מפוקח
+## תא 12 - ML לא מפוקח
 
 `run_ml_on_session(S)` בונה מטריצת 7 תכונות מ-`ip_agg` (`mean_len`, `std_len`, `count`, `burst_score`, `unique_dsts`, `syn_count`, `rst_count`), מריץ עליה `StandardScaler`, ואז:
 
-**IsolationForest** עם sensitivity sweep של 20 נקודות contamination מ-0.02 עד 0.30. לכל ערך, מתאים את המודל ורושם את הציון הממוצע של הקבוצה המסומנת. בוחר את ה-contamination שהקבוצה המסומנת שלו בעלת **הציון הממוצע הנמוך ביותר** (הקיצונית ביותר — הנקודות שבודדו הכי מהר ע"י העצים). שומר את הערך הנבחר ב-`ip_agg.attrs['chosen_contamination']`.
+**IsolationForest** עם sensitivity sweep של 20 נקודות contamination מ-0.02 עד 0.30. לכל ערך, מתאים את המודל ורושם את הציון הממוצע של הקבוצה המסומנת. בוחר את ה-contamination שהקבוצה המסומנת שלו בעלת **הציון הממוצע הנמוך ביותר** (הקיצונית ביותר - הנקודות שבודדו הכי מהר ע"י העצים). שומר את הערך הנבחר ב-`ip_agg.attrs['chosen_contamination']`.
 
-**DBSCAN** עם `eps` מ-k-distance elbow: `NearestNeighbors(n_neighbors=2)`, סידור המרחקים בסדר יורד, איתור הנגזרת השנייה המקסימלית — זה ה-elbow. שימוש ב-`min_samples=2` כי במרחב 7-מימדי עם 50-150 נקודות, הצפיפות נמוכה מטבעה.
+**DBSCAN** עם `eps` מ-k-distance elbow: `NearestNeighbors(n_neighbors=2)`, סידור המרחקים בסדר יורד, איתור הנגזרת השנייה המקסימלית - זה ה-elbow. שימוש ב-`min_samples=2` כי במרחב 7-מימדי עם 50-150 נקודות, הצפיפות נמוכה מטבעה.
 
 **סטטיסטיקת Hopkins H** מחושבת לצד. H ≈ 0.5 = הנתונים אקראיים; H > 0.65 = יש מבנה אשכולות אמיתי.
 
@@ -142,7 +142,7 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 14 — Z-Scores מול עמיתים מקומיים
+## תא 14 - Z-Scores מול עמיתים מקומיים
 
 `compute_z_scores(S, my_ip)` מסנן את `ip_agg` רק לכתובות IP פרטיות (דרך `is_private`), מחשב ממוצע וסטיית תקן לכל תכונה, ואז `(value − mean) / std` לשורה שמתאימה ל-`my_ip`. מחזיר Series.
 
@@ -150,27 +150,27 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 16 — סריקות אבטחה מבוססות חוקים
+## תא 16 - סריקות אבטחה מבוססות חוקים
 
 `run_security_scans(S)` מריץ 5 סריקות מול `df_pkts` ורשימת החבילות הגולמית:
 
-1. **Credentials של FTP/SMTP** — מחפש ב-payloads של חבילות שורות `USER`, `PASS`, `MAIL FROM`, `RCPT TO` על הפורטים הרלוונטיים.
-2. **TCP SYN flood/scan** — מסמן IPs עם `syn_count > 100`.
-3. **ARP spoofing** — מסמן IPs שמופיעים עם יותר מ-MAC אחד ב-`arp_ip_to_macs`.
-4. **DNS NXDOMAIN spike** — מסמן sessions עם יותר מ-50 תגובות NXDOMAIN.
-5. **DNS tunnelling** — מסמן שאילתות ארוכות מ-60 תווים או על פורטי DNS לא סטנדרטיים.
+1. **Credentials של FTP/SMTP** - מחפש ב-payloads של חבילות שורות `USER`, `PASS`, `MAIL FROM`, `RCPT TO` על הפורטים הרלוונטיים.
+2. **TCP SYN flood/scan** - מסמן IPs עם `syn_count > 100`.
+3. **ARP spoofing** - מסמן IPs שמופיעים עם יותר מ-MAC אחד ב-`arp_ip_to_macs`.
+4. **DNS NXDOMAIN spike** - מסמן sessions עם יותר מ-50 תגובות NXDOMAIN.
+5. **DNS tunnelling** - מסמן שאילתות ארוכות מ-60 תווים או על פורטי DNS לא סטנדרטיים.
 
 מחזיר dict של שם סריקה → רשימת פריטים מסומנים.
 
 ---
 
-## תא 18 — השוואת sessions
+## תא 18 - השוואת sessions
 
 `compute_session_compare(S1, S2)` עושה אריתמטיקת קבוצות: `new = ips2 − ips1`, `gone = ips1 − ips2`, `both = ips1 ∩ ips2`. בונה DataFrame השוואה עם נפחי bytes לכל IP לשני ה-sessions ותגיות סטטוס.
 
 ---
 
-## תא 20 — Intelligence Insights + דבק הצינור
+## תא 20 - Intelligence Insights + דבק הצינור
 
 `generate_insights_lines(s1, s2, local_ip_agg_df, compare_df_arg, my_ip)` מייצר 8 ממצאים אוטומטיים מנתוני runtime:
 
@@ -189,9 +189,9 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 22 — ארכיטקטורת LSTM
+## תא 22 - ארכיטקטורת LSTM
 
-`class LSTMModel(nn.Module)` — LSTM קטן עם:
+`class LSTMModel(nn.Module)` - LSTM קטן עם:
 - מימד קלט 1 (רק גודל חבילה)
 - מימד hidden 32
 - שכבה אחת
@@ -199,23 +199,23 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 24 — אימון LSTM
+## תא 24 - אימון LSTM
 
 `SEQ_LEN = 10`, `BATCH = 64`, `EPOCHS = 30`, `PATIENCE = 2`.
 
-`run_lstm_on_session(S, label)` בונה רצפים מקובצי-זמן (bins של שנייה אחת, ממוצע גודל חבילה), מחלק 80/20 כרונולוגית (ללא ערבוב — זה היה גורם ל-leak של עתיד לעבר), מאמן עם MSE loss + Adam, עוקב אחר val loss בכל epoch, עוצר מוקדם אם val loss לא משתפר במשך `PATIENCE` epochs רצופים. משחזר משקלים הטובים ביותר בסוף.
+`run_lstm_on_session(S, label)` בונה רצפים מקובצי-זמן (bins של שנייה אחת, ממוצע גודל חבילה), מחלק 80/20 כרונולוגית (ללא ערבוב - זה היה גורם ל-leak של עתיד לעבר), מאמן עם MSE loss + Adam, עוקב אחר val loss בכל epoch, עוצר מוקדם אם val loss לא משתפר במשך `PATIENCE` epochs רצופים. משחזר משקלים הטובים ביותר בסוף.
 
-סף אנומליה = `mean(val_err) + 2 * std(val_err)` — משתמש בשגיאות validation לא שגיאות training (כדי שישקף הכללה, לא שינון).
+סף אנומליה = `mean(val_err) + 2 * std(val_err)` - משתמש בשגיאות validation לא שגיאות training (כדי שישקף הכללה, לא שינון).
 
 ---
 
-## תא 26 — הערכת LSTM
+## תא 26 - הערכת LSTM
 
 `evaluate_lstm(...)` מריץ את המודל המאומן על כל הרצף, מחשב שגיאה לכל חיזוי, מחזיר את מערך השגיאות והסף עבור גרף ההיסטוגרמה.
 
 ---
 
-## תא 37 — מנוע סיווג
+## תא 37 - מנוע סיווג
 
 התא הכי מורכב מחוץ לדשבורד. טוען שלושה קבצי JSON דרך `_find_config(name)` (מחפש ב-cwd, parent, `/mnt/data`, `~/`):
 
@@ -266,17 +266,17 @@ Dispatcher: קורא ל-`_analyze_pcap_tshark` אם `TSHARK_PATH` מוגדר, א
 
 ---
 
-## תא 39 — מצאי מכשירים ומדדי כיסוי
+## תא 39 - מצאי מכשירים ומדדי כיסוי
 
-`_is_private(ip)` — בודק טווחי RFC 1918 דרך `ipaddress.ip_address(ip).is_private`.
+`_is_private(ip)` - בודק טווחי RFC 1918 דרך `ipaddress.ip_address(ip).is_private`.
 
-`build_device_inventory(session, my_ip)` — עובר על `session['ip_agg']`, מסווג כל IP פרטי דרך `classify_local_device(...)`, מצמיד את התוצאה לכל שורה. בונה DataFrame עם עמודות: IP, MAC, vendor, category, subcategory, model, confidence, total_bytes, packet_count.
+`build_device_inventory(session, my_ip)` - עובר על `session['ip_agg']`, מסווג כל IP פרטי דרך `classify_local_device(...)`, מצמיד את התוצאה לכל שורה. בונה DataFrame עם עמודות: IP, MAC, vendor, category, subcategory, model, confidence, total_bytes, packet_count.
 
 מדדי כיסוי שמחושבים: כמה מכשירים קיבלו סיווג Tier-1 לעומת Tier-2 לעומת Tier-3; לכמה יש vendor ידוע; כמה משתמשים ב-MAC אקראי.
 
 ---
 
-## תא 41 — Worker לכידה חיה
+## תא 41 - Worker לכידה חיה
 
 `LiveCaptureWorker` הוא צובר בטוח-thread:
 
@@ -314,27 +314,27 @@ class LiveCaptureWorker:
         ...
 ```
 
-`LIVE_SESSIONS = {'S1': LiveCaptureWorker(), 'S2': LiveCaptureWorker()}` — worker אחד לכל משבצת session.
+`LIVE_SESSIONS = {'S1': LiveCaptureWorker(), 'S2': LiveCaptureWorker()}` - worker אחד לכל משבצת session.
 
 `list_capture_interfaces()` מריץ `tshark -D` ומפרק את הפלט ל-`[(name, description), ...]` עבור ה-dropdown של הדשבורד.
 
 ---
 
-## תא 43 — ניתוח גלישה + מפת מכשירים
+## תא 43 - ניתוח גלישה + מפת מכשירים
 
 `CATEGORY_RULES` היא רשימת דפוסי regex שממפים שאילתות DNS לקטגוריות (Streaming, Work, Google/Cloud, Cloud Infra, Social, Security/Update, News/Media, CDN/Infra).
 
 `categorize_dns_query(q)` מחזיר את הקטגוריה הראשונה שמתאימה, או "Other".
 
-`build_browse_by_category(s)` — לכל מכשיר עם שם mDNS, מחשב את האחוז של שאילתות ה-DNS שלו לכל קטגוריה. מחזיר DataFrame ל-stacked bar.
+`build_browse_by_category(s)` - לכל מכשיר עם שם mDNS, מחשב את האחוז של שאילתות ה-DNS שלו לכל קטגוריה. מחזיר DataFrame ל-stacked bar.
 
-`build_browse_by_hour(s)` — לכל מכשיר, מחלק את timeline ה-DNS שלו לפי שעת היום. מחזיר DataFrame ל-heatmap.
+`build_browse_by_hour(s)` - לכל מכשיר, מחלק את timeline ה-DNS שלו לפי שעת היום. מחזיר DataFrame ל-heatmap.
 
-`_build_device_map_figure(session, label)` — מריץ PCA על מטריצת תכונות המכשיר המסווג (one-hot category + תכונות מספריות) ומייצר scatter 2D צבוע לפי קטגוריה.
+`_build_device_map_figure(session, label)` - מריץ PCA על מטריצת תכונות המכשיר המסווג (one-hot category + תכונות מספריות) ומייצר scatter 2D צבוע לפי קטגוריה.
 
 ---
 
-## תא 45 — בניית כל הגרפים
+## תא 45 - בניית כל הגרפים
 
 ```python
 import plotly.io as _pio
@@ -363,19 +363,19 @@ _pio.templates.default = "none"
 
 ---
 
-## תא 47 — דשבורד (עיצוב Aurora + מסך פתיחה CRT)
+## תא 47 - דשבורד (עיצוב Aurora + מסך פתיחה CRT)
 
 התא הגדול ביותר במחברת. מגדיר:
 
 - פלטת צבעים: `INK`, `INK_DIM`, `INK_MUTE`, `VIOLET`, `CYAN`, `MAGENTA`, וכו'
 - CSS ב-`AURORA_INDEX_STRING` (טיפוגרפיה, animations, utility classes של glass-panel)
-- `_NETSEC_LETTERS` — קואורדינטות פיקסל-גריד עבור N, E, T, S, C
-- `_build_netsec_crt_logo()` — מחזיר Base64 SVG data URL עבור הלוגו פיקסל-ארט הוורוד
-- `_build_intro_splash()` — מרכיב את מסך הפתיחה של מסוף CRT (prompt CLI ירוק, לוגו NETSEC ורוד, עץ תיקיות מזויף, סמן מהבהב, שכבת scanline)
-- `build_intro_view()` — תצוגת הברוכים-הבאים/הסבר שמכילה את מסך הפתיחה
-- `build_choice_view()` — בורר העלאה/הקלטה
-- `build_main_view()` — דשבורד הניתוח עם sidebar + topbar + chart panel
-- `_build_second_pcap_modal()` — modal "Load Second PCAP"
+- `_NETSEC_LETTERS` - קואורדינטות פיקסל-גריד עבור N, E, T, S, C
+- `_build_netsec_crt_logo()` - מחזיר Base64 SVG data URL עבור הלוגו פיקסל-ארט הוורוד
+- `_build_intro_splash()` - מרכיב את מסך הפתיחה של מסוף CRT (prompt CLI ירוק, לוגו NETSEC ורוד, עץ תיקיות מזויף, סמן מהבהב, שכבת scanline)
+- `build_intro_view()` - תצוגת הברוכים-הבאים/הסבר שמכילה את מסך הפתיחה
+- `build_choice_view()` - בורר העלאה/הקלטה
+- `build_main_view()` - דשבורד הניתוח עם sidebar + topbar + chart panel
+- `_build_second_pcap_modal()` - modal "Load Second PCAP"
 - Topbar עם 6 KPI חיים + כפתור Load Second PCAP
 - Sidebar עם `NAV_ITEMS` (28 entries ב-7 חלקים)
 - Dash callbacks: `splash_to_choice`, `choice_to_main`, `click_nav`, `render_chart`, `brand_to_home`, `restart_app`, `open_second_pcap_modal`, ועוד שרשרת callback של live-capture
@@ -386,6 +386,6 @@ _pio.templates.default = "none"
 
 ---
 
-## תאים 48-49 — ריקים
+## תאים 48-49 - ריקים
 
 שמורים להרחבות עתידיות.

@@ -2,9 +2,9 @@
 
 **Wireshark PCAPNG + לכידה חיה + סיווג מכשירים בשלושה שלבים + לוח בקרה אינטראקטיבי**
 
-מסגרת לאינטליגנציית רשת שהופכת לכידות Wireshark לתובנות אבטחה מובנות — ללא צורך בנתונים מסומנים. כוללת מנוע סיווג מכשירים בשלושה שלבים, למידת מכונה לא מפוקחת, ניתוח קרבה מבוסס RSSI, ולוח בקרה בעיצוב Aurora עם מסך פתיחה בסגנון מסוף CRT.
+מסגרת לאינטליגנציית רשת שהופכת לכידות Wireshark לתובנות אבטחה מובנות - ללא צורך בנתונים מסומנים. כוללת מנוע סיווג מכשירים בשלושה שלבים, למידת מכונה לא מפוקחת, ניתוח קרבה מבוסס RSSI, ולוח בקרה בעיצוב Aurora עם מסך פתיחה בסגנון מסוף CRT.
 
-**השאלה המרכזית שהמערכת עונה עליה:** *אילו מכשירים נמצאים ברשת, מה הם, איך הם מתנהגים — והאם משהו מההתנהגות הזו מהווה בעיית אבטחה?*
+**השאלה המרכזית שהמערכת עונה עליה:** *אילו מכשירים נמצאים ברשת, מה הם, איך הם מתנהגים - והאם משהו מההתנהגות הזו מהווה בעיית אבטחה?*
 
 ---
 
@@ -42,19 +42,19 @@ pip install dash dash-bootstrap-components scapy torch scikit-learn plotly panda
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         שלב הקליטה                                 │
-│   tshark (מועדף) — 25 שדות כולל 8 שדות WLAN                       │
-│   scapy fallback — רק IP/TCP/UDP/DNS/ARP                          │
+│   tshark (מועדף) - 25 שדות כולל 8 שדות WLAN                       │
+│   scapy fallback - רק IP/TCP/UDP/DNS/ARP                          │
 │                       או                                            │
-│   לכידה חיה — תהליך tshark ברקע + polling                          │
+│   לכידה חיה - תהליך tshark ברקע + polling                          │
 └─────────────────────────────────────────────────────────────────────┘
                                   ↓
 ┌─────────────────────────────────────────────────────────────────────┐
 │                       מנוע סיווג                                    │
 │   • מסד נתוני OUI (Wireshark manuf או `tshark -G manuf`)           │
-│   • שלב 1: חוקים (device_rules.json — 261 חוקים)                  │
-│   • שלב 2: טביעות DNS (dns_fingerprints.json — 217 טביעות)        │
+│   • שלב 1: חוקים (device_rules.json - 261 חוקים)                  │
+│   • שלב 2: טביעות DNS (dns_fingerprints.json - 217 טביעות)        │
 │   • שלב 3: ניתוח התנהגותי לפי פורטים (תמיד מחזיר קטגוריה)         │
-│   + סיווג כתובות IP חיצוניות (cloud_ranges.json — 247 CIDR/334 r) │
+│   + סיווג כתובות IP חיצוניות (cloud_ranges.json - 247 CIDR/334 r) │
 └─────────────────────────────────────────────────────────────────────┘
                                   ↓
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -97,13 +97,13 @@ pip install dash dash-bootstrap-components scapy torch scikit-learn plotly panda
 ## תכונות מרכזיות
 
 ### סיווג מכשירים בשלושה שלבים
-כל IP מקומי עובר דרך שלושה שלבים — הראשון שמצליח מנצח:
+כל IP מקומי עובר דרך שלושה שלבים - הראשון שמצליח מנצח:
 
-1. **חוקים** — התאמת vendor + mDNS + פורטים + regex על DNS. priority ≥ 800 = ביטחון גבוה, 500–799 = בינוני, 200–499 = נמוך.
-2. **טביעות DNS** — חיפוש substring/regex של שאילתות DNS מול 217 טביעות מכשיר; כל טביעה דורשת `match_threshold` דומיינים מזהים.
-3. **fallback התנהגותי** — זיהוי לפי דפוסי פורטים (554 → מצלמה, 9100 → מדפסת, 5060 → VoIP, 8008 → Chromecast, 62078 → iPhone וכו'). תמיד מחזיר קטגוריה ספציפית.
+1. **חוקים** - התאמת vendor + mDNS + פורטים + regex על DNS. priority ≥ 800 = ביטחון גבוה, 500–799 = בינוני, 200–499 = נמוך.
+2. **טביעות DNS** - חיפוש substring/regex של שאילתות DNS מול 217 טביעות מכשיר; כל טביעה דורשת `match_threshold` דומיינים מזהים.
+3. **fallback התנהגותי** - זיהוי לפי דפוסי פורטים (554 → מצלמה, 9100 → מדפסת, 5060 → VoIP, 8008 → Chromecast, 62078 → iPhone וכו'). תמיד מחזיר קטגוריה ספציפית.
 
-המנוע **לעולם לא מחזיר Unknown** — גם בלי שום אות, יחזיר `Generic Endpoint / Network endpoint`.
+המנוע **לעולם לא מחזיר Unknown** - גם בלי שום אות, יחזיר `Generic Endpoint / Network endpoint`.
 
 ### לכידה חיה
 `tshark` רץ כתהליך משנה ברקע. לוח הבקרה דוגם worker בטוח-thread עבור KPI חיים (ספירת חבילות, bytes/sec, top talkers). מקליטים כמה זמן שרוצים, לוחצים Save, וצינור הקליטה הרגיל מעבד את ה-PCAP שנשמר.
@@ -127,33 +127,33 @@ d = 10^((Tx − RSSI − PL₀) / (10 · n))
 
 סרגל הצד מקבץ 28 גרפים ב-7 חלקים:
 
-- **Overview** — top talkers, התפלגות פרוטוקולים, ציר זמן bytes, top domains של DNS
-- **Sessions** — סיכום חבילות לכל מפגש, מטא-דאטה של לכידה, תובנות
-- **Device Inventory** — טבלת מכשירים מסווגים, מפת מכשירים (PCA), מפת קרבה (RSSI)
-- **Browsing** — לפי קטגוריה, לפי שעה, השוואות S1/S2
-- **Security** — SYN flood / ARP spoof / DNS NX / DNS tunnelling, model agreement matrix, contamination sweep
-- **Comparison** — IPs חדשים/נעלמים/השתנו, traffic delta, mDNS churn
-- **Insights** — 8 ממצאים נרטיביים שמיוצרים אוטומטית
+- **Overview** - top talkers, התפלגות פרוטוקולים, ציר זמן bytes, top domains של DNS
+- **Sessions** - סיכום חבילות לכל מפגש, מטא-דאטה של לכידה, תובנות
+- **Device Inventory** - טבלת מכשירים מסווגים, מפת מכשירים (PCA), מפת קרבה (RSSI)
+- **Browsing** - לפי קטגוריה, לפי שעה, השוואות S1/S2
+- **Security** - SYN flood / ARP spoof / DNS NX / DNS tunnelling, model agreement matrix, contamination sweep
+- **Comparison** - IPs חדשים/נעלמים/השתנו, traffic delta, mDNS churn
+- **Insights** - 8 ממצאים נרטיביים שמיוצרים אוטומטית
 
 ---
 
 ## עקרונות מתודולוגיים
 
-1. **אין תוויות בנתונים** — אין עמודת `is_suspicious`, אין `device_role`. הצינור מסיק הכל מהתנהגות החבילות.
-2. **התנהגות מעל זהות** — אנומליות מתגלות מאותות זמניים, מבניים וסטטיסטיים.
-3. **הידרדרות נוחה בשלושה שלבים** — חוק עם ביטחון גבוה → טביעת DNS → fallback התנהגותי. לעולם לא מחזיר Unknown.
-4. **היפר-פרמטרים מבוססי נתונים** — IsolationForest contamination מ-sensitivity sweep; DBSCAN `eps` מ-k-distance elbow; סף LSTM משגיאות validation.
-5. **מניעת leakage** — חלוקה כרונולוגית של train/val ב-LSTM; אין תכונה שמקודדת ישירות את תווית האנומליה.
-6. **השוואה לעמיתים מקומיים** — Z-scores מחושבים מול עמיתים בכתובות IP פרטיות בלבד, כדי ש-CDN/cloud לא ילכלכו את ה-baseline.
-7. **זהות נתנת להגדרה** — כל זיהוי המכשירים והשירותים נמצא בשלושה קבצי JSON חיצוניים.
+1. **אין תוויות בנתונים** - אין עמודת `is_suspicious`, אין `device_role`. הצינור מסיק הכל מהתנהגות החבילות.
+2. **התנהגות מעל זהות** - אנומליות מתגלות מאותות זמניים, מבניים וסטטיסטיים.
+3. **הידרדרות נוחה בשלושה שלבים** - חוק עם ביטחון גבוה → טביעת DNS → fallback התנהגותי. לעולם לא מחזיר Unknown.
+4. **היפר-פרמטרים מבוססי נתונים** - IsolationForest contamination מ-sensitivity sweep; DBSCAN `eps` מ-k-distance elbow; סף LSTM משגיאות validation.
+5. **מניעת leakage** - חלוקה כרונולוגית של train/val ב-LSTM; אין תכונה שמקודדת ישירות את תווית האנומליה.
+6. **השוואה לעמיתים מקומיים** - Z-scores מחושבים מול עמיתים בכתובות IP פרטיות בלבד, כדי ש-CDN/cloud לא ילכלכו את ה-baseline.
+7. **זהות נתנת להגדרה** - כל זיהוי המכשירים והשירותים נמצא בשלושה קבצי JSON חיצוניים.
 
 ---
 
 ## הערות אבטחה
 
-- כל העיבוד מקומי — שום מידע לא יוצא מהמחשב.
-- לוח הבקרה מאזין רק על `127.0.0.1:8050` — לא נגיש מבחוץ.
-- פלט credentials של FTP/SMTP הוא רגיש — להתייחס בהתאם.
+- כל העיבוד מקומי - שום מידע לא יוצא מהמחשב.
+- לוח הבקרה מאזין רק על `127.0.0.1:8050` - לא נגיש מבחוץ.
+- פלט credentials של FTP/SMTP הוא רגיש - להתייחס בהתאם.
 - שמות `.local` ומחרוזות OUI vendor עשויים לחשוף שמות מכשירים ויצרנים.
 - לכידה חיה דורשת הרשאות admin/root ברוב המערכות.
 
@@ -161,9 +161,9 @@ d = 10^((Tx − RSSI − PL₀) / (10 · n))
 
 ## תודות
 
-- **Scikit-learn** — IsolationForest, DBSCAN, NearestNeighbors, MDS, StandardScaler
-- **PyTorch** — LSTM עם early stopping
-- **Plotly + Dash** — לוח בקרה אינטראקטיבי
-- **Wireshark / tshark** — לכידת חבילות ומסד OUI
-- **Ester, Kriegel, Sander, Xu (1996)** — שיטת k-distance elbow ל-DBSCAN
-- **Hopkins (1954)** — סטטיסטיקת clusterability
+- **Scikit-learn** - IsolationForest, DBSCAN, NearestNeighbors, MDS, StandardScaler
+- **PyTorch** - LSTM עם early stopping
+- **Plotly + Dash** - לוח בקרה אינטראקטיבי
+- **Wireshark / tshark** - לכידת חבילות ומסד OUI
+- **Ester, Kriegel, Sander, Xu (1996)** - שיטת k-distance elbow ל-DBSCAN
+- **Hopkins (1954)** - סטטיסטיקת clusterability

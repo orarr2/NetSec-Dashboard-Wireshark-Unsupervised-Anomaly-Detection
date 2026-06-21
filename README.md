@@ -1,4 +1,4 @@
-# NetSec — Wireshark + ML Forensic Dashboard
+# NetSec - Wireshark + ML Forensic Dashboard
 
 A Wireshark PCAPNG forensic dashboard built on Dash + scikit-learn + PyTorch.
 Loads up to two capture sessions (S1 / S2), runs IsolationForest, DBSCAN, an
@@ -12,10 +12,10 @@ analysis, security, comparison, inventory, external traffic, coverage).
 - Extracts per-IP features (packet count, byte volume, mean packet size,
   unique destinations, SYN / RST counts, burst score, dominance).
 - Runs three ML models in parallel:
-  - **IsolationForest** — single-IP outlier detection, contamination tuned
+  - **IsolationForest** - single-IP outlier detection, contamination tuned
     by sensitivity sweep over [0.05, 0.10, 0.15].
-  - **DBSCAN** — behavioural clustering, IPs not in any cluster are flagged.
-  - **LSTM** — temporal anomaly detection on 1-second packet-size bins,
+  - **DBSCAN** - behavioural clustering, IPs not in any cluster are flagged.
+  - **LSTM** - temporal anomaly detection on 1-second packet-size bins,
     flagged when prediction error exceeds val_mean + 2 σ.
 - Runs two deterministic rule layers: TCP SYN scan / flood detection and
   ARP-spoofing / DNS-tunneling signals.
@@ -29,12 +29,12 @@ analysis, security, comparison, inventory, external traffic, coverage).
 
 | Path | Purpose |
 |---|---|
-| `Network_Security_Dashboard.ipynb` | Single-file dashboard — 48 cells, the only thing you need to run |
+| `Network_Security_Dashboard.ipynb` | Single-file dashboard - 48 cells, the only thing you need to run |
 | `cloud_ranges.json` | CIDR ranges → cloud provider lookup |
 | `device_rules.json` | 261 hostname / OUI / port rules for device classification |
 | `dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
 | `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs) |
-| `legacy/Network_Security_Dashboard_V5_baseline.ipynb` | The V5 baseline notebook the current version was built from — kept for diff / reference |
+| `legacy/Network_Security_Dashboard_V5_baseline.ipynb` | The V5 baseline notebook the current version was built from - kept for diff / reference |
 
 ## How to run on a laptop
 
@@ -65,4 +65,4 @@ NetSec_Wireshark-ML-Dashboard/
 
 ## License
 
-Private — research / educational use only.
+Private - research / educational use only.
