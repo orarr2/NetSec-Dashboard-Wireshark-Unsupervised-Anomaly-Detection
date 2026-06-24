@@ -6,13 +6,6 @@ LSTM, and two deterministic rule layers in parallel, then renders dozens of
 figures across 9 navigation sections (analysis, device profile, browsing
 analysis, security, comparison, inventory, external traffic, coverage).
 
-> **Note on the repository name:** despite the legacy repo name mentioning
-> "Random Forest and XGBoost", this project does **not** use those supervised
-> models. The network traffic has no ground-truth labels, so the project is
-> built entirely on **unsupervised learning** - IsolationForest (anomaly
-> detection), DBSCAN (density clustering) and an LSTM (temporal anomaly
-> detection). The repo name is kept only for its existing URL/history.
-
 ## What it does
 
 - Reads `.pcapng` captures from disk OR records live traffic via `tshark`.
