@@ -1,16 +1,13 @@
-# NetSec — Project Decisions & Dilemmas (6 graphs)
+# NetSec - Project Decisions & Dilemmas
 
-ששת הגרפים מציגים את ההחלטות והדילמות שהתקבלו במהלך הפרויקט,
-בשני פורמטים של Mermaid ובפורמט Graphviz, כל אחד בעברית ובאנגלית.
+These graphs show the decisions and dilemmas made during the project, in two
+Mermaid formats and one Graphviz format.
 
-| File | Format | Style | Language |
-|------|--------|-------|----------|
-| `decisions_pipeline_en.mmd` | Mermaid | Annotated pipeline (like the attached screenshot) | English |
-| `decisions_pipeline_he.mmd` | Mermaid | Annotated pipeline | עברית |
-| `decisions_dilemmas_en.mmd` | Mermaid | Decision tree (rejected vs chosen) | English |
-| `decisions_dilemmas_he.mmd` | Mermaid | Decision tree | עברית |
-| `decisions_en.dot` | Graphviz | Decision DAG | English |
-| `decisions_he.dot` | Graphviz | Decision DAG | עברית |
+| File | Format | Style |
+|------|--------|-------|
+| `decisions_pipeline_en.mmd` | Mermaid | Annotated pipeline (like the attached screenshot) |
+| `decisions_dilemmas_en.mmd` | Mermaid | Decision tree (rejected vs chosen) |
+| `decisions_en.dot` | Graphviz | Decision DAG |
 
 ## How to render
 

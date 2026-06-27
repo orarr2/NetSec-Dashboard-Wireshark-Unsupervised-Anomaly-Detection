@@ -35,7 +35,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `app/device_rules.json` | 261 hostname / OUI / port rules for device classification |
 | `app/dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
-| `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
+| `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
 

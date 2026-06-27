@@ -6,3 +6,9 @@ __pycache__/
 _*.py
 _*.json
 netsec_upload_*.pcapng
+
+# Hebrew documentation versions - kept locally, English-only in the repo
+*_HE.md
+*_he.mmd
+*_he.dot
+*_he.png
