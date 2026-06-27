@@ -1,0 +1,59 @@
+%%{init: {'theme':'dark', 'flowchart':{'curve':'basis'}}}%%
+flowchart TD
+    classDef data fill:#0b3d3a,stroke:#39d0c4,color:#d7fffb
+    classDef choose fill:#1b2a4a,stroke:#6aa3ff,color:#dbe8ff
+    classDef reject fill:#3a1320,stroke:#ff6a8a,color:#ffd7e0,stroke-dasharray:4 3
+    classDef win fill:#2a2440,stroke:#b08bff,color:#efe8ff
+    classDef eval fill:#3a2f10,stroke:#e0b020,color:#fff3c9
+
+    D0["<b>Raw Wireshark PCAP — S1 &amp; S2</b><br/>Loads packet captures from a live LAN.<br/>No ground-truth labels exist."]:::data
+
+    DL1{"<b>Dilemma 1: Supervised or Unsupervised?</b><br/>Data has no labelled attacks."}:::choose
+    R1["<b>Rejected: Random Forest / XGBoost / SVM</b><br/>Need labelled data we do not have."]:::reject
+    C1["<b>Chosen: Unsupervised learning</b><br/>Detect anomalies without labels."]:::win
+
+    DL2{"<b>Dilemma 2: Which detectors?</b><br/>One model has blind spots."}:::choose
+    C2["<b>Chosen: 3-model ensemble</b><br/>IsolationForest (global outliers) +<br/>DBSCAN (density) + LSTM (temporal).<br/>Cross-validate via agreement matrix."]:::win
+
+    DL3["<b>Feature prep</b><br/>7 per-IP features: mean_len, std_len, count,<br/>burst_score, unique_dsts, syn_count, rst_count.<br/><b>StandardScaler</b> — models are scale-sensitive."]:::choose
+
+    DL4{"<b>Dilemma 3: IsolationForest contamination?</b>"}:::choose
+    R4["<b>Rejected: hard-coded contamination</b><br/>Wrong guess over/under-flags."]:::reject
+    C4["<b>Chosen: sensitivity sweep [0.05, 0.10, 0.15]</b><br/>Pick the most statistically extreme.<br/>n_estimators=200, random_state=42."]:::win
+
+    DL5{"<b>Dilemma 4: DBSCAN eps?</b>"}:::choose
+    R5["<b>Rejected: hard-coded eps=0.5</b><br/>Each session has a different distance scale."]:::reject
+    C5["<b>Chosen: auto from k-distance elbow</b><br/>2nd-derivative elbow. S1=0.78, S2=4.86."]:::win
+
+    DL6{"<b>Dilemma 5: DBSCAN min_samples?</b>"}:::choose
+    R6["<b>Rejected: min_samples &ge; 3</b><br/>In 7-D with ~50–220 IPs everything collapses to noise."]:::reject
+    C6["<b>Chosen: min_samples=2</b><br/>cluster = -1 means a lone IP = anomaly."]:::win
+
+    DL7{"<b>Dilemma 6: LSTM sequence sampling?</b>"}:::choose
+    R7["<b>Rejected: step-sampling</b><br/>Breaks temporal continuity (Fix Issue 8)."]:::reject
+    C7["<b>Chosen: contiguous sequences</b><br/>SEQ_LEN=10, hidden=64, Adam lr=0.001, MSELoss."]:::win
+
+    DL8{"<b>Dilemma 7: LSTM error baseline?</b>"}:::choose
+    R8["<b>Rejected: error on training set</b><br/>Optimistic, hides overfit (Fix Issue 1)."]:::reject
+    C8["<b>Chosen: held-out val set (20%)</b><br/>Flag when error &gt; val_mean + 2&sigma;.<br/>Early stopping, PATIENCE=2."]:::win
+
+    EV["<b>Evaluation without labels</b><br/>Silhouette (DBSCAN) + Hopkins statistic +<br/>IsolationForest↔DBSCAN agreement matrix."]:::eval
+
+    CLS["<b>Device classification</b><br/>3-tier: hostname/OUI/port → DNS fingerprint →<br/>behavioural heuristic (12 categories)."]:::choose
+    SEC["<b>Threat detection</b><br/>ML + deterministic rule layers:<br/>SYN scan/flood, ARP-spoof, DNS-tunnel."]:::choose
+    OUT["<b>Interactive Dash dashboard</b><br/>Side-by-side S1 vs S2, dozens of figures."]:::win
+
+    D0 --> DL1
+    DL1 -.-> R1
+    DL1 --> C1 --> DL2
+    DL2 --> C2 --> DL3 --> DL4
+    DL4 -.-> R4
+    DL4 --> C4 --> DL5
+    DL5 -.-> R5
+    DL5 --> C5 --> DL6
+    DL6 -.-> R6
+    DL6 --> C6 --> DL7
+    DL7 -.-> R7
+    DL7 --> C7 --> DL8
+    DL8 -.-> R8
+    DL8 --> C8 --> EV --> CLS --> SEC --> OUT

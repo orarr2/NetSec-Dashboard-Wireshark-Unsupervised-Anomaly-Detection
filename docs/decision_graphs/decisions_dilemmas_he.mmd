@@ -1,0 +1,38 @@
+%%{init: {'theme':'dark'}}%%
+graph LR
+    classDef q fill:#1b2a4a,stroke:#6aa3ff,color:#dbe8ff
+    classDef no fill:#3a1320,stroke:#ff6a8a,color:#ffd7e0,stroke-dasharray:4 3
+    classDef yes fill:#0b3d3a,stroke:#39d0c4,color:#d7fffb
+
+    ROOT(["פרויקט NetSec — דילמות מרכזיות"]):::q
+
+    ROOT --> Q1{"ש1<br/>מפוקח מול<br/>לא-מפוקח?"}:::q
+    Q1 -. נדחה .-> Q1N["RF / XGBoost / SVM<br/>דורשים labels"]:::no
+    Q1 == נבחר ==> Q1Y["לא-מפוקח<br/>(אין נתונים מתויגים)"]:::yes
+
+    ROOT --> Q2{"ש2<br/>מודל אחד או<br/>כמה?"}:::q
+    Q2 -. נדחה .-> Q2N["מזהה בודד<br/>→ נקודות עיוורון"]:::no
+    Q2 == נבחר ==> Q2Y["שילוב: IsolationForest +<br/>DBSCAN + LSTM"]:::yes
+
+    ROOT --> Q3{"ש3<br/>contamination<br/>ל-IsolationForest?"}:::q
+    Q3 -. נדחה .-> Q3N["ערך קבוע"]:::no
+    Q3 == נבחר ==> Q3Y["sweep [0.05, 0.10, 0.15]<br/>בוחרים הכי קיצוני"]:::yes
+
+    ROOT --> Q4{"ש4<br/>eps ל-DBSCAN?"}:::q
+    Q4 -. נדחה .-> Q4N["eps קבוע =0.5"]:::no
+    Q4 == נבחר ==> Q4Y["מרפק k-distance (אוטומטי)<br/>S1=0.78 · S2=4.86"]:::yes
+
+    ROOT --> Q5{"ש5<br/>min_samples<br/>ל-DBSCAN?"}:::q
+    Q5 -. נדחה .-> Q5N["≥ 3 → הכל noise<br/>ב-7 ממדים, מעט IP"]:::no
+    Q5 == נבחר ==> Q5Y["min_samples=2<br/>-1 = IP בודד = אנומליה"]:::yes
+
+    ROOT --> Q6{"ש6<br/>דגימת רצפים<br/>ל-LSTM?"}:::q
+    Q6 -. נדחה .-> Q6N["step-sampling<br/>שובר רציפות"]:::no
+    Q6 == נבחר ==> Q6Y["רצפים רציפים<br/>SEQ_LEN=10"]:::yes
+
+    ROOT --> Q7{"ש7<br/>בסיס לשגיאת<br/>LSTM?"}:::q
+    Q7 -. נדחה .-> Q7N["שגיאת אימון<br/>מסתירה overfit"]:::no
+    Q7 == נבחר ==> Q7Y["ולידציה 20%<br/>סימון &gt; mean+2σ"]:::yes
+
+    ROOT --> Q8{"ש8<br/>הערכה ללא<br/>labels?"}:::q
+    Q8 == נבחר ==> Q8Y["Silhouette + Hopkins +<br/>מטריצת הסכמה"]:::yes

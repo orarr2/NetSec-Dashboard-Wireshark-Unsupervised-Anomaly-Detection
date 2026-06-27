@@ -1,0 +1,70 @@
+digraph NetSecDecisions {
+    rankdir=TB;
+    bgcolor="#0b0a14";
+    node [fontname="Helvetica", shape=box, style="rounded,filled", fontcolor="#e8e4f5", penwidth=1.4];
+    edge [fontname="Helvetica", color="#9b94b8", fontcolor="#9b94b8"];
+
+    // node color classes
+    // data
+    node [fillcolor="#0b3d3a", color="#39d0c4"];
+    D0  [label="Raw Wireshark PCAP — S1 & S2\nLive LAN capture · NO ground-truth labels"];
+
+    // choice nodes (decisions)
+    node [fillcolor="#1b2a4a", color="#6aa3ff"];
+    Q1 [label="Dilemma 1: Supervised vs Unsupervised?"];
+    Q2 [label="Dilemma 2: Which detectors?"];
+    FP [label="Feature prep: 7 per-IP features + StandardScaler\n(models are scale-sensitive)"];
+    Q3 [label="Dilemma 3: IsolationForest contamination?"];
+    Q4 [label="Dilemma 4: DBSCAN eps?"];
+    Q5 [label="Dilemma 5: DBSCAN min_samples?"];
+    Q6 [label="Dilemma 6: LSTM sequence sampling?"];
+    Q7 [label="Dilemma 7: LSTM error baseline?"];
+
+    // rejected options
+    node [fillcolor="#3a1320", color="#ff6a8a", style="rounded,filled,dashed"];
+    R1 [label="Rejected: Random Forest / XGBoost / SVM\n(require labels)"];
+    R3 [label="Rejected: hard-coded contamination"];
+    R4 [label="Rejected: hard-coded eps=0.5"];
+    R5 [label="Rejected: min_samples >= 3\n(collapses to noise in 7-D, few IPs)"];
+    R6 [label="Rejected: step-sampling\n(breaks temporal continuity)"];
+    R7 [label="Rejected: error on training set\n(hides overfit)"];
+
+    // chosen options
+    node [fillcolor="#0b3d3a", color="#39d0c4", style="rounded,filled"];
+    C1 [label="Chosen: Unsupervised learning"];
+    C2 [label="Chosen: Ensemble\nIsolationForest + DBSCAN + LSTM"];
+    C3 [label="Chosen: sweep [0.05, 0.10, 0.15]\nn_estimators=200, random_state=42"];
+    C4 [label="Chosen: k-distance elbow (auto)\nS1=0.78 · S2=4.86"];
+    C5 [label="Chosen: min_samples=2\n(-1 = lone IP = anomaly)"];
+    C6 [label="Chosen: contiguous sequences\nSEQ_LEN=10, hidden=64, Adam lr=0.001"];
+    C7 [label="Chosen: held-out val 20%\nflag > val_mean + 2σ, early stopping"];
+
+    // evaluation / downstream
+    node [fillcolor="#3a2f10", color="#e0b020"];
+    EV  [label="Evaluation without labels\nSilhouette + Hopkins + agreement matrix"];
+    node [fillcolor="#2a2440", color="#b08bff"];
+    CLS [label="Device classification (3-tier)\nOUI/port -> DNS fingerprint -> heuristic"];
+    SEC [label="Threat detection\nML + rule layers (SYN scan, ARP-spoof, DNS-tunnel)"];
+    OUT [label="Interactive Dash dashboard\nS1 vs S2 comparison"];
+
+    // edges
+    D0 -> Q1;
+    Q1 -> R1 [label="rejected", style=dashed, color="#ff6a8a"];
+    Q1 -> C1 [label="chosen", color="#39d0c4"];
+    C1 -> Q2 -> C2 -> FP -> Q3;
+    Q3 -> R3 [style=dashed, color="#ff6a8a"];
+    Q3 -> C3 [color="#39d0c4"];
+    C3 -> Q4;
+    Q4 -> R4 [style=dashed, color="#ff6a8a"];
+    Q4 -> C4 [color="#39d0c4"];
+    C4 -> Q5;
+    Q5 -> R5 [style=dashed, color="#ff6a8a"];
+    Q5 -> C5 [color="#39d0c4"];
+    C5 -> Q6;
+    Q6 -> R6 [style=dashed, color="#ff6a8a"];
+    Q6 -> C6 [color="#39d0c4"];
+    C6 -> Q7;
+    Q7 -> R7 [style=dashed, color="#ff6a8a"];
+    Q7 -> C7 [color="#39d0c4"];
+    C7 -> EV -> CLS -> SEC -> OUT;
+}
