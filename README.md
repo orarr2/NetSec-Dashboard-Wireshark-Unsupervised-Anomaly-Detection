@@ -29,12 +29,12 @@ analysis, security, comparison, inventory, external traffic, coverage).
 
 | Path | Purpose |
 |---|---|
-| `Network_Security_Dashboard.ipynb` | Single-file dashboard - 48 cells, the only thing you need to run |
-| `NetSec_Advanced_Threat_Detection.ipynb` | Standalone companion notebook - six encrypted-traffic-aware / behavioral detection engines (beaconing, DNS tunneling, ARP/DHCP spoofing, etc.) |
-| `cloud_ranges.json` | CIDR ranges → cloud provider lookup |
-| `device_rules.json` | 261 hostname / OUI / port rules for device classification |
-| `dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
-| `MODELS.md` | Reference for the three ML models and their parameters |
+| `app/Network_Security_Dashboard.ipynb` | Single-file dashboard - 48 cells, the only thing you need to run |
+| `app/NetSec_Advanced_Threat_Detection.ipynb` | Standalone companion notebook - six encrypted-traffic-aware / behavioral detection engines (beaconing, DNS tunneling, ARP/DHCP spoofing, etc.) |
+| `app/cloud_ranges.json` | CIDR ranges → cloud provider lookup |
+| `app/device_rules.json` | 261 hostname / OUI / port rules for device classification |
+| `app/dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
+| `docs/MODELS.md` | Reference for the three ML models and their parameters |
 | `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
@@ -44,7 +44,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 2. Python deps: the notebook auto-pip-installs `dash`,
    `dash-bootstrap-components`, `plotly`, `manuf` on first run; you also need
    `pandas`, `numpy`, `scikit-learn`, `torch`, `scapy`.
-3. Open `Network_Security_Dashboard.ipynb` in Jupyter.
+3. Open `app/Network_Security_Dashboard.ipynb` in Jupyter.
 4. **Kernel → Restart Kernel → Run All**.
 5. Open the URL the last cell prints (auto-picks first free port from
    8050–8056).
@@ -56,13 +56,20 @@ analysis, security, comparison, inventory, external traffic, coverage).
 ## Folder layout
 
 ```
-NetSec_Wireshark-ML-Dashboard/
-├── Network_Security_Dashboard.ipynb   ← main notebook
-├── cloud_ranges.json                  ← supporting data
-├── device_rules.json
-├── dns_fingerprints.json
-└── README.md
+NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
+├── README.md
+├── app/                                    ← everything you run, in one folder
+│   ├── Network_Security_Dashboard.ipynb    ← main notebook
+│   ├── NetSec_Advanced_Threat_Detection.ipynb
+│   ├── cloud_ranges.json                   ← supporting data
+│   ├── device_rules.json
+│   └── dns_fingerprints.json
+└── docs/                                   ← MODELS.md + deep-dive docs + decision graphs
 ```
+
+The notebooks locate the JSON data files automatically whether you launch
+from `app/` (Jupyter) or from the repo root (VS Code), so you don't need to
+move anything to run them.
 
 ## License
 
