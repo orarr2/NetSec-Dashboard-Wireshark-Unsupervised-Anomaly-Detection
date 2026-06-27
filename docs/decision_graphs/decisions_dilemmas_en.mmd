@@ -1,0 +1,38 @@
+%%{init: {'theme':'dark'}}%%
+graph LR
+    classDef q fill:#1b2a4a,stroke:#6aa3ff,color:#dbe8ff
+    classDef no fill:#3a1320,stroke:#ff6a8a,color:#ffd7e0,stroke-dasharray:4 3
+    classDef yes fill:#0b3d3a,stroke:#39d0c4,color:#d7fffb
+
+    ROOT(["NetSec Project — Key Dilemmas"]):::q
+
+    ROOT --> Q1{"Q1<br/>Supervised vs<br/>Unsupervised?"}:::q
+    Q1 -. rejected .-> Q1N["RF / XGBoost / SVM<br/>need labels"]:::no
+    Q1 == chosen ==> Q1Y["Unsupervised<br/>(no labels available)"]:::yes
+
+    ROOT --> Q2{"Q2<br/>One model or<br/>many?"}:::q
+    Q2 -. rejected .-> Q2N["Single detector<br/>→ blind spots"]:::no
+    Q2 == chosen ==> Q2Y["Ensemble: IsolationForest +<br/>DBSCAN + LSTM"]:::yes
+
+    ROOT --> Q3{"Q3<br/>IsolationForest<br/>contamination?"}:::q
+    Q3 -. rejected .-> Q3N["Hard-coded value"]:::no
+    Q3 == chosen ==> Q3Y["Sweep [0.05, 0.10, 0.15]<br/>pick most extreme"]:::yes
+
+    ROOT --> Q4{"Q4<br/>DBSCAN<br/>eps?"}:::q
+    Q4 -. rejected .-> Q4N["Hard-coded eps=0.5"]:::no
+    Q4 == chosen ==> Q4Y["k-distance elbow (auto)<br/>S1=0.78 · S2=4.86"]:::yes
+
+    ROOT --> Q5{"Q5<br/>DBSCAN<br/>min_samples?"}:::q
+    Q5 -. rejected .-> Q5N["≥ 3 → all noise<br/>in 7-D, few IPs"]:::no
+    Q5 == chosen ==> Q5Y["min_samples=2<br/>-1 = lone IP = anomaly"]:::yes
+
+    ROOT --> Q6{"Q6<br/>LSTM sequence<br/>sampling?"}:::q
+    Q6 -. rejected .-> Q6N["Step-sampling<br/>breaks continuity"]:::no
+    Q6 == chosen ==> Q6Y["Contiguous seqs<br/>SEQ_LEN=10"]:::yes
+
+    ROOT --> Q7{"Q7<br/>LSTM error<br/>baseline?"}:::q
+    Q7 -. rejected .-> Q7N["Train-set error<br/>hides overfit"]:::no
+    Q7 == chosen ==> Q7Y["Held-out val 20%<br/>flag &gt; mean+2σ"]:::yes
+
+    ROOT --> Q8{"Q8<br/>Evaluate without<br/>labels?"}:::q
+    Q8 == chosen ==> Q8Y["Silhouette + Hopkins +<br/>model agreement matrix"]:::yes
