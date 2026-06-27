@@ -30,11 +30,12 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | Path | Purpose |
 |---|---|
 | `Network_Security_Dashboard.ipynb` | Single-file dashboard - 48 cells, the only thing you need to run |
+| `NetSec_Advanced_Threat_Detection.ipynb` | Standalone companion notebook - six encrypted-traffic-aware / behavioral detection engines (beaconing, DNS tunneling, ARP/DHCP spoofing, etc.) |
 | `cloud_ranges.json` | CIDR ranges → cloud provider lookup |
 | `device_rules.json` | 261 hostname / OUI / port rules for device classification |
 | `dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
-| `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs) |
-| `legacy/Network_Security_Dashboard_V5_baseline.ipynb` | The V5 baseline notebook the current version was built from - kept for diff / reference |
+| `MODELS.md` | Reference for the three ML models and their parameters |
+| `docs/` | English + Hebrew deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
 
