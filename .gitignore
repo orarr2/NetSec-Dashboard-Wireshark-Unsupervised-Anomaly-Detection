@@ -12,3 +12,6 @@ netsec_upload_*.pcapng
 *_he.mmd
 *_he.dot
 *_he.png
+
+# local working backups created by tooling
+*.local-bak
