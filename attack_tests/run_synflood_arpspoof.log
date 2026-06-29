@@ -1,0 +1,94 @@
+======================================================================
+# Loading S1 = pcaps/synflood.pcap
+======================================================================
+[S1] synflood.pcap | 10:30:21->10:30:44 | 37,841 packets | 37623 src-IPs | 1 MACs | protos={'TCP': 37841}
+======================================================================
+# Loading S2 = pcaps/arpspoof.pcap
+======================================================================
+[S2] arpspoof.pcap | 00:00:00->00:09:03 | 16,285 packets | 25 src-IPs | 3 MACs | protos={'TCP': 13265, 'TLSv1.2': 1716, 'DNS': 551, 'ICMPv6': 443, 'TLSv1.3': 118}
+
+----------------------------------------------------------------------
+[S1] feature matrix: 37623 IPs x 10 features
+[S1] IsolationForest contamination sweep:
+  cont=0.05 -> 218 flagged | mean score=-0.3291
+  cont=0.10 -> 218 flagged | mean score=-0.3291
+  cont=0.15 -> 218 flagged | mean score=-0.3291
+  selected cont=0.05
+[S1] eps collapsed to 0; using mean k-dist=0.050
+[S1] DBSCAN eps=0.05 (min_samples=2)
+[S1] DBSCAN skipped: 37,623 IPs > cap 5,000 (spoofed-flood pattern). cluster=-1.
+[S1] DBSCAN clusters=0 noise=37623 silhouette=n/a
+[S1] anomalies: 218 / 37623
+[S1] top anomaly IPs (lowest iso_score):
+    1.114.160.177          score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    1.174.71.201           score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    1.88.75.218            score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    101.93.178.104         score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    103.125.62.76          score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    104.139.129.155        score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    104.236.123.58         score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    105.230.193.203        score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    105.79.34.146          score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+    107.4.156.139          score=-0.3291 pkts=     2 syn=    2 fin=    0 xmas=    0 unique_dsts=    1
+
+[S1] security scan (deterministic rules):
+  top SYN  : [('112.124.85.108', 2), ('38.19.55.108', 2), ('80.194.243.3', 2), ('210.128.16.155', 2), ('46.182.118.170', 2)]
+  top RST  : []
+  ARP IP->multi-MAC : 0 ip(s)
+  ARP MAC->multi-IP : 0 mac(s)
+  DNS NXDOMAIN      : 0
+  DNS long (>60ch)  : 0
+  --- horizontal-scan rule (SYN + FIN + NULL + XMAS) ---
+      (no scanner-like sources)
+  --- DNS amplification rule (response side) ---
+      (no reflector pattern)
+
+[S1] LSTM | time bins: 15
+[S1] too few bins (15) -> skipping LSTM
+
+----------------------------------------------------------------------
+[S2] feature matrix: 25 IPs x 10 features
+[S2] IsolationForest contamination sweep:
+  cont=0.05 ->   2 flagged | mean score=-0.0918
+  cont=0.10 ->   3 flagged | mean score=-0.0960
+  cont=0.15 ->   4 flagged | mean score=-0.1418
+  selected cont=0.15
+[S2] DBSCAN eps=0.26 (min_samples=2)
+[S2] DBSCAN clusters=5 noise=12 silhouette=0.63
+[S2] anomalies: 4 / 25
+[S2] top anomaly IPs (lowest iso_score):
+    192.168.1.104          score=-0.2980 pkts=  4774 syn=   64 fin=    0 xmas=    0 unique_dsts=   25
+    151.101.193.140        score=-0.1242 pkts=  5024 syn=    0 fin=    0 xmas=    0 unique_dsts=    1
+    151.101.129.140        score=-0.1000 pkts=  4986 syn=    0 fin=    0 xmas=    0 unique_dsts=    1
+    192.168.1.105          score=-0.0451 pkts=    19 syn=    0 fin=    0 xmas=    0 unique_dsts=    3
+
+[S2] security scan (deterministic rules):
+  top SYN  : [('192.168.1.104', 64)]
+  top RST  : [('192.168.1.104', 81), ('151.101.193.140', 13), ('151.101.129.140', 9), ('151.101.65.140', 8), ('151.101.1.140', 4)]
+  ARP IP->multi-MAC : 1 ip(s)
+      192.168.1.1 -> ['08:00:27:2d:f8:5a', '08:00:27:5e:01:7c']
+  ARP MAC->multi-IP : 1 mac(s)
+      08:00:27:2d:f8:5a -> claimed 2 IPs e.g. ['192.168.1.1', '192.168.1.105']
+  DNS NXDOMAIN      : 6
+  DNS long (>60ch)  : 0
+  --- horizontal-scan rule (SYN + FIN + NULL + XMAS) ---
+      192.168.1.104          SYN   count=   64 unique_dsts=  25 ratio=0.01  *** SCAN ***
+  --- DNS amplification rule (response side) ---
+      192.168.1.1            responses=  271 mean_size=207.7 bytes  *** AMP REFLECTOR ***
+
+[S2] LSTM | time bins: 68
+[S2] training on 46 seq | val on 12
+  ep 1/8 train=0.251298 val=0.803593 *
+  ep 2/8 train=0.240592 val=0.773941 *
+  ep 3/8 train=0.230028 val=0.743932 *
+  ep 4/8 train=0.219596 val=0.713435 *
+  ep 5/8 train=0.209279 val=0.682307 *
+  ep 6/8 train=0.199058 val=0.650398 *
+  ep 7/8 train=0.188921 val=0.617547 *
+  ep 8/8 train=0.178859 val=0.583585 *
+[S2] LSTM val MAE=0.76242 std=0.04801 thr=0.85844
+[S2] anomalous time bins: 0 / 58 (0.0%)
+
+=== S1 vs S2 compare === |S1|=37623 |S2|=25 | new=25 gone=37623 shared=0
+  S1 top talkers (bytes): [('1.114.160.177', 120), ('1.174.71.201', 120), ('1.88.75.218', 120), ('101.93.178.104', 120), ('103.125.62.76', 120)]
+  S2 top talkers (bytes): [('151.101.193.140', 7077781), ('151.101.129.140', 6892162), ('192.168.1.104', 377742), ('104.74.36.68', 120055), ('216.58.203.98', 101385)]

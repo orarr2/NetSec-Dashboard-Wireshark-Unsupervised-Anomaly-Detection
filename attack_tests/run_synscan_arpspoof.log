@@ -1,0 +1,83 @@
+======================================================================
+# Loading S1 = pcaps/tcp_syn_scan.pcap
+======================================================================
+[S1] tcp_syn_scan.pcap | 18:58:34->18:58:36 | 2,020 packets | 5 src-IPs | 8 MACs | protos={'TCP': 2007, 'ARP': 9, 'SSDP': 4}
+======================================================================
+# Loading S2 = pcaps/arpspoof.pcap
+======================================================================
+[S2] arpspoof.pcap | 00:00:00->00:09:03 | 16,285 packets | 25 src-IPs | 3 MACs | protos={'TCP': 13265, 'TLSv1.2': 1716, 'DNS': 551, 'ICMPv6': 443, 'TLSv1.3': 118}
+
+----------------------------------------------------------------------
+[S1] feature matrix: 5 IPs x 10 features
+[S1] IsolationForest contamination sweep:
+  cont=0.05 ->   1 flagged | mean score=-0.0082
+  cont=0.10 ->   1 flagged | mean score=-0.0165
+  cont=0.15 ->   1 flagged | mean score=-0.0247
+  selected cont=0.15
+[S1] DBSCAN eps=4.00 (min_samples=2)
+[S1] DBSCAN clusters=1 noise=1 silhouette=n/a
+[S1] anomalies: 1 / 5
+[S1] top anomaly IPs (lowest iso_score):
+    192.168.1.10           score=-0.0247 pkts=  1007 syn= 1002 fin=    0 xmas=    0 unique_dsts=    1
+
+[S1] security scan (deterministic rules):
+  top SYN  : [('192.168.1.10', 1002)]
+  top RST  : [('192.168.1.25', 995), ('192.168.1.10', 5)]
+  ARP IP->multi-MAC : 0 ip(s)
+  ARP MAC->multi-IP : 0 mac(s)
+  DNS NXDOMAIN      : 0
+  DNS long (>60ch)  : 0
+  --- horizontal-scan rule (SYN + FIN + NULL + XMAS) ---
+      192.168.1.10           SYN   count= 1002 unique_dsts=   1 ratio=1.0  *** SCAN ***
+  --- DNS amplification rule (response side) ---
+      (no reflector pattern)
+
+[S1] LSTM | time bins: 2
+[S1] too few bins (2) -> skipping LSTM
+
+----------------------------------------------------------------------
+[S2] feature matrix: 25 IPs x 10 features
+[S2] IsolationForest contamination sweep:
+  cont=0.05 ->   2 flagged | mean score=-0.0918
+  cont=0.10 ->   3 flagged | mean score=-0.0960
+  cont=0.15 ->   4 flagged | mean score=-0.1418
+  selected cont=0.15
+[S2] DBSCAN eps=0.26 (min_samples=2)
+[S2] DBSCAN clusters=5 noise=12 silhouette=0.63
+[S2] anomalies: 4 / 25
+[S2] top anomaly IPs (lowest iso_score):
+    192.168.1.104          score=-0.2980 pkts=  4774 syn=   64 fin=    0 xmas=    0 unique_dsts=   25
+    151.101.193.140        score=-0.1242 pkts=  5024 syn=    0 fin=    0 xmas=    0 unique_dsts=    1
+    151.101.129.140        score=-0.1000 pkts=  4986 syn=    0 fin=    0 xmas=    0 unique_dsts=    1
+    192.168.1.105          score=-0.0451 pkts=    19 syn=    0 fin=    0 xmas=    0 unique_dsts=    3
+
+[S2] security scan (deterministic rules):
+  top SYN  : [('192.168.1.104', 64)]
+  top RST  : [('192.168.1.104', 81), ('151.101.193.140', 13), ('151.101.129.140', 9), ('151.101.65.140', 8), ('151.101.1.140', 4)]
+  ARP IP->multi-MAC : 1 ip(s)
+      192.168.1.1 -> ['08:00:27:2d:f8:5a', '08:00:27:5e:01:7c']
+  ARP MAC->multi-IP : 1 mac(s)
+      08:00:27:2d:f8:5a -> claimed 2 IPs e.g. ['192.168.1.1', '192.168.1.105']
+  DNS NXDOMAIN      : 6
+  DNS long (>60ch)  : 0
+  --- horizontal-scan rule (SYN + FIN + NULL + XMAS) ---
+      192.168.1.104          SYN   count=   64 unique_dsts=  25 ratio=0.01  *** SCAN ***
+  --- DNS amplification rule (response side) ---
+      192.168.1.1            responses=  271 mean_size=207.7 bytes  *** AMP REFLECTOR ***
+
+[S2] LSTM | time bins: 68
+[S2] training on 46 seq | val on 12
+  ep 1/8 train=0.247286 val=0.787638 *
+  ep 2/8 train=0.237299 val=0.759214 *
+  ep 3/8 train=0.227525 val=0.730623 *
+  ep 4/8 train=0.217917 val=0.701689 *
+  ep 5/8 train=0.208429 val=0.672256 *
+  ep 6/8 train=0.199021 val=0.642168 *
+  ep 7/8 train=0.189662 val=0.611261 *
+  ep 8/8 train=0.180333 val=0.579358 *
+[S2] LSTM val MAE=0.75966 std=0.04773 thr=0.85513
+[S2] anomalous time bins: 0 / 58 (0.0%)
+
+=== S1 vs S2 compare === |S1|=5 |S2|=25 | new=25 gone=5 shared=0
+  S1 top talkers (bytes): [('192.168.1.25', 60000), ('192.168.1.10', 58386), ('123.238.9.219', 770), ('123.238.8.29', 175), ('123.238.9.0', 143)]
+  S2 top talkers (bytes): [('151.101.193.140', 7077781), ('151.101.129.140', 6892162), ('192.168.1.104', 377742), ('104.74.36.68', 120055), ('216.58.203.98', 101385)]
