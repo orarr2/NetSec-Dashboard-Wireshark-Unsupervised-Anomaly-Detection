@@ -15,3 +15,6 @@ netsec_upload_*.pcapng
 
 # local working backups created by tooling
 *.local-bak
+
+# Live recording output directory (per-session PCAPs land here)
+netsec_sessions/
