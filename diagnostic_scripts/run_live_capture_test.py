@@ -50,7 +50,7 @@ TRAFFIC_RUN = {"go": True}
 def traffic_gen():
     """Sustained HTTPS load on allowed domains so the live capture has packets."""
     urls = ["https://github.com/", "https://pypi.org/", "https://archive.ubuntu.com/",
-            "https://api.github.com/zen", "https://raw.githubusercontent.com/anthropics/anthropic-cookbook/main/README.md"]
+            "https://api.github.com/zen", "https://raw.githubusercontent.com/octocat/Hello-World/master/README"]
     pkt_estimate = 0
     while TRAFFIC_RUN["go"]:
         # Fire 4 parallel curls
