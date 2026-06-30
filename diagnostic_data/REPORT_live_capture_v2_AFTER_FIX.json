@@ -1,0 +1,182 @@
+{
+  "url": "http://127.0.0.1:60215",
+  "screenshots": [
+    {
+      "name": "01_choice_screen",
+      "desc": "Choice screen: Load PCAP or Record live",
+      "bytes": 1172782
+    },
+    {
+      "name": "02_live_recording_page_loaded",
+      "desc": "Live Recording page (S1 + S2 panels, both idle)",
+      "bytes": 618632
+    },
+    {
+      "name": "03_iface_set_to_any",
+      "desc": "S1 interface set to 'any' (Linux all-interfaces)",
+      "bytes": 408781
+    },
+    {
+      "name": "04_recording_started",
+      "desc": "Recording started - State should now read 'Recording'",
+      "bytes": 412673
+    },
+    {
+      "name": "05_recording_t010s",
+      "desc": "Recording in progress @ t=10s",
+      "bytes": 414100
+    },
+    {
+      "name": "05_recording_t030s",
+      "desc": "Recording in progress @ t=30s",
+      "bytes": 413928
+    },
+    {
+      "name": "05_recording_t060s",
+      "desc": "Recording in progress @ t=60s",
+      "bytes": 414076
+    },
+    {
+      "name": "05_recording_t090s",
+      "desc": "Recording in progress @ t=90s",
+      "bytes": 414810
+    },
+    {
+      "name": "05_recording_t125s",
+      "desc": "Recording in progress @ t=125s",
+      "bytes": 414537
+    },
+    {
+      "name": "06_after_stop_save",
+      "desc": "After Stop & Save - pending-snapshot card with Analyze button",
+      "bytes": 451323
+    },
+    {
+      "name": "07_after_analysis",
+      "desc": "After analysis - dashboard should show the captured traffic",
+      "bytes": 432418
+    },
+    {
+      "name": "08_view_top_talkers",
+      "desc": "Captured traffic view: Top Talkers",
+      "bytes": 561791
+    },
+    {
+      "name": "08_view_protocols",
+      "desc": "Captured traffic view: Protocols",
+      "bytes": 584340
+    },
+    {
+      "name": "08_view_devices",
+      "desc": "Captured traffic view: Devices",
+      "bytes": 577989
+    },
+    {
+      "name": "08_view_traffic_timeline",
+      "desc": "Captured traffic view: Traffic Timeline",
+      "bytes": 615534
+    },
+    {
+      "name": "08_view_burst_vs_scan",
+      "desc": "Captured traffic view: Burst vs Scan",
+      "bytes": 590833
+    }
+  ],
+  "phases": [],
+  "tshark_chunks_observed": [
+    {
+      "t": 10,
+      "chunks": [
+        [
+          "S1_chunk_1782807254_0.pcap",
+          10285864
+        ]
+      ]
+    },
+    {
+      "t": 30,
+      "chunks": [
+        [
+          "S1_chunk_1782807254_0.pcap",
+          28908804
+        ]
+      ]
+    },
+    {
+      "t": 60,
+      "chunks": [
+        [
+          "S1_chunk_1782807254_0.pcap",
+          57453664
+        ]
+      ]
+    },
+    {
+      "t": 90,
+      "chunks": [
+        [
+          "S1_chunk_1782807254_0.pcap",
+          84542816
+        ]
+      ]
+    },
+    {
+      "t": 125,
+      "chunks": [
+        [
+          "S1_chunk_1782807254_0.pcap",
+          118068212
+        ]
+      ]
+    }
+  ],
+  "traffic_gen_estimate": 0,
+  "server_500s": 0,
+  "console_errors": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 ()"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 ()"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn` and the property is `n_clicks`. The string ids in the current layout are: [app-mo"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn` and the property is `n_clicks`. The string ids in the current layout are: [app-mo"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    },
+    {
+      "type": "error",
+      "text": "ReferenceError: A nonexistent object was used in an `Input` of a Dash callback. The id of this object is `restart-btn-welcome` and the property is `n_clicks`. The string ids in the current layout are:"
+    }
+  ],
+  "final_pcap": {
+    "path": "/root/netsec_sessions/S1_20260630_081625_948608.pcap",
+    "bytes": 118876308,
+    "io_stat": "Running as user \"root\" and group \"root\". This could be dangerous.\n\n=======================================\n| IO Statistics                       |\n|                                     |\n| Duration: 129.9 secs                |\n| Interval: 129.9 secs                |\n|                                     |\n| Col 1: Frames and bytes             |\n|-------------------------------------|\n|                |1                   |\n| Interval       | Frames |   Bytes   |\n|-------------------------------------|\n|   0.0 <> 129.9 |  32767 | 117806310 |\n=======================================\n"
+  }
+}

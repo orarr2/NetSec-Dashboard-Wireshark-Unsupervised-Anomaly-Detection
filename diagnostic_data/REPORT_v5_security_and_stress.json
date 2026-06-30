@@ -1,0 +1,169 @@
+{
+  "screenshots": [
+    {
+      "name": "01_security_tab_opened",
+      "desc": "Security tab opened - should show 9 security items",
+      "bytes": 576808
+    },
+    {
+      "name": "sec_tcp_syn_analysis",
+      "desc": "Security: TCP SYN Analysis",
+      "bytes": 576808
+    },
+    {
+      "name": "sec_model_agreement_matrix",
+      "desc": "Security: Model Agreement Matrix",
+      "bytes": 606909
+    },
+    {
+      "name": "sec_contamination_sweep",
+      "desc": "Security: Contamination Sweep",
+      "bytes": 628485
+    },
+    {
+      "name": "sec_beaconing_c2",
+      "desc": "Security: Beaconing (C2)",
+      "bytes": 580288
+    },
+    {
+      "name": "sec_dns_tunneling",
+      "desc": "Security: DNS Tunneling",
+      "bytes": 581259
+    },
+    {
+      "name": "sec_dga_domains",
+      "desc": "Security: DGA Domains",
+      "bytes": 582504
+    },
+    {
+      "name": "sec_arp_rogue_dhcp",
+      "desc": "Security: ARP / Rogue DHCP",
+      "bytes": 583257
+    },
+    {
+      "name": "sec_tls_fingerprint",
+      "desc": "Security: TLS Fingerprint",
+      "bytes": 582191
+    },
+    {
+      "name": "sec_kill_chain_risk",
+      "desc": "Security: Kill-Chain Risk",
+      "bytes": 595114
+    },
+    {
+      "name": "02_live_recording_with_banner",
+      "desc": "Live Recording page - FIX1 overwrite banner should show 'Heads-up'",
+      "bytes": 727292
+    },
+    {
+      "name": "03_live_banner_zoom",
+      "desc": "Live Recording - top of page showing FIX1 banner",
+      "bytes": 546003
+    },
+    {
+      "name": "04_after_stress_test",
+      "desc": "After 20-click stress test (0 server errors)",
+      "bytes": 595573
+    }
+  ],
+  "security_walk": {
+    "TCP SYN Analysis": "ok",
+    "Model Agreement Matrix": "ok",
+    "Contamination Sweep": "ok",
+    "Beaconing (C2)": "ok",
+    "DNS Tunneling": "ok",
+    "DGA Domains": "ok",
+    "ARP / Rogue DHCP": "ok",
+    "TLS Fingerprint": "ok",
+    "Kill-Chain Risk": "ok"
+  },
+  "phases": [],
+  "server_500s": 0,
+  "stress_test": {
+    "clicks": 20,
+    "server_500_errors_during": 0,
+    "verdict": "PASS - no server errors",
+    "sequence": [
+      [
+        "Top Talkers",
+        "ok"
+      ],
+      [
+        "Devices",
+        "ok"
+      ],
+      [
+        "Protocols",
+        "ok"
+      ],
+      [
+        "Traffic Timeline",
+        "ok"
+      ],
+      [
+        "Burst vs Scan",
+        "ok"
+      ],
+      [
+        "DNS Services",
+        "ok"
+      ],
+      [
+        "Analysis Insights",
+        "ok"
+      ],
+      [
+        "Top Talkers",
+        "ok"
+      ],
+      [
+        "Devices",
+        "ok"
+      ],
+      [
+        "Protocols",
+        "ok"
+      ],
+      [
+        "Traffic Timeline",
+        "ok"
+      ],
+      [
+        "Burst vs Scan",
+        "ok"
+      ],
+      [
+        "DNS Services",
+        "ok"
+      ],
+      [
+        "Analysis Insights",
+        "ok"
+      ],
+      [
+        "Top Talkers",
+        "ok"
+      ],
+      [
+        "Devices",
+        "ok"
+      ],
+      [
+        "Protocols",
+        "ok"
+      ],
+      [
+        "Traffic Timeline",
+        "ok"
+      ],
+      [
+        "Burst vs Scan",
+        "ok"
+      ],
+      [
+        "DNS Services",
+        "ok"
+      ]
+    ]
+  }
+}
