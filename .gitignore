@@ -18,3 +18,8 @@ netsec_upload_*.pcapng
 
 # Live recording output directory (per-session PCAPs land here)
 netsec_sessions/
+
+# Editor / tooling settings that must never be tracked
+settings.local.json
+.vscode/
+.idea/

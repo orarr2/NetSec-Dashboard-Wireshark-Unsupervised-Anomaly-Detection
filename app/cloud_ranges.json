@@ -3112,18 +3112,6 @@
       "type": "AI"
     },
     {
-      "pattern": "\\.anthropic\\.com$",
-      "provider": "Anthropic",
-      "service": "Anthropic",
-      "type": "AI"
-    },
-    {
-      "pattern": "\\.claude\\.ai$",
-      "provider": "Anthropic",
-      "service": "Claude",
-      "type": "AI"
-    },
-    {
       "pattern": "\\.gemini\\.google\\.com$",
       "provider": "Google",
       "service": "Gemini",
