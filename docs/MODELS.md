@@ -10,14 +10,16 @@
 
 ```python
 FEATURE_COLS = ["mean_len", "std_len", "count", "burst_score",
-                "unique_dsts", "syn_count", "rst_count"]
+                "unique_dsts", "syn_count", "rst_count",
+                "fin_count", "null_count", "xmas_count"]
 X_raw  = ip_agg[FEATURE_COLS].fillna(0).values
 scaler = StandardScaler()
 X      = scaler.fit_transform(X_raw)
 ```
 
-- **7 פיצ'רים פר-IP**: גודל פקטה ממוצע, סטיית תקן של גודל, מספר פקטות,
-  ציון פרצים (burst), יעדים ייחודיים, ספירת SYN, ספירת RST.
+- **10 פיצ'רים פר-IP**: גודל פקטה ממוצע, סטיית תקן של גודל, מספר פקטות,
+  ציון פרצים (burst), יעדים ייחודיים, ספירת SYN, ספירת RST, וספירות
+  סריקות-חמקניות: FIN-only, NULL, Xmas.
 - `fillna(0)` — ערכים חסרים הופכים ל-0.
 - `StandardScaler` — מנרמל כל פיצ'ר לממוצע 0 וסטיית תקן 1. **קריטי**, כי גם
   IsolationForest וגם DBSCAN רגישים לסקאלה (count בעשרות-אלפים מול std_len קטן).
@@ -27,34 +29,38 @@ X      = scaler.fit_transform(X_raw)
 ## 1️⃣ IsolationForest — זיהוי אנומליות פר-IP
 
 ```python
-# בחירת contamination אוטומטית (sensitivity sweep)
-best_cont, best_score = 0.10, np.inf
+# בחירת contamination לפי יציבות-בין-זרעים (seed stability):
+# contamination לא משנה את העצים אלא רק את סף הסימון, ולכן השוואת ציונים
+# עם זרע קבוע חסרת משמעות. במקום זה: לכל ערך מאמנים כמה יערות עם זרעים
+# שונים, מודדים כמה קבוצת המסומנים יציבה בין הזרעים (Jaccard ממוצע בין
+# זוגות), ובוחרים את הערך היציב ביותר. תיקו → הערך הקטן יותר.
+STABILITY_SEEDS = [7, 17, 42, 99, 123]   # (3 זרעים בלבד מעל 20k IP)
 for cont in [0.05, 0.10, 0.15]:
-    iso_tmp    = IsolationForest(n_estimators=200, contamination=cont, random_state=42)
-    iso_tmp.fit(X)
-    flagged    = iso_tmp.decision_function(X)[iso_tmp.predict(X) == -1]
-    mean_score = flagged.mean() if len(flagged) else 0
-    if mean_score < best_score:
-        best_score, best_cont = mean_score, cont
+    flag_sets = [frozenset(np.where(
+        IsolationForest(n_estimators=100, contamination=cont,
+                        random_state=seed).fit(X).predict(X) == -1)[0])
+        for seed in STABILITY_SEEDS]
+    # stability = ממוצע Jaccard בין כל זוגות ה-flag_sets; votes = הצבעת רוב
 
 # המודל הסופי
 iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42)
 iso.fit(X)
-ip_agg["iso_score"] = iso.decision_function(X)   # ציון רציף
-ip_agg["iso_flag"]  = iso.predict(X)             # 1 = רגיל, -1 = אנומליה
-ip_agg["anomaly"]   = ip_agg["iso_flag"] == -1
+ip_agg["iso_score"]     = iso.decision_function(X)  # ציון רציף
+ip_agg["iso_stability"] = votes / n_seeds           # שיעור הזרעים שסימנו את ה-IP
+ip_agg["anomaly"]       = ip_agg["iso_stability"] >= 0.5   # הצבעת רוב
 ```
 
 **הפרמטרים:**
 - `n_estimators=200` — מספר עצי הבידוד ביער. יותר עצים = ציון יציב יותר, על
-  חשבון זמן ריצה. 200 הוא איזון סביר.
+  חשבון זמן ריצה. 200 הוא איזון סביר (100 בריצות ה-sweep, לחיסכון).
 - `contamination` — אחוז האנומליות המשוער בנתונים. **לא קבוע** — נבחר
-  אוטומטית מתוך `[0.05, 0.10, 0.15]`: לכל ערך מודדים את הציון הממוצע של
-  ה-IP-ים שסומנו, ובוחרים את הערך שנותן את הציון **הנמוך ביותר** (הכי קיצוני
-  סטטיסטית). זה הפרמטר הרגיש ביותר במודל ולכן ה-sweep.
-- `random_state=42` — זרע אקראיות קבוע → תוצאות ניתנות לשחזור.
+  אוטומטית מתוך `[0.05, 0.10, 0.15]` לפי **יציבות בין זרעים**: מאמנים
+  מספר יערות עם זרעים שונים לכל ערך ובוחרים את הערך שקבוצת המסומנים שלו
+  הכי עקבית (Jaccard ממוצע). IP נחשב אנומליה רק אם **רוב** הזרעים סימנו
+  אותו — הצבעה שעמידה בהרבה לרעש של יער בודד.
+- `random_state=42` — זרע קבוע למודל הסופי → ציוני `iso_score` ניתנים לשחזור.
 - `decision_function` → ציון אנומליה רציף (שלילי = חריג יותר).
-- `predict` → תיוג בינארי: `-1` אנומליה, `1` רגיל.
+- `iso_stability` → שיעור הזרעים שהסכימו שה-IP חריג (0–1).
 
 ---
 
@@ -83,7 +89,7 @@ ip_agg["cluster"] = dbscan.fit_predict(X)        # -1 = noise (אנומליה)
   ה-k-distance (הנגזרת השנייה המינימלית), מעוגל ל-2 ספרות. אם יש פחות מ-4
   נקודות → fallback ל-`1.3`. זה הפרמטר הקריטי ב-DBSCAN ולכן הוא מחושב מהנתונים
   ולא מנוחש.
-- `min_samples=2` — מינימום שכנים כדי להגדיר אזור צפוף. נמוך בכוונה: מרחב של 7
+- `min_samples=2` — מינימום שכנים כדי להגדיר אזור צפוף. נמוך בכוונה: מרחב של 10
   ממדים ודאטה קטן (~50–150 IP) — דרישה ל-3+ שכנים הייתה הופכת כמעט הכל ל-noise.
 - `metric` — ברירת מחדל `euclidean`.
 - `fit_predict` → תווית אשכול לכל IP. תווית **`-1`** = נקודה בודדת ללא שכנים
@@ -117,6 +123,8 @@ MAX_EPOCHS, PATIENCE = 15, 2
 
 **הפרמטרים:**
 - `input_size=1` — משתנה קלט בודד: גודל פקטה ממוצע ב-bin של שנייה.
+  שניות ללא תעבורה **ממולאות באפס** (ולא נמחקות) — שקט הוא תצפית אמיתית,
+  ומחיקתו הייתה "מדביקה" פערים ומסתירה מהמודל מעברי שקט→פרץ.
 - `hidden_size=64` — מספר היחידות הנסתרות ב-LSTM. קובע את קיבולת המודל.
 - `nn.LSTM(..., batch_first=True)` — צורת הטנזור היא `(batch, seq, features)`.
 - `nn.Linear(hidden_size, 1)` — שכבה מלאה שממירה את הפלט הנסתר לחיזוי יחיד.
@@ -141,5 +149,7 @@ MAX_EPOCHS, PATIENCE = 15, 2
 | LSTM | אנומליות זמניות / רצפיות | שגיאת חיזוי |
 
 כל מודל מכסה חולשה של האחרים, וההסכמה ביניהם ("Model Agreement Matrix")
-משמשת כ-cross-validation לא-מפוקח. ההערכה מתבססת על Silhouette Score (DBSCAN)
-ו-Hopkins statistic (האם בכלל יש מבנה אשכולות בנתונים).
+משמשת כ-cross-validation לא-מפוקח. ההערכה מתבססת על Silhouette Score
+(DBSCAN) ועל יציבות-בין-זרעים של IsolationForest, ובנוסף — מאז הוספת
+`attack_tests/ground_truth.json` — על precision/recall אמיתיים מול חמשת
+ה-PCAP המתויגים (ראו `attack_tests/evaluate.py` ו-`tests/`).

@@ -1,0 +1,55 @@
+{
+  "_comment": "Labeled ground truth for the bundled attack PCAPs. Consumed by attack_tests/evaluate.py and tests/test_detection_regression.py. attacker_ips = hosts that should be flagged per-IP; entity lists are exhaustive for their PCAP.",
+  "tcp_syn_scan.pcap": {
+    "attack": "tcp_syn_scan",
+    "source": "markofu/pcaps EvilFingers NMAP (nmap -sS)",
+    "attacker_ips": ["192.168.1.10"],
+    "expect": {
+      "scan_alert_types": ["SYN"],
+      "ml_should_flag_attacker": true,
+      "aggregate_flood": false
+    }
+  },
+  "xmas_scan.pcap": {
+    "attack": "tcp_xmas_scan",
+    "source": "markofu/pcaps EvilFingers NMAP (nmap -sX)",
+    "attacker_ips": ["192.168.1.10"],
+    "expect": {
+      "scan_alert_types": ["XMAS"],
+      "aggregate_flood": false
+    }
+  },
+  "arpspoof.pcap": {
+    "attack": "arp_spoofing",
+    "source": "researcher111/ARP-pcap-files",
+    "spoofed_ips": ["192.168.1.1"],
+    "spoofing_macs": ["08:00:27:2d:f8:5a", "08:00:27:5e:01:7c"],
+    "expect": {
+      "arp_multi_mac": true,
+      "aggregate_flood": false
+    }
+  },
+  "synflood.pcap": {
+    "attack": "spoofed_syn_flood",
+    "source": "pvrmza/DDoS-packet-captures",
+    "attacker_ips": [],
+    "expect": {
+      "aggregate_flood": true,
+      "spoofed_source_pattern": true,
+      "dbscan_skipped": true,
+      "min_syn_sources": 30000
+    }
+  },
+  "dns_amp.pcap": {
+    "attack": "dns_amplification",
+    "source": "pvrmza/DDoS-packet-captures (victim side)",
+    "reflector_ips": [
+      "212.8.51.69", "212.8.51.71", "212.8.50.179", "212.8.51.72",
+      "212.8.51.99", "146.120.160.133", "212.8.51.140", "212.8.50.158"
+    ],
+    "expect": {
+      "amp_rule": true,
+      "aggregate_flood": false
+    }
+  }
+}

@@ -1,3 +1,15 @@
+# =========================================================================
+# AUTO-GENERATED from app/Network_Security_Dashboard.ipynb
+# by tools/export_dashboard_module.py - DO NOT EDIT BY HAND.
+# Regenerate with:  python3 tools/export_dashboard_module.py
+#
+# Importing this module executes the full notebook INCLUDING the final
+# app.run() call. For tests, stub dash.Dash.run to a no-op before import.
+# =========================================================================
+
+
+# ==== notebook cell 4 ====
+
 import subprocess, sys, os
 
 PKGS = {
@@ -119,6 +131,8 @@ print()
 print('All libraries loaded successfully')
 
 
+# ==== notebook cell 6 ====
+
 import base64, tempfile
 
 PCAP1 = None
@@ -187,6 +201,8 @@ print(f"Upload limit (drag-and-drop): {MAX_UPLOAD_HUMAN}. "
       f"Larger files: paste the path directly.")
 
 
+# ==== notebook cell 8 ====
+
 from datetime import datetime
 
 def _find_tshark():
@@ -254,6 +270,8 @@ def _analyze_pcap_tshark(path, label, tshark_path):
         "udp.srcport", "udp.dstport",
         "dns.qry.name", "dns.flags.rcode", "dns.flags.response",
         "arp.src.proto_ipv4", "arp.src.hw_mac",
+        "wlan.fc.type", "wlan.fc.subtype", "wlan.sa", "wlan.fc.retry",
+        "radiotap.dbm_antsignal", "wlan_radio.signal_dbm",
     ]
     cmd = [tshark_path, "-r", str(path), "-n", "-T", "fields",
            "-E", "header=n", "-E", "separator=|",
@@ -266,7 +284,9 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     df = pd.read_csv(io.StringIO(raw), sep="|", header=None,
         names=["ts","len","eth_src","eth_dst","ip_src","ip_dst","proto",
                "tcp_sport","tcp_dport","tcp_flags","udp_sport","udp_dport",
-               "dns_qname","dns_rcode","dns_response","arp_psrc","arp_hwsrc"],
+               "dns_qname","dns_rcode","dns_response","arp_psrc","arp_hwsrc",
+               "wlan_type","wlan_subtype","wlan_sa","wlan_retry",
+               "rssi_radiotap","rssi_wlanradio"],
         dtype=str, na_filter=False, low_memory=False)
     if len(df) == 0:
         raise RuntimeError(f"tshark returned 0 rows from {path}")
@@ -303,8 +323,10 @@ def _analyze_pcap_tshark(path, label, tshark_path):
             try: return int(s, 16)
             except: return 0
         tcp_df["fi"] = tcp_df["tcp_flags"].map(_flag_int)
-        # SYN scan: SYN flag only (0x02).
-        syn_counter = collections.Counter(tcp_df[tcp_df["fi"] == 0x02]["ip_src"].tolist())
+        # SYN scan: SYN flag only (0x02), masked against 0x3F so the ECN
+        # bits (ECE/CWR - e.g. 0xC2 SYNs from ECN-enabled Linux stacks) do
+        # not hide the SYN from the counter.
+        syn_counter = collections.Counter(tcp_df[(tcp_df["fi"] & 0x3F) == 0x02]["ip_src"].tolist())
         # RST: any RST flag (0x04).
         rst_counter = collections.Counter(tcp_df[(tcp_df["fi"] & 0x04) != 0]["ip_src"].tolist())
         # Stealth scans — FIN-only, NULL (no flags), Xmas (FIN|PSH|URG = 0x29).
@@ -380,7 +402,15 @@ def _analyze_pcap_tshark(path, label, tshark_path):
                 "mean_size":   float(row["mean"]),
             }
 
-    dns_nxdomain = int(((df["dns_rcode"]=="3") & (df["dns_response"]=="True")).sum())
+    # tshark renders boolean fields as "1"/"0" or "True"/"False" depending
+    # on version - reuse the same normalised mask as the amp rule above.
+    _nx_mask = (df["dns_rcode"]=="3") & _dns_is_resp
+    dns_nxdomain = int(_nx_mask.sum())
+    # Attribute NXDOMAIN storms to the host that *received* the responses
+    # (the querier), so threat scoring can blame the right device instead
+    # of the whole session.
+    nxdomain_per_dst = collections.Counter(
+        df[_nx_mask & (df["ip_dst"]!="")]["ip_dst"].tolist())
     nonstd_mask  = (df["dns_qname"]!="") & (df["udp_dport"]!="")
     if nonstd_mask.any():
         ports_int = pd.to_numeric(df.loc[nonstd_mask,"udp_dport"], errors="coerce")
@@ -415,12 +445,12 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     wlan_features = {}
     wlan_available = False
     try:
-        wlan_type_col   = df.get("wlan.fc.type")
-        wlan_sub_col    = df.get("wlan.fc.subtype")
-        wlan_sa_col     = df.get("wlan.sa")
-        wlan_retry_col  = df.get("wlan.fc.retry")
-        rssi_a_col      = df.get("radiotap.dbm_antsignal")
-        rssi_b_col      = df.get("wlan_radio.signal_dbm")
+        wlan_type_col   = df.get("wlan_type")
+        wlan_sub_col    = df.get("wlan_subtype")
+        wlan_sa_col     = df.get("wlan_sa")
+        wlan_retry_col  = df.get("wlan_retry")
+        rssi_a_col      = df.get("rssi_radiotap")
+        rssi_b_col      = df.get("rssi_wlanradio")
 
         def _to_int(v):
             try:
@@ -440,7 +470,9 @@ def _analyze_pcap_tshark(path, label, tshark_path):
                 return None
 
         has_any_rssi = False
-        if wlan_sa_col is not None:
+        # Skip the per-row loop entirely for wired/deframed captures - the
+        # wlan_sa column exists but is empty there.
+        if wlan_sa_col is not None and (wlan_sa_col != "").any():
             for i in range(len(df)):
                 sa = wlan_sa_col.iloc[i]
                 if not sa or pd.isna(sa) or sa == "":
@@ -480,7 +512,7 @@ def _analyze_pcap_tshark(path, label, tshark_path):
                     entry["rssi_samples"].append(rssi)
                     has_any_rssi = True
 
-                ts = df["frame.time_epoch"].iloc[i] if "frame.time_epoch" in df.columns else None
+                ts = df["ts"].iloc[i]
                 try:
                     ts_f = float(ts)
                     if entry["first_seen"] is None or ts_f < entry["first_seen"]:
@@ -519,6 +551,7 @@ def _analyze_pcap_tshark(path, label, tshark_path):
         "arp_spoofing_ips": arp_spoofing_ips,
         "arp_spoofing_macs": arp_spoofing_macs,
         "dns_nxdomain": dns_nxdomain,
+        "nxdomain_per_dst": nxdomain_per_dst,
         "dns_nonstandard": dns_nonstandard,
         "dns_long_queries": dns_long_queries,
         "ip_to_mac": ip_to_mac,
@@ -580,7 +613,7 @@ def _analyze_pcap_scapy(path, label="Session"):
             flags = int(p["TCP"].flags)
             if p.haslayer("IP"):
                 src = p["IP"].src
-                if flags == 0x02: syn_counter[src] += 1
+                if (flags & 0x3F) == 0x02: syn_counter[src] += 1
                 if flags & 0x04:  rst_counter[src] += 1
                 masked = flags & 0x3F
                 if masked == 0x01: fin_counter[src]  += 1
@@ -647,6 +680,10 @@ def _analyze_pcap_scapy(path, label="Session"):
 
     dns_nxdomain = sum(1 for p in pkts if p.haslayer("DNS")
                        and p["DNS"].qr==1 and p["DNS"].rcode==3)
+    nxdomain_per_dst = collections.Counter(
+        p["IP"].dst for p in pkts
+        if p.haslayer("DNS") and p.haslayer("IP")
+        and p["DNS"].qr==1 and p["DNS"].rcode==3)
     dns_nonstandard = sum(1 for p in pkts if p.haslayer("DNS")
                           and p.haslayer("UDP")
                           and p["UDP"].dport not in (53,5353))
@@ -669,6 +706,7 @@ def _analyze_pcap_scapy(path, label="Session"):
         "arp_spoofing_ips":arp_spoofing_ips,
         "arp_spoofing_macs":arp_spoofing_macs,
         "dns_nxdomain":dns_nxdomain,
+        "nxdomain_per_dst":nxdomain_per_dst,
         "dns_nonstandard":dns_nonstandard,
         "dns_long_queries":dns_long_queries,
         "ip_to_mac":ip_to_mac,
@@ -691,6 +729,8 @@ def analyze_pcap(path, label="Session"):
 print("analyze_pcap() ready  -  loader:",
       ("tshark @ " + _TSHARK_PATH_FOR_LOADER) if _TSHARK_PATH_FOR_LOADER else "scapy (slower)")
 
+
+# ==== notebook cell 10 ====
 
 S1 = None
 S2 = None
@@ -728,6 +768,8 @@ def load_session_from_pcap(pcap_path, label, csv_path=None):
 print("Empty state initialized. Sessions will be loaded via the dashboard.")
 
 
+# ==== notebook cell 12 ====
+
 def run_ml_on_session(S):
     """Run IsolationForest + DBSCAN on a session's per-IP feature matrix. Mutates S['ip_agg'] in-place to add columns: iso_score, iso_flag, anomaly, cluster."""
     if S is None or S.get("ip_agg") is None or len(S["ip_agg"]) == 0:
@@ -750,26 +792,50 @@ def run_ml_on_session(S):
 
     print(f"[{S['label']}] Feature matrix: {X.shape[0]} IPs x {X.shape[1]} features")
 
-    print(f"[{S['label']}] IsolationForest - contamination sensitivity analysis:")
-    best_cont, best_score = 0.10, np.inf
+    # Contamination selection by seed-stability. sklearn's `contamination`
+    # does not change the trees - only the flagging threshold - so with a
+    # fixed seed the anomaly scores are byte-identical across the sweep and
+    # comparing "mean score of flagged" compares nothing. Instead: refit
+    # with several seeds per contamination and keep the value whose flagged
+    # set is most stable across seeds (mean pairwise Jaccard). Ties go to
+    # the smaller contamination.
+    STABILITY_SEEDS = [7, 17, 42, 99, 123] if len(ip_agg) <= 20000 else [7, 42, 123]
+    print(f"[{S['label']}] IsolationForest - contamination stability sweep "
+          f"({len(STABILITY_SEEDS)} seeds per value):")
+    best_cont, best_stab = 0.10, -1.0
+    flag_votes_by_cont = {}
     for cont in [0.05, 0.10, 0.15]:
-        iso_tmp = IsolationForest(n_estimators=200, contamination=cont, random_state=42)
-        iso_tmp.fit(X)
-        scores_tmp = iso_tmp.decision_function(X)
-        flagged    = scores_tmp[iso_tmp.predict(X) == -1]
-        mean_score = flagged.mean() if len(flagged) else 0
-        n_flagged  = (iso_tmp.predict(X) == -1).sum()
-        print(f"  contamination={cont:.2f} -> {n_flagged:3d} IPs flagged | "
-              f"mean anomaly score of flagged: {mean_score:.4f}")
-        if mean_score < best_score:
-            best_score, best_cont = mean_score, cont
-    print(f"  => Selected contamination={best_cont:.2f}")
+        flag_sets = []
+        for seed in STABILITY_SEEDS:
+            iso_tmp = IsolationForest(n_estimators=100, contamination=cont,
+                                      random_state=seed).fit(X)
+            flag_sets.append(frozenset(np.where(iso_tmp.predict(X) == -1)[0]))
+        pair_jac = []
+        for a in range(len(flag_sets)):
+            for b in range(a + 1, len(flag_sets)):
+                u = flag_sets[a] | flag_sets[b]
+                pair_jac.append(len(flag_sets[a] & flag_sets[b]) / len(u) if u else 1.0)
+        stability = float(np.mean(pair_jac)) if pair_jac else 1.0
+        votes = np.zeros(len(X))
+        for fs in flag_sets:
+            votes[list(fs)] += 1
+        flag_votes_by_cont[cont] = votes / len(flag_sets)
+        n_majority = int((votes >= len(flag_sets) / 2).sum())
+        print(f"  contamination={cont:.2f} -> {n_majority:3d} IPs by majority vote | "
+              f"seed stability (Jaccard)={stability:.3f}")
+        if stability > best_stab + 1e-9:
+            best_stab, best_cont = stability, cont
+    print(f"  => Selected contamination={best_cont:.2f} (most seed-stable)")
 
     iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42)
     iso.fit(X)
     ip_agg["iso_score"] = iso.decision_function(X)
     ip_agg["iso_flag"]  = iso.predict(X)
-    ip_agg["anomaly"]   = ip_agg["iso_flag"] == -1
+    # An IP is anomalous when the majority of stability seeds flagged it -
+    # a vote is far less sensitive to one forest's randomness than a single
+    # fixed-seed predict().
+    ip_agg["iso_stability"] = flag_votes_by_cont[best_cont]
+    ip_agg["anomaly"]   = ip_agg["iso_stability"] >= 0.5
 
     k = 2
     nbrs = NearestNeighbors(n_neighbors=k).fit(X)
@@ -834,6 +900,8 @@ def run_ml_on_session(S):
           f"Clusters: {ip_agg['cluster'].nunique()}")
 
 
+# ==== notebook cell 14 ====
+
 def compute_z_scores(S, my_ip):
     """Compute z-scores of local devices vs the local-network mean. Returns (z_scores_df, local_ip_agg, extern_ip_agg). my_ip used only for printout."""
     import ipaddress
@@ -871,12 +939,14 @@ def compute_z_scores(S, my_ip):
     return z_scores, local_ip_agg, extern_ip_agg
 
 
+# ==== notebook cell 16 ====
+
 def run_security_scans(S):
     """Run FTP/SMTP/SYN/ARP/DNS security scans on a single session. Returns a findings dict (also printed to stdout)."""
     findings = {"ftp": [], "smtp": [], "syn_top": [], "rst_top": [],
                 "arp_spoofing": {}, "dns_long": [],
                 "fin_top": [], "null_top": [], "xmas_top": [],
-                "scan_alerts": [], "dns_amp": []}
+                "scan_alerts": [], "dns_amp": [], "flood": []}
 
     pkts = S.get("pkts") or []
     ftp_creds, smtp_lines = [], []
@@ -916,14 +986,18 @@ def run_security_scans(S):
                           ("FIN",  S.get("fin_counter")  or collections.Counter()),
                           ("NULL", S.get("null_counter") or collections.Counter()),
                           ("XMAS", S.get("xmas_counter") or collections.Counter())):
-            for src, n in cnt.most_common(5):
+            # No top-5 truncation: walk every source above the 50-packet
+            # floor, so a 6th+ scanner is not hidden behind heavier talkers.
+            for src, n in sorted(cnt.items(), key=lambda kv: -kv[1]):
+                if n <= 50:
+                    break
                 if not src or src not in ip_agg_for_scan.index:
                     continue
                 row = ip_agg_for_scan.loc[src]
                 n_pkt = int(row["count"])
                 n_dst = int(row["unique_dsts"])
                 ratio = n / max(n_pkt, 1)
-                if n > 50 and (n_dst > 20 or ratio > 0.7):
+                if n_dst > 20 or ratio > 0.7:
                     findings["scan_alerts"].append({
                         "src": src, "type": name, "count": int(n),
                         "unique_dsts": n_dst, "ratio": round(ratio, 2),
@@ -942,6 +1016,28 @@ def run_security_scans(S):
                 "mean_size": round(stats["mean_size"], 1),
             })
 
+    # Aggregate spoofed-flood rule: a SYN flood from thousands of spoofed
+    # sources leaves every per-IP counter at ~1 SYN, so the per-source scan
+    # rule above can never fire and IsolationForest inverts (the flood rows
+    # become the dense majority). Detect it from session-level aggregates.
+    total_syn  = sum(S["syn_counter"].values())
+    n_syn_srcs = len(S["syn_counter"])
+    try:
+        duration_s = max((S["t1"] - S["t0"]).total_seconds(), 1.0)
+    except Exception:
+        duration_s = 1.0
+    syn_rate = total_syn / duration_s
+    if total_syn >= 1000 and n_syn_srcs >= 100 and syn_rate >= 100:
+        per_src = total_syn / n_syn_srcs
+        findings["flood"].append({
+            "type": "SYN_FLOOD",
+            "total_syn": int(total_syn),
+            "syn_sources": int(n_syn_srcs),
+            "syn_per_sec": round(syn_rate, 1),
+            "syn_per_source": round(per_src, 2),
+            "spoofed_source_pattern": bool(per_src <= 3),
+        })
+
     print(f"\n[{S['label']}] Security scan:")
     print(f"  FTP lines: {len(ftp_creds)} | SMTP lines: {len(smtp_lines)}")
     print(f"  Top SYN : {findings['syn_top']}")
@@ -958,10 +1054,17 @@ def run_security_scans(S):
         for a in findings['dns_amp'][:8]:
             print(f"    {a['src']:<22} responses={a['responses']:>5} "
                   f"mean_size={a['mean_size']} bytes")
+    if findings['flood']:
+        for a in findings['flood']:
+            tag = "spoofed-source" if a["spoofed_source_pattern"] else "concentrated"
+            print(f"  FLOOD: {a['total_syn']:,} SYNs from {a['syn_sources']:,} sources "
+                  f"@ {a['syn_per_sec']}/s ({tag})  *** SYN FLOOD ***")
     print(f"  ARP spoofing IPs: {len(findings['arp_spoofing'])}")
     print(f"  NXDOMAIN: {S['dns_nxdomain']} | Long DNS queries: {len(findings['dns_long'])}")
     return findings
 
+
+# ==== notebook cell 18 ====
 
 def compute_session_compare(S1, S2):
     """Build the comparison dataframe between two sessions. Returns (compare_df, new_n, gone_n)."""
@@ -991,6 +1094,8 @@ def compute_session_compare(S1, S2):
           f"new={n_new} gone={n_gone}")
     return df, n_new, n_gone
 
+
+# ==== notebook cell 20 ====
 
 def generate_insights_lines(s1, s2, local_ip_agg_df, compare_df_arg, my_ip):
     """Build a list of one-line insights describing what is interesting in the captured traffic. Returns a list of strings."""
@@ -1079,6 +1184,8 @@ def compute_pair_state(S1, S2, my_ip):
     }
 
 
+# ==== notebook cell 22 ====
+
 class LSTMModel(nn.Module):
     def __init__(self, input_size=1, hidden_size=64):
         super().__init__()
@@ -1091,6 +1198,8 @@ class LSTMModel(nn.Module):
 print(f"LSTMModel class defined")
 
 
+# ==== notebook cell 24 ====
+
 import math
 import tempfile
 
@@ -1102,9 +1211,13 @@ def train_lstm_for_session(session, session_label):
     df_sorted = session["df_pkts"].sort_values("time").copy()
     df_sorted["second"] = ((df_sorted["time"] - df_sorted["time"].min()).astype(int))
 
-    binned = (df_sorted.groupby("second")["size"].mean()
-              .reset_index().sort_values("second")["size"]
-              .values.astype(float))
+    # Zero-fill idle seconds: a bare groupby drops seconds with no packets,
+    # which stitches gaps together and hides silence-then-burst transitions
+    # from the model. A second with no traffic is a real observation (0).
+    per_sec = df_sorted.groupby("second")["size"].mean()
+    n_secs  = int(df_sorted["second"].max()) + 1
+    binned  = (per_sec.reindex(range(n_secs), fill_value=0.0)
+               .values.astype(float))
 
     if len(binned) > MAX_BINS:
         stride = len(binned) // MAX_BINS
@@ -1186,6 +1299,8 @@ def train_lstm_for_session(session, session_label):
 print("train_lstm_for_session defined")
 
 
+# ==== notebook cell 26 ====
+
 def evaluate_lstm(m, Xt_all, yt_all, Xt_val, yt_val, session, label):
     m.eval()
     with torch.no_grad():
@@ -1210,20 +1325,32 @@ def evaluate_lstm(m, Xt_all, yt_all, Xt_val, yt_val, session, label):
 print("evaluate_lstm defined")
 
 
-pass
-
-
-pass
-
+# ==== notebook cell 28 ====
 
 pass
 
 
+# ==== notebook cell 29 ====
+
 pass
 
 
+# ==== notebook cell 31 ====
+
 pass
 
+
+# ==== notebook cell 33 ====
+
+pass
+
+
+# ==== notebook cell 35 ====
+
+pass
+
+
+# ==== notebook cell 37 ====
 
 import json, ipaddress, re, os, socket
 from pathlib import Path
@@ -1602,6 +1729,8 @@ def classify_external_ip(ip, do_rdns=True):
 print("Device classification engine ready.")
 
 
+# ==== notebook cell 39 ====
+
 import pandas as pd
 import ipaddress as _ipa
 from collections import Counter as _Counter, defaultdict as _dd
@@ -1679,17 +1808,19 @@ def compute_threat_score(ip, session):
         score += 25; n_signals += 1
         reasons.append("ARP IP↔MAC inconsistency - possible spoofing")
 
-    n_dns_long = len(session.get("dns_long_queries", []))
+    # Long-query and NXDOMAIN signals are attributed per-IP: one infected
+    # machine's DNS storm must not raise the threat tier of every device
+    # in the inventory.
+    dns_per_ip = session.get("dns_per_ip", {}).get(ip, _Counter())
+    n_dns_long = sum(1 for q in dns_per_ip if len(q) > 60)
     if n_dns_long > 0:
-        dns_per_ip = session.get("dns_per_ip", {}).get(ip, _Counter())
-        if sum(dns_per_ip.values()) > 30:
-            score += min(15, n_dns_long * 3); n_signals += 1
-            reasons.append(f"{n_dns_long} long DNS queries (tunneling-like)")
+        score += min(15, n_dns_long * 3); n_signals += 1
+        reasons.append(f"{n_dns_long} long DNS queries from this IP (tunneling-like)")
 
-    nxd = session.get("dns_nxdomain", 0)
+    nxd = session.get("nxdomain_per_dst", {}).get(ip, 0)
     if nxd >= 50:
         score += min(10, nxd // 50); n_signals += 1
-        reasons.append(f"{nxd} NXDOMAIN responses in session")
+        reasons.append(f"{nxd} NXDOMAIN responses to this IP")
 
     if n_signals >= 3:
         score += 10
@@ -1831,6 +1962,8 @@ COVERAGE_S2 = dict(COVERAGE_S1)
 print("Inventory & coverage scaffolding ready. Empty until a session is loaded.")
 
 
+# ==== notebook cell 41 ====
+
 """ - : Streaming live capture with dual-session UI support. Architecture: LiveCaptureWorker manages ONE session: tshark subprocess + reader thread - tshark writes raw pcap to disk AND outputs parsed fields to stdout - Reader thread parses each stdout line and updates in-memory Counters - Pause = kill subprocess (its pcap chunk closes cleanly) - Resume = relaunch tshark to a NEW pcap chunk (data in memory persists) - Stop&Save = pause + merge all chunks via mergecap into a single .pcap - LIVE_SESSIONS = {"S1": worker, "S2": worker} - global, refresh-safe Browser refresh does NOT lose state because all data lives in Python globals,
 NOT in Dash component state. Dash callbacks only read snapshots.
 """
@@ -1854,10 +1987,43 @@ TSHARK_PATH   = _find_tool("tshark")
 MERGECAP_PATH = _find_tool("mergecap")
 
 
+_INTERFACE_LIST_CACHE = None    # cache for list_capture_interfaces() (tshark -D is slow)
+
+
+def _default_project_save_dir():
+    """Where live recordings get saved by default.
+    Walks up from the notebook's cwd looking for a marker that identifies
+    the project root (an 'app/' subdir or a README.md sibling), and returns
+    <project_root>/netsec_sessions. Recordings therefore travel with the
+    project rather than leaking into the user's home directory.
+
+    Falls back to <cwd>/netsec_sessions if nothing is recognisable - the
+    folder is still created on first access by __init__."""
+    from pathlib import Path as _Path
+    here = _Path.cwd().resolve()
+    # candidates in priority order: cwd, parent (if cwd is app/), grandparent
+    for cand in (here, here.parent, here.parent.parent):
+        try:
+            if (cand / "app").is_dir() or (cand / "README.md").is_file():
+                return str(cand / "netsec_sessions")
+        except Exception:
+            pass
+    return str(here / "netsec_sessions")
+
+
 def list_capture_interfaces():
-    """Return [(id, friendly_name), ...] for available capture interfaces."""
+    """Return [(id, friendly_name), ...] for available capture interfaces.
+    Results are cached in a module-global so the tshark -D subprocess
+    (which takes 1-3 seconds on Windows) runs once per kernel, NOT on every
+    Live Recording panel rebuild. Eliminates the multi-second freeze the
+    user hit on every click. Call list_capture_interfaces.cache_clear() to
+    force a re-scan if a new NIC is plugged in mid-session."""
+    global _INTERFACE_LIST_CACHE
+    if _INTERFACE_LIST_CACHE is not None:
+        return _INTERFACE_LIST_CACHE
     if not TSHARK_PATH:
-        return [("0", "(tshark not available - install Wireshark)")]
+        _INTERFACE_LIST_CACHE = [("0", "(tshark not available - install Wireshark)")]
+        return _INTERFACE_LIST_CACHE
     try:
         out = subprocess.check_output([TSHARK_PATH, "-D"],
             encoding="utf-8", errors="replace", timeout=10,
@@ -1868,9 +2034,17 @@ def list_capture_interfaces():
             if not line or "." not in line: continue
             num, rest = line.split(".", 1)
             rows.append((num.strip(), rest.strip()))
-        return rows or [("?", "(no interfaces - may need admin / sudo)")]
+        _INTERFACE_LIST_CACHE = rows or [("?", "(no interfaces - may need admin / sudo)")]
+        return _INTERFACE_LIST_CACHE
     except Exception as e:
+        # do NOT cache an error - retry next time
         return [("?", f"error listing: {e}")]
+
+def _clear_interface_list_cache():
+    """Force a re-scan on the next list_capture_interfaces() call. Wire to a
+    refresh button if the user wants to add a NIC mid-session."""
+    global _INTERFACE_LIST_CACHE
+    _INTERFACE_LIST_CACHE = None
 
 
 class LiveCaptureWorker:
@@ -1894,7 +2068,10 @@ class LiveCaptureWorker:
 
     def __init__(self, label, save_dir=None):
         self.label    = label
-        self.save_dir = save_dir or os.path.expanduser("~/netsec_sessions")
+        # Save recordings INSIDE the project root (not in the user home).
+        # _default_project_save_dir() finds the project by walking up from
+        # cwd looking for an "app/" subdir or README.md.
+        self.save_dir = save_dir or _default_project_save_dir()
         os.makedirs(self.save_dir, exist_ok=True)
 
         self.status      = "idle"
@@ -1920,6 +2097,19 @@ class LiveCaptureWorker:
         self.final_pcap_path  = None
 
         self._reset_data()
+        # sweep stale chunk files (older than 6h) left by crashed
+        # sessions so netsec_sessions/ does not accumulate indefinitely.
+        try:
+            import time as _time
+            _cutoff = _time.time() - 6 * 3600
+            for fn in os.listdir(self.save_dir):
+                if "_chunk_" in fn and fn.endswith(".pcap"):
+                    fp = os.path.join(self.save_dir, fn)
+                    try:
+                        if os.path.getmtime(fp) < _cutoff:
+                            os.remove(fp)
+                    except Exception: pass
+        except Exception: pass
 
     def _reset_data(self):
         self.data = {
@@ -1982,8 +2172,12 @@ class LiveCaptureWorker:
             for f in self.TSHARK_FIELDS:
                 cmd += ["-e", f]
             try:
+                # stderr must NOT be a pipe: tshark writes a running
+                # packet-count there and nothing drains it, so a long or
+                # busy capture fills the ~64KB OS buffer and tshark blocks
+                # - the capture silently stalls.
                 self._proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                     encoding="utf-8", errors="replace", bufsize=1)
             except Exception as e:
                 self.status, self.error_msg = "error", str(e)
@@ -2064,6 +2258,17 @@ class LiveCaptureWorker:
                     for c in self.pcap_chunks:
                         try: os.remove(c)
                         except Exception: pass
+                elif (not MERGECAP_PATH) and len(self.pcap_chunks) > 1:
+                    # mergecap missing but user recorded across
+                    # pause/resume - save only the first chunk and warn.
+                    shutil.copy2(self.pcap_chunks[0], self.final_pcap_path)
+                    dropped = len(self.pcap_chunks) - 1
+                    self.error_msg = (f"mergecap not installed - only the first chunk was saved. "
+                                      f"{dropped} additional chunk(s) were discarded. "
+                                      f"Install Wireshark's mergecap.exe to keep all chunks.")
+                    for c in self.pcap_chunks:
+                        try: os.remove(c)
+                        except Exception: pass
                 elif len(self.pcap_chunks) == 1:
                     shutil.copy2(self.pcap_chunks[0], self.final_pcap_path)
                     try: os.remove(self.pcap_chunks[0])
@@ -2109,7 +2314,21 @@ class LiveCaptureWorker:
     def _auto_stop(self):
         """Triggered by MAX_SECONDS timer. Auto-saves."""
         if self.status == "recording":
-            self.stop_and_save()
+            self.error_msg = f"Auto-saved at {self.MAX_SECONDS//60}-minute limit"
+            ok, _ = self.stop_and_save()
+            # also stage the pending snapshot so the UI shows the
+            # Analyze button - otherwise a 1-hour recording lands in
+            # status='saved' with no way to reach it from the UI.
+            if ok:
+                try:
+                    snap = self.snapshot()
+                    snap["label"] = self.label
+                    snap["pkts"] = []
+                    self._pending_snapshot = snap
+                    _n = snap.get("n_pkts", 0)
+                    print(f"[{self.label}] auto-stop staged pending snapshot ({_n} pkts)", flush=True)
+                except Exception as e:
+                    print(f"[{self.label}] auto-stop could not stage snapshot: {e}", flush=True)
 
 
     def get_elapsed_seconds(self):
@@ -2226,6 +2445,24 @@ class LiveCaptureWorker:
                 self.error_msg = f"Reader crashed: {type(exc).__name__}: {exc}"
             except Exception:
                 pass
+            # reader crash left tshark orphaned - terminate it AND
+            # cancel the auto-stop timer so the crashed session is fully torn down.
+            try:
+                if self._proc is not None:
+                    try: self._proc.terminate()
+                    except Exception: pass
+                    try: self._proc.wait(timeout=3)
+                    except Exception:
+                        try: self._proc.kill()
+                        except Exception: pass
+                if self._auto_stop_timer is not None:
+                    try: self._auto_stop_timer.cancel()
+                    except Exception: pass
+                    self._auto_stop_timer = None
+                self._proc = None
+                print(f"[{self.label}] reader-crash cleanup: tshark terminated, timer cancelled", flush=True)
+            except Exception:
+                pass
 
     def _process_line(self, line):
         parts = line.split("|")
@@ -2268,7 +2505,7 @@ class LiveCaptureWorker:
             if tcp_fl and ip_src:
                 try:
                     fi = int(tcp_fl, 16)
-                    if fi == 0x02:   d["syn_counter"][ip_src] += 1
+                    if (fi & 0x3F) == 0x02: d["syn_counter"][ip_src] += 1
                     if fi & 0x04:    d["rst_counter"][ip_src] += 1
                     masked = fi & 0x3F
                     if masked == 0x01: d["fin_counter"][ip_src]  += 1
@@ -2289,7 +2526,7 @@ class LiveCaptureWorker:
                     d["dns_per_ip"][ip_src][q] += 1
                     if q.endswith(".local"):
                         d["mdns_per_ip"][ip_src].add(q)
-            if dns_rc == "3" and dns_rsp == "True":
+            if dns_rc == "3" and dns_rsp in ("1", "True"):
                 d["dns_nxdomain"] += 1
             if dns_q and udp_dp:
                 try:
@@ -2343,6 +2580,8 @@ print(f"  Interfaces visible: {len(ifs)}")
 for num, name in ifs[:6]:
     print(f"    {num}: {name}")
 
+
+# ==== notebook cell 43 ====
 
 import re as _re
 
@@ -2735,6 +2974,8 @@ def build_browse_figures(s1, s2):
 
 print("Browse-figure builders ready (call build_browse_figures(S1, S2) on demand)")
 
+
+# ==== notebook cell 45 ====
 
 import plotly.io as _pio
 # CRITICAL: plotly's default template carries bar.marker.pattern objects that
@@ -3965,6 +4206,8 @@ def rebuild_figures():
 print("FIGS empty; call rebuild_figures() after a session loads.")
 
 
+# ==== notebook cell 47 ====
+
 # === Advanced Threat Detection engines (integrated, MITRE ATT&CK-aligned) ===
 # Re-parses each pcap with a wider tshark field set (TLS/JA3/JA4, DHCP server,
 # ARP opcode, DNS rcode), runs 6 detectors, and returns a structured findings
@@ -4399,6 +4642,8 @@ def run_advanced_threats(pcap_path, label):
 print("Advanced threat engines ready: arp_dhcp, dns_tunnel, dga, beaconing, tls, fusion")
 
 
+# ==== notebook cell 48 ====
+
 INK            = "#e8e4f5"
 INK_DIM        = "#9b94b8"
 INK_MUTE       = "#5a536f"
@@ -4764,11 +5009,12 @@ def _build_netsec_crt_logo(cell_px=18):
     grids drawn with rect elements - each cell has a darker outer stroke and
     a brighter inner highlight stripe, with a vintage CRT phosphor look."""
     import base64
-    rows = ["NET", "SEC"]
+    # NETSEC now renders on ONE row so the "NET / SEC" wrap does not happen.
+    rows = ["NETSEC"]
     letter_w, letter_h = 5, 7
     letter_spacing_cells, line_gap_cells = 1.5, 1
-    row_w_cells = letter_w * 3 + letter_spacing_cells * 2
-    total_h_cells = (letter_h * 2) + line_gap_cells
+    row_w_cells = letter_w * 6 + letter_spacing_cells * 5
+    total_h_cells = letter_h
     W = int(row_w_cells * cell_px)
     H = int(total_h_cells * cell_px)
 
@@ -4800,6 +5046,49 @@ def _build_netsec_crt_logo(cell_px=18):
         svg.encode("utf-8")).decode("ascii")
 
 
+
+def _build_netsec_mini_badge(height_px=36):
+    """Full NETSEC wordmark (all 6 letters on one line) in the coral pixel-art
+    style of the splash logo. Rendered as a base64-encoded SVG with
+    aspect ratio determined by the letter grid, so the caller only pins
+    the height and the width adapts to preserve the pixel-art shape."""
+    import base64
+    letter_w, letter_h = 5, 7
+    letter_spacing_cells = 1.5
+    padding_cells = 1
+    total_w_cells = letter_w * 6 + letter_spacing_cells * 5 + padding_cells * 2
+    total_h_cells = letter_h + padding_cells * 2
+    cell = height_px / total_h_cells
+    W = total_w_cells * cell
+    H = height_px
+    off_x = padding_cells * cell
+    off_y = padding_cells * cell
+    coral, coral_dim, coral_glow = "#f8a8a8", "#c87878", "#ff9a9a"
+    rects = []
+    word = "NETSEC"
+    for letter_idx, ch in enumerate(word):
+        base_x = off_x + letter_idx * (letter_w + letter_spacing_cells) * cell
+        for (cx, cy) in _NETSEC_LETTERS[ch]:
+            x = base_x + cx * cell
+            y = off_y + cy * cell
+            rects.append(
+                f'<rect x="{x+0.5:.2f}" y="{y+0.5:.2f}" '
+                f'width="{cell-1:.2f}" height="{cell-1:.2f}" '
+                f'fill="{coral}" stroke="{coral_dim}" stroke-width="0.5"/>')
+            rects.append(
+                f'<rect x="{x+1:.2f}" y="{y+1:.2f}" '
+                f'width="{cell-2:.2f}" height="{max(1, cell/6):.2f}" '
+                f'fill="{coral_glow}" opacity="0.5"/>')
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" '
+           f'viewBox="0 0 {W:.2f} {H:.2f}" '
+           f'style="height:100%;width:auto;display:block;'
+           f'filter:drop-shadow(0 0 3px rgba(248,168,168,0.6)) '
+           f'drop-shadow(0 0 8px rgba(248,168,168,0.3));">'
+           + "".join(rects) + '</svg>')
+    return "data:image/svg+xml;base64," + base64.b64encode(
+        svg.encode("utf-8")).decode("ascii")
+
+
 def _build_intro_splash():
     """The CRT-terminal splash for the intro view. Mimics a vintage computer
     screen with a phosphor glow, scanlines, a green CLI prompt header, a
@@ -4816,7 +5105,8 @@ def _build_intro_splash():
                     "fontWeight":"600","letterSpacing":"0.08em"}),
                 html.Span(" ---", style={"color":phosphor_green_dim}),
             ], style={"fontFamily":"'JetBrains Mono', monospace",
-                      "fontSize":"0.88rem","marginBottom":"6px"}),
+                      "fontSize":"0.88rem","marginBottom":"6px",
+                      "whiteSpace":"nowrap"}),
             html.Div([
                 html.Span("> ", style={"color":phosphor_green_dim}),
                 html.Span("load_netsec_model.py", style={"color":phosphor_green}),
@@ -4829,7 +5119,7 @@ def _build_intro_splash():
                 html.Img(src=_build_netsec_crt_logo(),
                     style={"maxWidth":"100%","display":"block",
                            "imageRendering":"pixelated"}),
-            ], md=8, style={"display":"flex","alignItems":"center"}),
+            ], md=12, style={"display":"flex","alignItems":"center","justifyContent":"center"}),
             dbc.Col([
                 html.Div([
                     html.Div("./netsec/", style={"color":phosphor_green,
@@ -4907,6 +5197,37 @@ def _build_floating_restart_pill():
                "boxShadow":"0 4px 20px rgba(0,0,0,0.4)"}),
         style={"position":"fixed","bottom":"22px","right":"22px","zIndex":"9999",
                "pointerEvents":"auto"})
+
+
+def _build_edu_panel(location_key):
+    """Educational-material panel with a collapse toggle. Multiple instances
+    can coexist on the same page - each uses a pattern-matched id keyed by
+    location_key so a single Dash callback (toggle_edu_panel) handles all of
+    them without conflicts."""
+    return html.Div([
+        html.Div([
+            html.Span("▼", id={"type":"edu-arrow","loc":location_key},
+                style={"fontSize":"1.1rem","marginRight":"12px",
+                       "color":VIOLET_BRIGHT,
+                       "textShadow":f"0 0 14px {VIOLET_BRIGHT}aa"}),
+            html.Span("Click to show the educational material",
+                id={"type":"edu-label","loc":location_key},
+                style={"fontFamily":"'JetBrains Mono', monospace",
+                       "fontSize":"12px","color":INK,
+                       "letterSpacing":"0.18em","textTransform":"uppercase",
+                       "fontWeight":"700"}),
+        ], id={"type":"edu-btn","loc":location_key}, n_clicks=0, style={
+            "display":"flex","alignItems":"center","justifyContent":"center",
+            "textAlign":"center","marginTop":"24px","marginBottom":"4px",
+            "padding":"14px 18px","borderRadius":"12px",
+            "background":"rgba(139,92,246,0.10)",
+            "border":f"1px solid {VIOLET_BRIGHT}66",
+            "textDecoration":"none","cursor":"pointer",
+            "transition":"all 0.2s ease"}),
+        dbc.Collapse(_build_education_content(),
+                     id={"type":"edu-collapse","loc":location_key},
+                     is_open=False),
+    ])
 
 
 def _build_education_content():
@@ -5462,11 +5783,15 @@ def build_choice_view(staged=None, replacing_s1=False):
         "padding":"40px 20px","position":"relative","zIndex":"2"}, children=[
         dbc.Row(justify="center", children=[dbc.Col(md=10, lg=9, children=[
             html.Div([
-                html.Div(html.Div(style={
-                    "width":"56px","height":"56px","borderRadius":"14px",
-                    "margin":"0 auto",
-                    "background":f"conic-gradient(from 200deg at 50% 50%, {VIOLET}, {CYAN}, {MAGENTA}, {VIOLET})",
-                    "boxShadow":f"0 0 40px {VIOLET}66"}),
+                html.Div(html.Div(
+                    html.Img(src=_build_netsec_mini_badge(height_px=64),
+                        style={"height":"64px","width":"auto","display":"block",
+                               "margin":"0 auto"}),
+                    style={"display":"inline-block","padding":"10px 20px",
+                        "borderRadius":"14px",
+                        "background":"rgba(248,168,168,0.06)",
+                        "border":"1px solid rgba(248,168,168,0.25)",
+                        "boxShadow":"0 0 32px rgba(248,168,168,0.20)"}),
                     style={"textAlign":"center","marginBottom":"16px"}),
                 html.H2([
                     "Choose how to load ",
@@ -5600,29 +5925,7 @@ def build_choice_view(staged=None, replacing_s1=False):
                         "fontFamily":"'JetBrains Mono', monospace"}),
             ], style={**CARD, "padding":"40px 44px","borderRadius":"24px"}),
 
-            html.Div([
-                html.Span("▼", id="edu-toggle-arrow",
-                    style={"fontSize":"1.1rem","marginRight":"12px",
-                                       "color":VIOLET_BRIGHT,
-                                       "textShadow":f"0 0 14px {VIOLET_BRIGHT}aa"}),
-                html.Span("Click to show the educational material",
-                    id="edu-toggle-label",
-                    style={
-                    "fontFamily":"'JetBrains Mono', monospace",
-                    "fontSize":"12px","color":INK,
-                    "letterSpacing":"0.18em","textTransform":"uppercase",
-                    "fontWeight":"700"}),
-            ], id="edu-scroll-btn", n_clicks=0, style={
-                "display":"flex","alignItems":"center","justifyContent":"center",
-                "textAlign":"center","marginTop":"24px","marginBottom":"4px",
-                "padding":"14px 18px","borderRadius":"12px",
-                "background":"rgba(139,92,246,0.10)",
-                "border":f"1px solid {VIOLET_BRIGHT}66",
-                "textDecoration":"none","cursor":"pointer",
-                "transition":"all 0.2s ease"}),
-
-            dbc.Collapse(_build_education_content(), id="edu-collapse",
-                         is_open=False),
+            _build_edu_panel("choice"),
         ])])
       ]),
       _build_floating_restart_pill(),
@@ -5832,17 +6135,23 @@ def build_topbar():
     return html.Div([
         dbc.Row([
             dbc.Col(html.Div([
-                html.Div(style={
-                    "width":"36px","height":"36px","borderRadius":"10px",
-                    "background":f"conic-gradient(from 200deg at 50% 50%, {VIOLET}, {CYAN}, {MAGENTA}, {VIOLET})",
-                    "marginRight":"12px","flexShrink":"0"}),
+                html.Div(
+                    html.Img(src=_build_netsec_mini_badge(height_px=32),
+                        style={"height":"32px","width":"auto","display":"block"}),
+                    style={
+                    "padding":"4px 10px","borderRadius":"10px",
+                    "background":"rgba(248,168,168,0.06)",
+                    "border":"1px solid rgba(248,168,168,0.25)",
+                    "marginRight":"14px","flexShrink":"0",
+                    "display":"inline-flex","alignItems":"center"}),
                 html.Div([
-                    html.Div("NetSec · PCAP & Live Analysis", style={
-                        "fontWeight":"600","fontSize":"15px","letterSpacing":"-0.015em",
-                        "color":INK,"lineHeight":"1.1"}),
+                    html.Div("PCAP & Live Analysis", style={
+                        "fontWeight":"600","fontSize":"14px","letterSpacing":"-0.015em",
+                        "color":INK,"lineHeight":"1.1","whiteSpace":"nowrap"}),
                     html.Div("tshark + ML · real-time analysis", style={
                         "fontFamily":"'JetBrains Mono', monospace","fontSize":"10.5px",
-                        "color":INK_MUTE,"letterSpacing":"0.02em","marginTop":"2px"}),
+                        "color":INK_MUTE,"letterSpacing":"0.02em","marginTop":"2px",
+                        "whiteSpace":"nowrap"}),
                 ]),
             ], id="brand-home", n_clicks=0,
                style={"display":"flex","alignItems":"center","cursor":"pointer",
@@ -6089,6 +6398,10 @@ def build_chart_picker_strip(active_chart, active_tab):
             continue
         is_active   = (nid == active_chart)
         is_disabled = (nid in needs_s2 and not has_s2)
+        # also disable the Live Recording chip when tshark is
+        # missing so the user cannot land on a page where Record does nothing.
+        if nid == "live_recording" and not TSHARK_PATH:
+            is_disabled = True
         if is_active:
             style = {"padding":"8px 16px","borderRadius":"999px",
                 "background":f"linear-gradient(135deg, rgba(139,92,246,0.22), rgba(34,211,238,0.16))",
@@ -6305,6 +6618,54 @@ def _build_ip_history_session_fig(session, ip_addr):
 
 
 
+def _worker_state_summary():
+    """peek at both live workers so the sidebar can grey out
+    buttons whose click would lose in-flight work.
+
+    Returns dict with keys s1_busy, s2_busy, s2_pending, s1_pending, plus
+    per-session raw state ('idle'|'recording'|'paused'|'saved'|'analyzing').
+    Never raises; missing workers = 'idle'."""
+    def _one(sid):
+        w = LIVE_SESSIONS.get(sid)
+        if w is None:
+            return "idle", False, False
+        try:
+            status = (w.quick_stats() or {}).get("status", "idle")
+            analyzing = bool(getattr(w, "_analyzing", False))
+            pending   = getattr(w, "_pending_snapshot", None) is not None
+            if analyzing:
+                status = "analyzing"
+            return status, analyzing, pending
+        except Exception:
+            return "idle", False, False
+    s1_state, _s1a, s1_pending = _one("S1")
+    s2_state, _s2a, s2_pending = _one("S2")
+    busy_states = {"recording", "paused", "analyzing"}
+    return {
+        "s1_state":   s1_state,
+        "s2_state":   s2_state,
+        "s1_busy":    s1_state in busy_states,
+        "s2_busy":    s2_state in busy_states,
+        "s1_pending": s1_pending,
+        "s2_pending": s2_pending,
+    }
+
+
+def _guard_reason(kind, state):
+    """User-facing tooltip text explaining why a sidebar button is disabled."""
+    if kind == "s1_busy":
+        return f"S1 is currently {state} - Stop or Reset the S1 recording first"
+    if kind == "s2_busy":
+        return f"S2 is currently {state} - Stop or Reset the S2 recording first"
+    if kind == "s2_pending":
+        return "S2 has an un-analyzed recording - Analyze or Discard it first"
+    if kind == "s1_pending":
+        return "S1 has an un-analyzed recording - Analyze or Discard it first"
+    if kind == "no_tshark":
+        return "tshark is not installed - live recording is unavailable"
+    return "This action is temporarily disabled"
+
+
 def _build_sidebar(active_chart, active_tab="analyze"):
     """Sidebar with grouped nav items, filtered by the active top-level tab.
     Items needing S2 are disabled when only S1 is loaded."""
@@ -6317,6 +6678,8 @@ def _build_sidebar(active_chart, active_tab="analyze"):
     children = []
     has_s1 = S1 is not None
     has_s2 = S2 is not None
+    # gather worker states once for the whole sidebar
+    _wsum = _worker_state_summary()
 
     needs_s2 = {"dns_combined","upload_download","lstm_combined","browse_combined",
                 "browse_hour_combined","cmp_traffic","cmp_new_gone","cmp_delta",
@@ -6342,6 +6705,14 @@ def _build_sidebar(active_chart, active_tab="analyze"):
               "border":f"1px solid {GLASS_BORDER}"}))
 
     if has_s1:
+        # disable both S1 replaces if S1 worker is busy
+        _s1_disabled = _wsum["s1_busy"]
+        _s1_disabled_reason = _guard_reason("s1_busy", _wsum["s1_state"]) if _s1_disabled else None
+        _s1_live_disabled = (not TSHARK_PATH) or _s1_disabled
+        _s1_live_reason = (
+            _guard_reason("no_tshark", None) if not TSHARK_PATH else
+            _s1_disabled_reason if _s1_disabled else None
+        )
         children.append(html.Div([
             html.Div("Replace first session",
                 style={"fontSize":"9.5px","color":INK_MUTE,"textTransform":"uppercase",
@@ -6349,14 +6720,38 @@ def _build_sidebar(active_chart, active_tab="analyze"):
                        "padding":"0 12px",
                        "fontFamily":"'JetBrains Mono', monospace"}),
             dbc.Button("↻  Replace S1 PCAP", id="replace-s1-btn",
-                size="sm", n_clicks=0, className="aur-btn-secondary",
+                size="sm", n_clicks=0,
+                disabled=_s1_disabled,
+                className="aur-btn-secondary",
+                title=_s1_disabled_reason or "",
                 style={"width":"100%","marginBottom":"6px","fontSize":"11.5px",
                        "fontWeight":"500","borderRadius":"10px",
-                       "background":"rgba(163,230,53,0.10)",
-                       "border":f"1px solid rgba(163,230,53,0.30)",
-                       "color":LIME,
+                       "background":"rgba(163,230,53,0.10)" if not _s1_disabled else "rgba(120,120,120,0.06)",
+                       "border":f"1px solid rgba(163,230,53,0.30)" if not _s1_disabled else f"1px solid {GLASS_BORDER}",
+                       "color":LIME if not _s1_disabled else INK_MUTE,
+                       "cursor":"pointer" if not _s1_disabled else "not-allowed",
+                       "opacity":"1.0" if not _s1_disabled else "0.55",
                        "fontFamily":"'Inter Tight', sans-serif",
                        "padding":"8px 10px"}),
+            dbc.Button("↻  Replace S1 recording", id="replace-s1-live-btn",
+                size="sm", n_clicks=0,
+                disabled=_s1_live_disabled,
+                className="aur-btn-secondary",
+                title=_s1_live_reason or "",
+                style={"width":"100%","fontSize":"11.5px","fontWeight":"500",
+                       "borderRadius":"10px",
+                       "background":"rgba(248,113,113,0.08)" if not _s1_live_disabled else "rgba(120,120,120,0.06)",
+                       "border":f"1px solid rgba(248,113,113,0.25)" if not _s1_live_disabled else f"1px solid {GLASS_BORDER}",
+                       "color":RED_ACCENT if (TSHARK_PATH and not _s1_disabled) else INK_MUTE,
+                       "cursor":"pointer" if not _s1_live_disabled else "not-allowed",
+                       "opacity":"1.0" if not _s1_live_disabled else "0.55",
+                       "fontFamily":"'Inter Tight', sans-serif",
+                       "padding":"8px 10px"}),
+            html.Div(_s1_disabled_reason,
+                     style={"fontSize":"10.5px","color":AMBER,
+                            "padding":"6px 4px 0","fontStyle":"italic",
+                            "display":"block" if _s1_disabled_reason else "none",
+                            "fontFamily":"'Inter Tight', sans-serif"}),
         ], style={"marginBottom":"16px","paddingBottom":"12px",
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
 
@@ -6365,6 +6760,17 @@ def _build_sidebar(active_chart, active_tab="analyze"):
         _header_text   = "Replace second session" if has_s2 else "Add a second session"
         _pcap_btn_text = "↻  Replace S2 PCAP"    if has_s2 else "➕  Load second PCAP"
         _live_btn_text = "↻  Replace S2 recording" if has_s2 else "➕  Record second session"
+        # disable S2 replace if S2 worker is busy OR has an
+        # un-analyzed pending snapshot (that we would otherwise silently lose).
+        _s2_disabled = _wsum["s2_busy"] or _wsum["s2_pending"]
+        _s2_reason = (
+            _guard_reason("s2_busy", _wsum["s2_state"]) if _wsum["s2_busy"] else
+            _guard_reason("s2_pending", None) if _wsum["s2_pending"] else None
+        )
+        _s2_live_disabled = (not TSHARK_PATH) or _s2_disabled
+        _s2_live_reason = (
+            _guard_reason("no_tshark", None) if not TSHARK_PATH else _s2_reason
+        )
         children.append(html.Div([
             html.Div(_header_text,
                 style={"fontSize":"9.5px","color":INK_MUTE,"textTransform":"uppercase",
@@ -6372,25 +6778,38 @@ def _build_sidebar(active_chart, active_tab="analyze"):
                        "padding":"0 12px",
                        "fontFamily":"'JetBrains Mono', monospace"}),
             dbc.Button(_pcap_btn_text, id="add-second-pcap-btn",
-                size="sm", n_clicks=0, className="aur-btn-secondary",
+                size="sm", n_clicks=0,
+                disabled=_s2_disabled,
+                title=_s2_reason or "",
+                className="aur-btn-secondary",
                 style={"width":"100%","marginBottom":"6px","fontSize":"11.5px",
                        "fontWeight":"500","borderRadius":"10px",
-                       "background":"rgba(139,92,246,0.10)",
-                       "border":f"1px solid rgba(139,92,246,0.3)",
-                       "color":VIOLET_BRIGHT,
+                       "background":"rgba(139,92,246,0.10)" if not _s2_disabled else "rgba(120,120,120,0.06)",
+                       "border":f"1px solid rgba(139,92,246,0.3)" if not _s2_disabled else f"1px solid {GLASS_BORDER}",
+                       "color":VIOLET_BRIGHT if not _s2_disabled else INK_MUTE,
+                       "cursor":"pointer" if not _s2_disabled else "not-allowed",
+                       "opacity":"1.0" if not _s2_disabled else "0.55",
                        "fontFamily":"'Inter Tight', sans-serif",
                        "padding":"8px 10px"}),
             dbc.Button(_live_btn_text, id="add-second-live-btn",
                 size="sm", n_clicks=0,
-                disabled=(not TSHARK_PATH),
+                disabled=_s2_live_disabled,
+                title=_s2_live_reason or "",
                 className="aur-btn-secondary",
                 style={"width":"100%","fontSize":"11.5px","fontWeight":"500",
                        "borderRadius":"10px",
-                       "background":"rgba(248,113,113,0.08)",
-                       "border":f"1px solid rgba(248,113,113,0.25)",
-                       "color":RED_ACCENT if TSHARK_PATH else INK_MUTE,
+                       "background":"rgba(248,113,113,0.08)" if not _s2_live_disabled else "rgba(120,120,120,0.06)",
+                       "border":f"1px solid rgba(248,113,113,0.25)" if not _s2_live_disabled else f"1px solid {GLASS_BORDER}",
+                       "color":RED_ACCENT if (TSHARK_PATH and not _s2_disabled) else INK_MUTE,
+                       "cursor":"pointer" if not _s2_live_disabled else "not-allowed",
+                       "opacity":"1.0" if not _s2_live_disabled else "0.55",
                        "fontFamily":"'Inter Tight', sans-serif",
                        "padding":"8px 10px"}),
+            html.Div(_s2_reason,
+                     style={"fontSize":"10.5px","color":AMBER,
+                            "padding":"6px 4px 0","fontStyle":"italic",
+                            "display":"block" if _s2_reason else "none",
+                            "fontFamily":"'Inter Tight', sans-serif"}),
         ], style={"marginBottom":"16px","paddingBottom":"12px",
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
 
@@ -6455,8 +6874,10 @@ def _build_sidebar(active_chart, active_tab="analyze"):
     return children
 
 
-def _state_badge(state, text=None):
-    """Visual indicator of a LiveCaptureWorker state."""
+def _state_badge(state, text=None, id=None):
+    """Visual indicator of a LiveCaptureWorker state.
+    Optional `id` parameter lets the clientside text-update callback
+    target the badge directly via document.getElementById."""
     colors = {
         "idle":      (INK_MUTE,    "rgba(155,148,184,0.10)", "● IDLE"),
         "recording": (LIME,        "rgba(163,230,53,0.14)",  "● RECORDING"),
@@ -6466,33 +6887,47 @@ def _state_badge(state, text=None):
     }
     color, bg, default_text = colors.get(state, (INK_MUTE, "rgba(255,255,255,0.04)", state))
     label = text or default_text
-    return html.Span(label, style={
+    kwargs = {"style": {
         "display":"inline-block","padding":"3px 10px","borderRadius":"6px",
         "background":bg,"color":color,
         "fontFamily":"'JetBrains Mono', monospace","fontSize":"10px",
         "fontWeight":"700","letterSpacing":"0.1em","border":f"1px solid {color}55",
-        "textShadow":f"0 0 6px {color}55" if state in ("recording","saved") else "none"})
+        "textShadow":f"0 0 6px {color}55" if state in ("recording","saved") else "none"}}
+    if id: kwargs["id"] = id
+    return html.Span(label, **kwargs)
 
 
-def _live_metric(label, value, color=INK):
+def _live_metric(label, value, color=INK, value_id=None):
+    """Metric card. value_id (optional) sets a stable DOM id on the value
+    Div so the clientside refresh can write straight to its textContent
+    without rebuilding the surrounding card (zero flicker)."""
+    value_kwargs = {"style": {
+        "fontFamily":"'Newsreader', Georgia, serif","fontWeight":"500",
+        "fontSize":"1.4rem","color":color,"lineHeight":"1.05","letterSpacing":"-0.015em"}}
+    if value_id: value_kwargs["id"] = value_id
     return html.Div([
         html.Div(label, style={
             "fontFamily":"'JetBrains Mono', monospace","fontSize":"9.5px",
             "color":INK_MUTE,"letterSpacing":"0.15em","textTransform":"uppercase",
             "marginBottom":"3px","fontWeight":"600"}),
-        html.Div(value, style={
-            "fontFamily":"'Newsreader', Georgia, serif","fontWeight":"500",
-            "fontSize":"1.4rem","color":color,"lineHeight":"1.05","letterSpacing":"-0.015em"}),
+        html.Div(value, **value_kwargs),
     ], style={"padding":"10px 12px","borderRadius":"10px",
               "background":"rgba(255,255,255,0.02)",
               "border":f"1px solid {GLASS_BORDER}"})
 
 
 def _live_btn(action, session_id, label, color, disabled=False):
-    """One control button (Record/Pause/Stop/Reset) in a live-capture panel."""
+    """One control button (Record/Pause/Stop/Reset) in a live-capture panel.
+    Any button whose action would start / restart tshark is
+    forced-disabled when TSHARK_PATH is missing, so the user gets the same
+    grey-out visual on all entry points (sidebar AND per-panel), not only
+    the sidebar."""
+    if action in ("record", "pause", "stop", "reset") and not TSHARK_PATH:
+        disabled = True
     return dbc.Button(label,
         id={"type":"live-btn","action":action,"session":session_id},
         n_clicks=0, disabled=disabled,
+        title=("tshark is not installed - live recording is unavailable" if (not TSHARK_PATH) else ""),
         style={"fontFamily":"'Inter Tight', sans-serif","fontSize":"12.5px",
                "fontWeight":"600","borderRadius":"10px","padding":"9px 14px",
                "background":f"rgba({color[0]},{color[1]},{color[2]},0.12)" if not disabled
@@ -6626,14 +7061,19 @@ def _build_session_live_block(session_id):
         "error":     "✗ ERROR",
     }.get(state, state.upper())
 
+    # FLICKER FIX: every counter / state element gets a stable DOM id.
+    # The 3-second tick now writes only to live-stats-store; a clientside
+    # callback reads that store and updates textContent of the elements
+    # below. The surrounding cards never re-render -> no flicker.
+    sid = session_id
     return [
         html.Div([
             html.Div([
-                html.Span(session_id, style={
+                html.Span(sid, style={
                     "fontFamily":"'Newsreader', Georgia, serif","fontSize":"1.7rem",
                     "fontWeight":"500","color":panel_color,"letterSpacing":"-0.02em",
                     "marginRight":"12px"}),
-                _state_badge(state, badge_text),
+                _state_badge(state, badge_text, id=f"live-state-badge-{sid}"),
             ], style={"display":"flex","alignItems":"center"}),
             html.Div(
                 f"saved → {os.path.basename(saved_to)}" if saved_to and is_saved
@@ -6642,19 +7082,33 @@ def _build_session_live_block(session_id):
                        "color":INK_MUTE,"marginTop":"6px"})
         ], style={"marginBottom":"16px"}),
 
-        (_err_box(error) if error else None),
+        # Error box always present but hidden when no error; clientside
+        # toggles display + writes the message into the inner span.
+        html.Div([
+            html.Span("✗  ", style={"color":RED_ACCENT,"fontWeight":"700"}),
+            html.Span(error or "", id=f"live-error-msg-{sid}"),
+        ], id=f"live-error-{sid}", style={
+            "color":RED_ACCENT,"padding":"10px 14px","borderRadius":"10px",
+            "background":"rgba(248,113,113,0.08)",
+            "border":f"1px solid rgba(248,113,113,0.25)",
+            "fontFamily":"'JetBrains Mono', monospace","fontSize":"12px",
+            "marginBottom":"12px",
+            "display":"block" if error else "none"}),
 
         dbc.Row([
             dbc.Col(_live_metric("Packets",
                 f"{n_pkts:,}" if n_pkts else "-",
-                color=panel_color if n_pkts else INK_MUTE), width=4),
+                color=panel_color if n_pkts else INK_MUTE,
+                value_id=f"live-pkts-{sid}"), width=4),
             dbc.Col(_live_metric("Duration",
                 dur_str if duration else "-",
-                color=INK if duration else INK_MUTE), width=4),
+                color=INK if duration else INK_MUTE,
+                value_id=f"live-duration-{sid}"), width=4),
             dbc.Col(_live_metric("State", badge_text.replace("● ","").replace("❚❚ ","")
                                               .replace("✓ ","").replace("✗ ","")
                                               .title(),
-                color=panel_color if is_recording else INK), width=4),
+                color=panel_color if is_recording else INK,
+                value_id=f"live-state-text-{sid}"), width=4),
         ], style={"marginBottom":"16px"}),
     ]
 
@@ -6681,6 +7135,14 @@ def _build_session_static_block(session_id):
     stop_color  = (248, 113, 113)
     reset_color = (155, 148, 184)
 
+    # block Record / Pause / Stop / Reset while analyzing - clicking
+    # any of them during process_session leaves the worker in a bad state.
+    _analyzing = bool(getattr(worker, "_analyzing", False))
+    # also block Stop when paused-below-min - the worker rejects
+    # with "Only Xs recorded. Minimum is 120s" and re-clicking just repeats
+    # the same error. Force the user to Resume or Reset first.
+    _paused_below_min = (is_paused and stats.get("elapsed", 0) < LiveCaptureWorker.MIN_SECONDS)
+
     return [
         html.Div([
             html.Div("Network interface", style={
@@ -6700,16 +7162,16 @@ def _build_session_static_block(session_id):
         dbc.Row([
             dbc.Col(_live_btn("record", session_id,
                               "⏵ Resume" if is_paused else "⏺ Record",
-                              rec_color, disabled=is_recording), width=6),
+                              rec_color, disabled=is_recording or _analyzing), width=6),
             dbc.Col(_live_btn("pause", session_id, "⏸ Pause",
-                              pause_color, disabled=not is_recording), width=6),
+                              pause_color, disabled=(not is_recording) or _analyzing), width=6),
         ], style={"marginBottom":"8px"}),
         dbc.Row([
             dbc.Col(_live_btn("stop", session_id, "⏹ Stop & Save",
-                              stop_color, disabled=is_idle or is_saved),
+                              stop_color, disabled=is_idle or is_saved or _analyzing or _paused_below_min),
                     width=6),
             dbc.Col(_live_btn("reset", session_id, "↺ Reset",
-                              reset_color, disabled=is_recording),
+                              reset_color, disabled=is_recording or _analyzing),
                     width=6),
         ]),
 
@@ -6809,7 +7271,8 @@ def _build_live_recording_page():
                          id={"type":"live-panel","session":"S2"}), md=6),
     ])
 
-    return html.Div([intro, panels])
+    edu = _build_edu_panel("live")
+    return html.Div([intro, panels, edu])
 
 
 ML_MIN_PACKETS = 10_000
@@ -7436,6 +7899,7 @@ def _build_second_pcap_modal():
                 style={"marginTop":"14px","fontSize":"0.85rem","color":INK_DIM,
                        "minHeight":"24px",
                        "fontFamily":"'JetBrains Mono', monospace"}),
+            _build_edu_panel("modal"),
         ], style={"background":"rgba(13,10,26,0.55)","color":INK}),
         dbc.ModalFooter(
             dbc.Button("Cancel", id="second-pcap-cancel-btn", n_clicks=0,
@@ -7452,6 +7916,33 @@ def _build_second_pcap_modal():
        style={"--bs-modal-bg":"rgba(13,10,26,0.92)"})
 
 
+# register an atexit handler that terminates any running tshark
+# subprocess when the kernel shuts down. Prevents orphaned processes when the
+# user closes Jupyter without hitting Restart first.
+import atexit as _atexit
+def _cleanup_all_workers_on_exit():
+    try:
+        for _sid, _w in (LIVE_SESSIONS or {}).items():
+            try:
+                if _w is None: continue
+                _p = getattr(_w, "_proc", None)
+                if _p is not None:
+                    try: _p.terminate()
+                    except Exception: pass
+                    try: _p.wait(timeout=3)
+                    except Exception:
+                        try: _p.kill()
+                        except Exception: pass
+                _t = getattr(_w, "_auto_stop_timer", None)
+                if _t is not None:
+                    try: _t.cancel()
+                    except Exception: pass
+                print(f"[atexit] cleaned up {_sid} worker", flush=True)
+            except Exception: pass
+    except Exception: pass
+_atexit.register(_cleanup_all_workers_on_exit)
+
+
 app.layout = html.Div([
     dcc.Store(id="app-mode",     data="intro"),
     dcc.Store(id="active-chart", data="talkers"),
@@ -7461,6 +7952,9 @@ app.layout = html.Div([
     dcc.Store(id="staged-second-pcap", data=None),
     dcc.Store(id="s2-loaded-tick", data=0),
     dcc.Store(id="live-rec-tick",  data=0),
+    # FLICKER FIX: tick now writes stats here; clientside reads + updates DOM textContent
+    dcc.Store(id="live-stats-store", data={}),
+    html.Div(id="live-stats-bridge", style={"display":"none"}),
     dcc.Store(id="scroll-helper", data=0),
     dcc.Store(id="last-chart-per-tab", data={"analyze":"talkers","security":"syn"}),
     dcc.Store(id="replacing-s1", data=False),
@@ -7517,13 +8011,14 @@ app.clientside_callback(
 )
 
 # Educational-material banner: toggle (show / hide) the whole edu section.
-@app.callback(Output("edu-collapse","is_open"),
-              Output("edu-toggle-label","children"),
-              Output("edu-toggle-arrow","children"),
-              Input("edu-scroll-btn","n_clicks"),
-              State("edu-collapse","is_open"),
+@app.callback(Output({"type":"edu-collapse","loc":MATCH}, "is_open"),
+              Output({"type":"edu-label","loc":MATCH}, "children"),
+              Output({"type":"edu-arrow","loc":MATCH}, "children"),
+              Input({"type":"edu-btn","loc":MATCH}, "n_clicks"),
+              State({"type":"edu-collapse","loc":MATCH}, "is_open"),
               prevent_initial_call=True)
-def toggle_education(n, is_open):
+def toggle_edu_panel(n, is_open):
+    """One pattern-match callback drives every _build_edu_panel instance."""
     if not n:
         return dash.no_update, dash.no_update, dash.no_update
     new_open = not is_open
@@ -7684,6 +8179,16 @@ app.clientside_callback(
     function(n) {
         if (!n) { return [window.dash_clientside.no_update,
                           window.dash_clientside.no_update]; }
+        // after 5 seconds, if the click did not clear the page,
+        // revert the button so it does not look permanently stuck. This
+        // catches the analyze-blocked branch where the server returns
+        // no_update and the button would otherwise stay at "Resetting...".
+        setTimeout(function() {
+            try {
+                var b = document.getElementById("restart-btn");
+                if (b) { b.disabled = false; b.innerText = "↺ Restart"; }
+            } catch(e) {}
+        }, 5000);
         return [true, "⏳ Resetting..."];
     }
     """,
@@ -7770,13 +8275,27 @@ def _ingest_pcap_from_path(path, label):
         import traceback; traceback.print_exc()
         return False, f"Loaded but post-processing failed: {e}"
     # Post-processing passed - commit globals, then rebuild figures.
+    # snapshot the old globals + FIGS BEFORE assignment so we can
+    # roll them back if rebuild_figures raises. Prevents "loaded chip" +
+    # broken FIGS inconsistency.
+    _old_S1, _old_S2 = S1, S2
+    try:
+        _old_FIGS = dict(FIGS) if isinstance(FIGS, dict) else None
+    except Exception:
+        _old_FIGS = None
     if label == "S1":  S1 = new_session
     else:              S2 = new_session
     try:
         rebuild_figures()
     except Exception as e:
         import traceback; traceback.print_exc()
-        return False, f"Loaded but figure rebuild failed: {e}"
+        # rollback both S1/S2 and FIGS on failure.
+        S1, S2 = _old_S1, _old_S2
+        try:
+            if _old_FIGS is not None:
+                FIGS.clear(); FIGS.update(_old_FIGS)
+        except Exception: pass
+        return False, f"Loaded but figure rebuild failed - rolled back: {e}"
     try: SESSION_PCAPS[label] = path
     except Exception: pass
     return True, (f"{label} loaded: {os.path.basename(path)} "
@@ -7893,6 +8412,17 @@ def handle_analyze_staged(n_click, staged, rebuild_count, replacing_s1):
                 dash.no_update, dash.no_update, False, _orig, dash.no_update)
     ok, msg = _ingest_pcap_from_path(staged["path"], "S1")
     if ok:
+        # delete tmp upload + clear stale live pending for S1 so
+        # freshly-loaded PCAP cannot be overwritten by an old "Analyze" click.
+        if staged and staged.get("source") == "upload" and staged.get("path"):
+            try: os.remove(staged["path"])
+            except Exception: pass
+        try:
+            w = LIVE_SESSIONS.get("S1")
+            if w is not None and getattr(w, "_pending_snapshot", None) is not None:
+                w._pending_snapshot = None
+                print("[analyze-staged] cleared stale S1 live pending snapshot")
+        except Exception: pass
         next_chart = "cmp_traffic" if (replacing_s1 and S2 is not None) else "talkers"
         return ("dashboard", next_chart, (rebuild_count or 0)+1,
                 "", None, dash.no_update, dash.no_update, False)
@@ -7957,6 +8487,9 @@ def handle_second_live_session(n_rec2, rebuild_count):
                 print("[nav] reset S2 live worker before re-record")
         except Exception as e:
             print(f"[nav] could not pre-reset S2 worker: {e}")
+        # pause S1 too so its tshark does not silently
+        # keep recording while user is focused on S2.
+        _pause_active_live_workers(except_for="S2")
         return "live_recording", (rebuild_count or 0)+1
     return dash.no_update, dash.no_update
 
@@ -7986,6 +8519,26 @@ def toggle_second_pcap_modal(n_open, n_cancel, is_open, staged):
             except Exception: pass
         return False, "", "", False, "Load", None
     return is_open, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+
+# catch modal closes that bypass toggle_second_pcap_modal (X button
+# in ModalHeader, Escape key, backdrop click) so staged-second-pcap and its
+# tmp upload file get cleaned up regardless of how the modal was dismissed.
+@app.callback(
+    Output("staged-second-pcap","data", allow_duplicate=True),
+    Input("second-pcap-modal","is_open"),
+    State("staged-second-pcap","data"),
+    prevent_initial_call=True,
+)
+def cleanup_on_modal_close(is_open, staged):
+    if is_open:
+        return dash.no_update
+    if staged and staged.get("source") == "upload" and staged.get("path"):
+        try:
+            os.remove(staged["path"])
+            print("[modal] cleaned up tmp upload after modal close", flush=True)
+        except Exception: pass
+    return None
 
 
 @app.callback(Output("second-load-status","children", allow_duplicate=True),
@@ -8071,12 +8624,25 @@ def handle_second_analyze_staged(n_click, staged, rebuild_count, s2_tick):
                 dash.no_update, dash.no_update, False, _orig)
     ok, msg = _ingest_pcap_from_path(staged["path"], "S2")
     if ok:
+        # delete tmp upload + clear stale live pending for S2 so
+        # freshly-loaded PCAP cannot be overwritten by an old "Analyze" click.
+        if staged and staged.get("source") == "upload" and staged.get("path"):
+            try: os.remove(staged["path"])
+            except Exception: pass
+        try:
+            w = LIVE_SESSIONS.get("S2")
+            if w is not None and getattr(w, "_pending_snapshot", None) is not None:
+                w._pending_snapshot = None
+                print("[analyze-staged-S2] cleared stale S2 live pending snapshot")
+        except Exception: pass
         # success: close modal, navigate to comparison view, clear staging
         return (False, "", "cmp_traffic", (rebuild_count or 0)+1,
                 (s2_tick or 0)+1, None, False, _orig)
+    # also drop staged-second-pcap so a vanished/invalid path is
+    # not remembered on the next open of the modal.
     return (dash.no_update, _err_box(msg + "  -  Tip: confirm the file is a valid PCAP/PCAPNG and that tshark is on PATH."),
             dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, False, _orig)
+            None, False, _orig)
 
 
 @app.callback(Output("staged-second-pcap","data", allow_duplicate=True),
@@ -8094,25 +8660,14 @@ def handle_second_clear_staged(n_click, staged):
     return None, ""
 
 
-@app.callback(Output("app-mode","data", allow_duplicate=True),
-              Output("active-chart","data", allow_duplicate=True),
-              Output("trigger-rebuild","data", allow_duplicate=True),
-              Output("staged-pcap","data", allow_duplicate=True),
-              Output("replacing-s1","data", allow_duplicate=True),
-              Input("restart-btn","n_clicks"),
-              Input("restart-btn-welcome","n_clicks"),
-              State("trigger-rebuild","data"),
-              State("staged-pcap","data"),
-              State("staged-second-pcap","data"),
-              prevent_initial_call=True)
-def restart_app(n_dash, n_welcome, rebuild_count, staged, staged_s2):
-    n = (n_dash or 0) + (n_welcome or 0)
-    """Full state reset: drop S1/S2/FIGS, clear staged uploads (deleting any
-    temp file they created), reset live workers, then return to intro.
-    also clear the replacing-s1 flag on full restart."""
-    if not n:
-        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
-    print(f"[restart] reset triggered (click #{n})")
+def _do_restart(rebuild_count, staged, staged_s2):
+    """Shared restart logic. Returns the 5-tuple that restart_app_*
+    server callbacks send back to the Store outputs. Splitting the dual-
+    Input callback into two single-Input callbacks is required for Dash 4
+    to actually dispatch the reset: a multi-Input callback is silently
+    skipped when one of the Inputs is absent from the current DOM, and
+    restart-btn / restart-btn-welcome are never both present at once."""
+    print(f"[restart] _do_restart firing", flush=True)
     if staged_s2 and staged_s2.get("source") == "upload" and staged_s2.get("path"):
         try: os.remove(staged_s2["path"])
         except Exception: pass
@@ -8144,8 +8699,63 @@ def restart_app(n_dash, n_welcome, rebuild_count, staged, staged_s2):
             print(f"  [restart] removed temp upload: {staged['path']}")
         except Exception:
             pass
-    print(f"[restart] state cleared, returning to intro view")
+    print(f"[restart] state cleared, returning to intro view", flush=True)
     return "intro", "live_recording", (rebuild_count or 0)+1, None, False
+
+
+@app.callback(Output("app-mode","data", allow_duplicate=True),
+              Output("active-chart","data", allow_duplicate=True),
+              Output("trigger-rebuild","data", allow_duplicate=True),
+              Output("staged-pcap","data", allow_duplicate=True),
+              Output("replacing-s1","data", allow_duplicate=True),
+              Input("restart-btn","n_clicks"),
+              State("trigger-rebuild","data"),
+              State("staged-pcap","data"),
+              State("staged-second-pcap","data"),
+              prevent_initial_call=True)
+def restart_app_from_dashboard(n, rebuild_count, staged, staged_s2):
+    print(f"[restart] dashboard button n={n}", flush=True)
+    if not n:
+        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+    # block Restart while analyzing AND surface why the
+    # click did nothing by writing worker.error_msg so the live panel banner
+    # shows the reason.
+    for _sid in ("S1", "S2"):
+        try:
+            _w = LIVE_SESSIONS.get(_sid)
+            if _w is not None and getattr(_w, "_analyzing", False):
+                print(f"[restart] BLOCKED: {_sid} is analyzing", flush=True)
+                try: _w.error_msg = f"Restart blocked: {_sid} is still analyzing. Please wait for it to finish."
+                except Exception: pass
+                return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+        except Exception: pass
+    return _do_restart(rebuild_count, staged, staged_s2)
+
+
+@app.callback(Output("app-mode","data", allow_duplicate=True),
+              Output("active-chart","data", allow_duplicate=True),
+              Output("trigger-rebuild","data", allow_duplicate=True),
+              Output("staged-pcap","data", allow_duplicate=True),
+              Output("replacing-s1","data", allow_duplicate=True),
+              Input("restart-btn-welcome","n_clicks"),
+              State("trigger-rebuild","data"),
+              State("staged-pcap","data"),
+              State("staged-second-pcap","data"),
+              prevent_initial_call=True)
+def restart_app_from_welcome(n, rebuild_count, staged, staged_s2):
+    if not n:
+        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+    # same guard, with visible feedback via error_msg.
+    for _sid in ("S1", "S2"):
+        try:
+            _w = LIVE_SESSIONS.get(_sid)
+            if _w is not None and getattr(_w, "_analyzing", False):
+                print(f"[restart] BLOCKED: {_sid} is analyzing", flush=True)
+                try: _w.error_msg = f"Restart blocked: {_sid} is still analyzing. Please wait."
+                except Exception: pass
+                return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+        except Exception: pass
+    return _do_restart(rebuild_count, staged, staged_s2)
 
 
 
@@ -8199,6 +8809,15 @@ def click_nav(_clicks, rebuild_count, active_tab, last_chart_per_tab):
     if val is None or not isinstance(val, (int, float)) or val <= 0:
         return dash.no_update, dash.no_update, dash.no_update
     new_chart = trig.get("id")
+    # hard-reject clicks on chips that require S2 when S2 is missing.
+    # The visual disabled state uses n_clicks=None but Dash still tracks pattern
+    # clicks; without this guard the callback would navigate to a placeholder.
+    _needs_s2 = {"dns_combined","upload_download","lstm_combined","browse_combined",
+                 "browse_hour_combined","cmp_traffic","cmp_new_gone","cmp_delta",
+                 "dev_hierarchy_s2","external_combined","coverage_combined"}
+    if new_chart in _needs_s2 and S2 is None:
+        print(f"[nav] blocked click on {new_chart} - S2 not loaded", flush=True)
+        return dash.no_update, dash.no_update, dash.no_update
     if new_chart != "live_recording":
         _pause_active_live_workers()
     # update the per-tab memory for the active tab
@@ -8253,14 +8872,67 @@ def brand_to_home(n, rebuild_count):
 def handle_replace_s1(n, rebuild_count):
     if not n:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    # stop tshark for any live worker still recording so it does not
+    # keep writing chunks silently while the user is on the choice screen.
+    _pause_active_live_workers()
+    # the staged-pcap Store is cleared here (returned None below);
+    # if it currently references a tmp upload file, also delete the file so
+    # a stale netsec_upload_*.pcap does not linger. (State is not part of
+    # this callback signature, so we broadcast a request to the
+    # cleanup-on-modal-close-style callback via the store; the simple
+    # approach here is to also sweep old tmp uploads.)
+    try:
+        import glob, time as _t
+        for _p in glob.glob(os.path.join(tempfile.gettempdir(), "netsec_upload_*.pcap*")):
+            try:
+                if _t.time() - os.path.getmtime(_p) > 60:
+                    os.remove(_p)
+            except Exception: pass
+    except Exception: pass
     return "choice", (rebuild_count or 0)+1, True, None
+
+
+@app.callback(Output("active-chart","data", allow_duplicate=True),
+              Output("trigger-rebuild","data", allow_duplicate=True),
+              Input("replace-s1-live-btn","n_clicks"),
+              State("trigger-rebuild","data"),
+              prevent_initial_call=True)
+def handle_replace_s1_live(n, rebuild_count):
+    """Sidebar 'Replace S1 recording' -> navigate to the live recording chart.
+    Reset the S1 worker first so a previously-saved live capture on S1
+    does not block the next Record click with \"Already saved. Press Reset
+    to record again.\""""
+    if not n:
+        return dash.no_update, dash.no_update
+    if ctx.triggered_id == "replace-s1-live-btn":
+        try:
+            w = LIVE_SESSIONS.get("S1")
+            if w is not None:
+                _st = w.quick_stats().get("status")
+                # previously only status=='saved' triggered reset,
+                # so an in-flight recording continued silently. Now cover
+                # recording, paused, and saved uniformly.
+                if _st in ("recording", "paused", "saved"):
+                    w.reset()
+                    print(f"[nav] reset S1 live worker (was {_st}) before re-record")
+        except Exception as e:
+            print(f"[nav] could not pre-reset S1 worker: {e}")
+        # also pause S2 so its tshark does not keep running
+        # while the user is focused on replacing S1.
+        _pause_active_live_workers(except_for="S1")
+        return "live_recording", (rebuild_count or 0)+1
+    return dash.no_update, dash.no_update
 
 
 @app.callback(Output("sidebar","children"),
               Input("active-chart","data"),
               Input("active-tab","data"),
-              Input("trigger-rebuild","data"))
-def update_sidebar(active_chart, active_tab, _rebuild):
+              Input("trigger-rebuild","data"),
+              Input("live-rec-tick","data"))
+def update_sidebar(active_chart, active_tab, _rebuild, _tick):
+    # live-rec-tick bumps on every worker action AND
+    # every 3s while on the live page, so the sidebar guard state
+    # stays fresh and buttons enable/disable in real time.
     return _build_sidebar(active_chart, active_tab or "analyze")
 
 
@@ -8403,6 +9075,17 @@ def manage_live_action(action_clicks, iface):
     try:
         if action == "record":
             iface_to_use = iface or pick_default_wifi_interface()
+            # sanity-check the interface still exists before spawning
+            # tshark - the NIC may have been unplugged since the dropdown was
+            # rendered, and tshark's own error is unreadable jargon.
+            try:
+                _valid = {i[0] for i in list_capture_interfaces()}
+                if iface_to_use is not None and str(iface_to_use) not in _valid:
+                    worker.error_msg = (f"Interface {iface_to_use} is no longer available. "
+                                        f"Choose another one from the dropdown.")
+                    return (_build_session_static_block(session_id),
+                            _build_session_live_block(session_id))
+            except Exception: pass
             ok, msg = worker.start(iface_to_use)
             print(f"[{session_id}] start({iface_to_use!r}) -> ok={ok}, msg={msg}")
             if not ok: worker.error_msg = msg
@@ -8427,9 +9110,10 @@ def manage_live_action(action_clicks, iface):
             else:
                 worker.error_msg = msg
         elif action == "analyze":
-            # Handled by handle_live_analyze (which also navigates the user
-            # off the live page). This branch is intentionally a no-op.
-            pass
+            # handle_live_analyze owns the entire analyze flow. Bail
+            # out NOW (before the rebuild at the bottom of this function)
+            # so we cannot race with it for control of the panel DOM.
+            return dash.no_update, dash.no_update
         elif action == "discard":
             worker.reset()
             print(f"[{session_id}] discarded pending snapshot + full reset")
@@ -8446,18 +9130,99 @@ def manage_live_action(action_clicks, iface):
 
 
 @app.callback(
-    Output({"type":"live-metrics","session":"S1"}, "children", allow_duplicate=True),
-    Output({"type":"live-metrics","session":"S2"}, "children", allow_duplicate=True),
+    Output("live-stats-store", "data"),
     Input("live-recording-tick", "n_intervals"),
-    prevent_initial_call=True,
+    prevent_initial_call=False,
 )
-def update_live_metrics_tick(_n):
-    """Recording tick - refreshes ONLY the live-metrics block for both
-    sessions. The static block (dropdown + buttons + pending snapshot) is
-    untouched, so the user can always click Stop while a recording is
-    active. This is the OTHER half of the flicker fix."""
-    return (_build_session_live_block("S1"),
-            _build_session_live_block("S2"))
+def update_live_stats_store(_n):
+    """FLICKER FIX: the 3-second tick no longer rebuilds HTML. It only
+    publishes a small dict (status + n_pkts + duration + error) for both
+    sessions to a dcc.Store. A clientside callback (registered below)
+    reads the store and updates ONLY the textContent of specific span
+    elements that already exist in the DOM. No tear-down, no re-paint."""
+    out = {}
+    for sid in ("S1", "S2"):
+        worker = LIVE_SESSIONS.get(sid)
+        if worker is None: continue
+        try:
+            s = worker.quick_stats()
+            elapsed = s.get("elapsed", 0) or 0
+            if elapsed < 60:    dur_str = f"{int(elapsed)}s"
+            elif elapsed < 3600: dur_str = f"{int(elapsed)//60}m {int(elapsed)%60}s"
+            else:               dur_str = f"{int(elapsed)//3600}h {(int(elapsed)%3600)//60}m"
+            n_pkts = int(s.get("n_pkts", 0) or 0)
+            out[sid] = {
+                "status":   s.get("status", "idle"),
+                "n_pkts":   n_pkts,
+                "pkts_str": f"{n_pkts:,}" if n_pkts else "-",
+                "duration": dur_str if elapsed else "-",
+                "error":    s.get("error") or "",
+            }
+        except Exception:
+            pass
+    return out
+
+
+# FLICKER FIX: clientside DOM textContent updates. Fires whenever
+# live-stats-store changes (every ~3 seconds while on Live Recording).
+# This is where the actual counter / badge / error text changes happen.
+# The browser only mutates text nodes - NO element tear-down, NO re-paint
+# of surrounding cards, NO Plotly re-render. Visually invisible refresh.
+app.clientside_callback(
+    """
+    function(data) {
+        if (!data) return window.dash_clientside.no_update;
+        var badgeText = {
+            idle:      "\u25cf IDLE",
+            recording: "\u25cf RECORDING",
+            paused:    "\u275a\u275a PAUSED",
+            saved:     "\u2713 SAVED",
+            error:     "\u2717 ERROR"
+        };
+        var stateColor = {
+            idle:      ["#9b94b8", "rgba(155,148,184,0.10)"],
+            recording: ["#a3e635", "rgba(163,230,53,0.14)"],
+            paused:    ["#fbbf24", "rgba(251,191,36,0.14)"],
+            saved:     ["#22d3ee", "rgba(34,211,238,0.14)"],
+            error:     ["#f87171", "rgba(248,113,113,0.14)"]
+        };
+        var sessions = ["S1", "S2"];
+        for (var i = 0; i < sessions.length; i++) {
+            var sid = sessions[i];
+            var s = data[sid];
+            if (!s) continue;
+            var pktsEl     = document.getElementById("live-pkts-"     + sid);
+            var durEl      = document.getElementById("live-duration-" + sid);
+            var stateTxtEl = document.getElementById("live-state-text-" + sid);
+            var badgeEl    = document.getElementById("live-state-badge-"+ sid);
+            var errBox     = document.getElementById("live-error-"    + sid);
+            var errMsg     = document.getElementById("live-error-msg-"+ sid);
+            if (pktsEl)     pktsEl.textContent     = s.pkts_str || "-";
+            if (durEl)      durEl.textContent      = s.duration || "-";
+            if (stateTxtEl) stateTxtEl.textContent =
+                (s.status || "idle").replace(/^[a-z]/, function(c){return c.toUpperCase();});
+            if (badgeEl) {
+                badgeEl.textContent = badgeText[s.status] || (s.status||"").toUpperCase();
+                var col = stateColor[s.status] || stateColor.idle;
+                badgeEl.style.color = col[0];
+                badgeEl.style.background = col[1];
+                badgeEl.style.border = "1px solid " + col[0] + "55";
+                badgeEl.style.textShadow =
+                    (s.status === "recording" || s.status === "saved")
+                    ? "0 0 6px " + col[0] + "55" : "none";
+            }
+            if (errBox && errMsg) {
+                errMsg.textContent = s.error || "";
+                errBox.style.display = s.error ? "block" : "none";
+            }
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("live-stats-bridge", "children"),
+    Input("live-stats-store", "data"),
+    prevent_initial_call=False,
+)
 
 
 # Dedicated callback for the live-recording panel's Analyze button. Split
@@ -8469,6 +9234,7 @@ def update_live_metrics_tick(_n):
     Output("active-chart", "data", allow_duplicate=True),
     Output("trigger-rebuild", "data", allow_duplicate=True),
     Output("s2-loaded-tick", "data", allow_duplicate=True),
+    Output("app-mode", "data", allow_duplicate=True),
     Input({"type":"live-btn","action":"analyze","session": MATCH}, "n_clicks"),
     State("trigger-rebuild", "data"),
     State("s2-loaded-tick", "data"),
@@ -8477,43 +9243,46 @@ def update_live_metrics_tick(_n):
 def handle_live_analyze(n_click, rebuild_count, s2_tick):
     trig = ctx.triggered_id
     if not isinstance(trig, dict) or not n_click:
-        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     session_id = trig.get("session")
     worker = LIVE_SESSIONS.get(session_id)
     if worker is None:
-        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+        return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     pending = getattr(worker, "_pending_snapshot", None)
     if pending is None:
         worker.error_msg = "Nothing staged to analyse"
         return (_build_session_panel(session_id),
-                dash.no_update, dash.no_update, dash.no_update)
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     if getattr(worker, "_analyzing", False):
         return (_build_session_panel(session_id),
-                dash.no_update, dash.no_update, dash.no_update)
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     worker._analyzing = True
+    import time as _time
+    _t_start = _time.time()
     try:
-        global S1, S2
-        process_session(pending, MY_DEVICE_IP)
-        if session_id == "S1": S1 = pending
-        else:                  S2 = pending
-        try:
-            compute_pair_state(S1, S2, MY_DEVICE_IP)
-        except Exception as e:
-            print(f"[{session_id}] compute_pair_state warn: {e}")
-        try:
-            rebuild_figures()
-        except Exception as e:
-            print(f"[{session_id}] rebuild_figures warn: {e}")
+        _n_pkts = (pending or {}).get("n_pkts", "?")
+        final_pcap = getattr(worker, "final_pcap_path", None)
+        if not final_pcap or not os.path.exists(final_pcap):
+            raise RuntimeError(f"saved PCAP missing on disk: {final_pcap}")
+        print(f"[{session_id}] analyse START - {_n_pkts} packets, ingesting {os.path.basename(final_pcap)} via the PCAP pipeline...", flush=True)
+        # Route the live recording through the SAME ingest path PCAP-upload
+        # uses, so the live session ends up with run_advanced_threats output
+        # (sess["threats"]), the full pkts list, and dns_amp_per_src - none
+        # of which the LiveCaptureWorker snapshot dict provides.
+        ok, msg = _ingest_pcap_from_path(final_pcap, session_id)
+        print(f"[{session_id}] _ingest_pcap_from_path -> ok={ok}, msg={msg}, took {_time.time()-_t_start:.1f}s", flush=True)
+        if not ok:
+            raise RuntimeError(msg)
         worker._pending_snapshot = None
         worker._analyzing = False
-        print(f"[{session_id}] analyse complete - FIGS now has {len(FIGS)} figures")
+        print(f"[{session_id}] analyse COMPLETE in {_time.time()-_t_start:.1f}s - FIGS now has {len(FIGS)} figures", flush=True)
     except Exception as e:
         print(f"[{session_id}] analyse failed: {e}")
         import traceback; traceback.print_exc()
         worker.error_msg = f"analysis failed: {e}"
         worker._analyzing = False
         return (_build_session_panel(session_id),
-                dash.no_update, dash.no_update, dash.no_update)
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     # Success path: leave the live-recording page so the user actually
     # SEES the new session. Comparison view if S2 is now populated,
     # otherwise the talkers view of S1.
@@ -8522,7 +9291,8 @@ def handle_live_analyze(n_click, rebuild_count, s2_tick):
     return (_build_session_panel(session_id),
             next_chart,
             (rebuild_count or 0) + 1,
-            next_s2_tick)
+            next_s2_tick,
+            "dashboard")
 
 
 # UI-5: live-recording-tick only needs to fire when the live recording
@@ -8533,25 +9303,21 @@ def handle_live_analyze(n_click, rebuild_count, s2_tick):
 @app.callback(
     Output("live-recording-tick", "disabled"),
     Input("active-chart", "data"),
-    Input("live-rec-tick", "data"),
     prevent_initial_call=False,
 )
-def toggle_live_tick(active_chart, _bump):
-    """also disable the interval when both workers are idle/saved/error.
-    Only an actively recording or paused worker needs the 3-second refresh.
-    Re-evaluated on every button click via live-rec-tick."""
-    if active_chart != "live_recording":
-        return True
-    try:
-        active_states = {"recording", "paused"}
-        any_active = any(
-            (LIVE_SESSIONS.get(sid) is not None
-             and LIVE_SESSIONS[sid].quick_stats().get("status") in active_states)
-            for sid in ("S1", "S2"))
-        return not any_active
-    except Exception:
-        # if anything goes wrong, fall back to old behaviour (always-on while on page)
-        return False
+def toggle_live_tick(active_chart):
+    """Run the 3-second refresh interval whenever the user is on
+    the Live Recording page. The old version ALSO depended on live-rec-tick
+    (bumped clientside on every button click) and re-checked worker.status
+    to short-circuit when nothing was actively recording. That created a
+    race: the bump arrived BEFORE manage_live_action had updated
+    worker.status, so the gate read "idle" and disabled the tick - then
+    never woke up again because its only Inputs were active-chart and
+    live-rec-tick, neither of which moved as a result of the action. Net
+    effect: counters froze at 0s/0 packets after clicking Record. The
+    simpler gate below has zero races; cost is ~20 idle ticks/minute on
+    the Live Recording page when no worker is recording (negligible)."""
+    return active_chart != "live_recording"
 
 
 import socket
@@ -8573,6 +9339,20 @@ def build_ip_history_heatmap(_n_clicks, _n_submit, ip_value):
     if not ip_addr:
         return html.Div("Please enter an IP address.",
             style={"color":INK_MUTE,"padding":"30px 10px","textAlign":"center"})
+    # reject invalid IP formats up-front so the user gets a real
+    # error instead of a misleading "No DNS activity for <garbage>" per-session.
+    import ipaddress as _ipa
+    try:
+        _ipa.ip_address(ip_addr)
+    except ValueError:
+        return html.Div([
+            html.Span("Invalid IP format: ", style={"color":INK_DIM}),
+            html.Span(ip_addr, style={"color":AMBER,"fontFamily":"'JetBrains Mono', monospace"}),
+            html.Div("Enter an IPv4 (e.g. 192.168.1.10) or IPv6 (e.g. fe80::1) address.",
+                     style={"color":INK_MUTE,"fontSize":"11.5px","marginTop":"8px"}),
+        ], style={"color":INK_DIM,"padding":"30px 20px","textAlign":"center",
+                  "background":"rgba(251,191,36,0.06)","borderRadius":"10px",
+                  "border":f"1px solid rgba(251,191,36,0.25)"})
 
     cols = []
     for label_text, session in [("Session 1", S1), ("Session 2", S2)]:
@@ -8626,10 +9406,18 @@ def _find_free_port(start=8050, end=8100):
     raise RuntimeError("No free port in range")
 
 
-PORT = _find_free_port()
+# if all preferred ports are busy (another Jupyter/Dash app running
+# on the same machine), let the OS pick any free port instead of crashing.
+try:
+    PORT = _find_free_port()
+except RuntimeError:
+    print("WARN: ports 8050-8099 all busy - letting OS pick a free one", flush=True)
+    _s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    _s.bind(("127.0.0.1", 0))
+    PORT = _s.getsockname()[1]
+    _s.close()
 print("=" * 52)
 print(f"  Dashboard -> http://127.0.0.1:{PORT}")
 print("  Stop: press Interrupt (square button) in Jupyter")
 print("=" * 52)
 app.run(debug=False, port=PORT, use_reloader=False, jupyter_mode="external")
-

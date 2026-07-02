@@ -44,9 +44,10 @@ mean-packet-size LSTM. No Dash UI; everything else is identical.
 - Xmas scan (FIN | PSH | URG = 0x29 on `192.168.1.10`, 1 000 packets)
   now lights up the same `*** SCAN ***` rule. Previously invisible.
 - DNS amplification capture: IsolationForest flags the four reflectors
-  it should (8.8.8.8, 8.8.4.4, 212.8.51.69, 1.1.1.1). The amp rule
-  itself does not fire here because the captured responses are 62 bytes
-  (this PCAP is the *victim* side, not the open-resolver side).
+  it should (8.8.8.8, 8.8.4.4, 212.8.51.69, 1.1.1.1), AND the
+  response-side amp rule fires on 8 reflector IPs sending ~1 100-byte
+  mean responses (e.g. `212.8.51.69 responses=250 mean_size=1090.1`,
+  all `*** AMP REFLECTOR ***`).
 
 ### `synflood.pcap` → `arpspoof.pcap`  (`run_synflood_arpspoof.log`)
 

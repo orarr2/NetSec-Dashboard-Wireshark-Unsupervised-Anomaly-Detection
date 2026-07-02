@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install tshark
+        run: |
+          echo "wireshark-common wireshark-common/install-setuid boolean false" | sudo debconf-set-selections
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
+          tshark --version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch first so requirements.txt sees it satisfied
+          pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu
+          if ! pip install -r requirements.txt; then
+            # manuf 1.1.5 has an old build backend and can fail to build under CI.
+            # It is only needed by the dashboard UI, not the tests: install the
+            # rest of the requirements, then try manuf best-effort.
+            grep -v '^manuf' requirements.txt > /tmp/requirements-no-manuf.txt
+            pip install -r /tmp/requirements-no-manuf.txt
+            pip install --no-build-isolation manuf==1.1.5 || true
+          fi
+          pip install pytest pytest-timeout
+
+      - name: Run tests
+        run: pytest tests/ -v --timeout=900
+
+  module-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check app/dashboard_module.py is in sync with the notebook
+        run: python3 tools/export_dashboard_module.py --check

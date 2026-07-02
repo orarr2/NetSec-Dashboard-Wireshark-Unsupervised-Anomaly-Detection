@@ -81,7 +81,8 @@ def analyze_pcap(path, label):
             try: return int(s, 16)
             except: return 0
         tdf["fi"] = tdf["tcp_flags"].map(_fi)
-        syn_counter  = collections.Counter(tdf[tdf["fi"] == 0x02]["ip_src"].tolist())
+        # Mask against 0x3F so ECN bits (ECE/CWR) do not hide the SYN.
+        syn_counter  = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x02]["ip_src"].tolist())
         rst_counter  = collections.Counter(tdf[(tdf["fi"] & 0x04) != 0]["ip_src"].tolist())
         fin_counter  = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x01]["ip_src"].tolist())
         null_counter = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x00]["ip_src"].tolist())
@@ -175,22 +176,41 @@ def run_ml_on_session(S):
 
     if len(ip_agg) < 2:
         print(f"[{S['label']}] only {len(ip_agg)} IP -> skipping clustering"); return
-    print(f"[{S['label']}] IsolationForest contamination sweep:")
-    best_cont, best_score = 0.10, np.inf
+    # Contamination selection by seed-stability (mirrors the notebook):
+    # `contamination` does not change the trees, only the threshold, so a
+    # fixed-seed "sweep" compares identical scores. Refit with several seeds
+    # per contamination and keep the most seed-stable flagged set.
+    STABILITY_SEEDS = [7, 17, 42, 99, 123] if len(ip_agg) <= 20000 else [7, 42, 123]
+    print(f"[{S['label']}] IsolationForest contamination stability sweep "
+          f"({len(STABILITY_SEEDS)} seeds per value):")
+    best_cont, best_stab = 0.10, -1.0
+    flag_votes_by_cont = {}
     for cont in [0.05, 0.10, 0.15]:
-        iso = IsolationForest(n_estimators=200, contamination=cont, random_state=42).fit(X)
-        sc = iso.decision_function(X)
-        flagged = sc[iso.predict(X) == -1]
-        ms = flagged.mean() if len(flagged) else 0.0
-        nf = int((iso.predict(X) == -1).sum())
-        print(f"  cont={cont:.2f} -> {nf:3d} flagged | mean score={ms:.4f}")
-        if ms < best_score:
-            best_score, best_cont = ms, cont
-    print(f"  selected cont={best_cont}")
+        flag_sets = []
+        for seed in STABILITY_SEEDS:
+            iso = IsolationForest(n_estimators=100, contamination=cont,
+                                  random_state=seed).fit(X)
+            flag_sets.append(frozenset(np.where(iso.predict(X) == -1)[0]))
+        pair_jac = []
+        for a in range(len(flag_sets)):
+            for b in range(a + 1, len(flag_sets)):
+                u = flag_sets[a] | flag_sets[b]
+                pair_jac.append(len(flag_sets[a] & flag_sets[b]) / len(u) if u else 1.0)
+        stability = float(np.mean(pair_jac)) if pair_jac else 1.0
+        votes = np.zeros(len(X))
+        for fs in flag_sets:
+            votes[list(fs)] += 1
+        flag_votes_by_cont[cont] = votes / len(flag_sets)
+        nf = int((votes >= len(flag_sets) / 2).sum())
+        print(f"  cont={cont:.2f} -> {nf:3d} by majority vote | stability={stability:.3f}")
+        if stability > best_stab + 1e-9:
+            best_stab, best_cont = stability, cont
+    print(f"  selected cont={best_cont} (most seed-stable)")
     iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42).fit(X)
     ip_agg["iso_score"] = iso.decision_function(X)
     ip_agg["iso_flag"]  = iso.predict(X)
-    ip_agg["anomaly"]   = ip_agg["iso_flag"] == -1
+    ip_agg["iso_stability"] = flag_votes_by_cont[best_cont]
+    ip_agg["anomaly"]   = ip_agg["iso_stability"] >= 0.5
 
     k = 2
     nbrs = NearestNeighbors(n_neighbors=k).fit(X)
@@ -269,12 +289,14 @@ def run_security_scans(S):
                       ("FIN", S.get("fin_counter") or collections.Counter()),
                       ("NULL", S.get("null_counter") or collections.Counter()),
                       ("XMAS", S.get("xmas_counter") or collections.Counter())):
-        for src, n in cnt.most_common(5):
+        # No top-5 truncation: walk every source above the 50-packet floor.
+        for src, n in sorted(cnt.items(), key=lambda kv: -kv[1]):
+            if n <= 50: break
             if not src or src not in S["ip_agg"].index: continue
             row = S["ip_agg"].loc[src]
             n_pkt = int(row["count"]); n_dst = int(row["unique_dsts"])
             ratio = n / max(n_pkt, 1)
-            if n > 50 and (n_dst > 20 or ratio > 0.7):
+            if n_dst > 20 or ratio > 0.7:
                 scan_alerts.append({"src":src,"type":name,"count":int(n),
                                     "unique_dsts":n_dst,"ratio":round(ratio,2)})
     if scan_alerts:
@@ -283,6 +305,31 @@ def run_security_scans(S):
                   f"unique_dsts={a['unique_dsts']:>4} ratio={a['ratio']}  *** SCAN ***")
     else:
         print(f"      (no scanner-like sources)")
+
+    # Aggregate spoofed-flood rule: thousands of spoofed sources sending ~1
+    # SYN each never trip the per-source rule above, so detect the flood
+    # from session-level aggregates.
+    print(f"  --- aggregate SYN-flood rule ---")
+    total_syn  = sum(S["syn_counter"].values())
+    n_syn_srcs = len(S["syn_counter"])
+    duration_s = max((S["t1"] - S["t0"]).total_seconds(), 1.0)
+    syn_rate   = total_syn / duration_s
+    flood_alerts = []
+    if total_syn >= 1000 and n_syn_srcs >= 100 and syn_rate >= 100:
+        per_src = total_syn / n_syn_srcs
+        flood_alerts.append({
+            "type": "SYN_FLOOD", "total_syn": int(total_syn),
+            "syn_sources": int(n_syn_srcs), "syn_per_sec": round(syn_rate, 1),
+            "syn_per_source": round(per_src, 2),
+            "spoofed_source_pattern": bool(per_src <= 3),
+        })
+    if flood_alerts:
+        for a in flood_alerts:
+            tag = "spoofed-source" if a["spoofed_source_pattern"] else "concentrated"
+            print(f"      {a['total_syn']:,} SYNs from {a['syn_sources']:,} sources "
+                  f"@ {a['syn_per_sec']}/s ({tag})  *** SYN FLOOD ***")
+    else:
+        print(f"      (no aggregate flood pattern)")
 
     # DNS amp rule.
     print(f"  --- DNS amplification rule (response side) ---")
@@ -297,6 +344,18 @@ def run_security_scans(S):
                   f"mean_size={a['mean_size']} bytes  *** AMP REFLECTOR ***")
     else:
         print(f"      (no reflector pattern)")
+
+    # Returned so tests / the evaluation harness can assert on findings
+    # instead of scraping stdout.
+    return {
+        "scan_alerts": scan_alerts,
+        "flood_alerts": flood_alerts,
+        "amp_alerts": amp_alerts,
+        "arp_spoofing_ips": dict(S["arp_spoofing_ips"]),
+        "arp_spoofing_macs": dict(S["arp_spoofing_macs"]),
+        "dns_nxdomain": S["dns_nxdomain"],
+        "dns_long_queries": list(S["dns_long_queries"]),
+    }
 
 
 class LSTMModel(nn.Module):
@@ -319,8 +378,11 @@ def train_and_eval_lstm(S, max_epochs=8):
     if len(df) == 0:
         print(f"[{label}] no packets, skipping LSTM"); return
     df["second"] = (df["time"] - df["time"].min()).astype(int)
-    binned = (df.groupby("second")["size"].mean()
-              .reset_index().sort_values("second")["size"].values.astype(float))
+    # Zero-fill idle seconds (mirrors the notebook): a bare groupby drops
+    # empty seconds and hides silence-then-burst transitions.
+    per_sec = df.groupby("second")["size"].mean()
+    n_secs  = int(df["second"].max()) + 1
+    binned  = per_sec.reindex(range(n_secs), fill_value=0.0).values.astype(float)
     if len(binned) > MAX_BINS:
         stride = len(binned) // MAX_BINS
         binned = binned[::stride][:MAX_BINS]
