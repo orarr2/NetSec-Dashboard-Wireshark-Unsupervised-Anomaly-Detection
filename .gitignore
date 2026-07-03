@@ -24,3 +24,6 @@ netsec_sessions/
 settings.local.json
 .vscode/
 .idea/
+
+# pytest cache (created by running tests/)
+.pytest_cache/
