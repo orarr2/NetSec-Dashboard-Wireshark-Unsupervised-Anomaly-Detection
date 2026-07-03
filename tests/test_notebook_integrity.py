@@ -32,7 +32,7 @@ def test_dashboard_module_in_sync():
 
 def test_feature_extraction_contract():
     """The live worker must produce every per-IP feature column the ML layer
-    consumes - the class of bug behind the FIX-14 live-capture crash."""
+    consumes - a missing column crashes analysis of a live recording."""
     nb = json.load(open(NB_PATH, encoding="utf-8"))
     src = "".join("".join(c["source"]) for c in nb["cells"]
                   if c["cell_type"] == "code")
