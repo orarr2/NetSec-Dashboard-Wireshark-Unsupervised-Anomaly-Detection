@@ -4678,50 +4678,95 @@ from dash import MATCH, ALL
 
 
 NAV_ITEMS = [
-    ("live_recording",      "🔴", "Live Recording",             "live"),
+    # (nav_id, icon, label, section, scope)
+    # scope: "s1" / "s2" - shown only on that session sub-tab;
+    #        "any"       - session-agnostic, shown on both sub-tabs.
+    ("live_recording",   "\U0001F534", "Live Recording",          "live",      "any"),
 
-    ("talkers",             "📡", "Top Talkers",               "analysis"),
-    ("burst",               "⚠️", "Burst vs Scan",              "analysis"),
-    ("proto",               "📊", "Protocols",                  "analysis"),
-    ("dns_combined",        "🌐", "DNS Services (S1+S2)",       "analysis"),
-    ("devices",             "💻", "Devices",                    "analysis"),
-    ("timeline",            "📈", "Traffic Timeline",           "analysis"),
-    ("upload_download",     "📤", "Upload / Download (S1+S2)",  "analysis"),
-    ("lstm_combined",       "🤖", "LSTM Errors (S1+S2)",        "analysis"),
-    ("insights",            "🧭", "Analysis Insights",      "analysis"),
+    ("talkers_s1",       "\U0001F4E1", "Top Talkers",             "analysis",  "s1"),
+    ("burst_s1",         "\u26A0\uFE0F", "Burst vs Scan",           "analysis",  "s1"),
+    ("proto",            "\U0001F4CA", "Protocols (S1 vs S2)",    "analysis",  "any"),
+    ("dns_s1",           "\U0001F310", "DNS Services",            "analysis",  "s1"),
+    ("devices_s1",       "\U0001F4BB", "Devices",                 "analysis",  "s1"),
+    ("timeline_s1",      "\U0001F4C8", "Traffic Timeline",        "analysis",  "s1"),
+    ("updown_s1",        "\U0001F4E4", "Upload / Download",       "analysis",  "s1"),
+    ("lstm_s1",          "\U0001F916", "LSTM Errors",             "analysis",  "s1"),
+    ("insights",         "\U0001F9ED", "Analysis Insights",       "analysis",  "any"),
 
-    ("profile",             "🎯", "My Device Profile",          "device"),
-    ("zbar",                "📏", "Z-score Deviation",          "device"),
+    ("talkers",          "\U0001F4E1", "Top Talkers",             "analysis",  "s2"),
+    ("burst",            "\u26A0\uFE0F", "Burst vs Scan",           "analysis",  "s2"),
+    ("dns",              "\U0001F310", "DNS Services",            "analysis",  "s2"),
+    ("devices",          "\U0001F4BB", "Devices",                 "analysis",  "s2"),
+    ("timeline",         "\U0001F4C8", "Traffic Timeline",        "analysis",  "s2"),
+    ("updown_s2",        "\U0001F4E4", "Upload / Download",       "analysis",  "s2"),
+    ("lstm",             "\U0001F916", "LSTM Errors",             "analysis",  "s2"),
 
-    ("browse_combined",     "🔎", "Browsing Categories (S1+S2)","browsing"),
-    ("browse_hour_combined","🕐", "Browsing by Hour (S1+S2)",   "browsing"),
-    ("ip_history",          "🔍", "IP Browsing History",        "browsing"),
+    ("profile",          "\U0001F3AF", "My Device Profile",       "device",    "any"),
+    ("zbar",             "\U0001F4CF", "Z-score Deviation",       "device",    "any"),
 
-    ("syn",                 "🔍", "TCP SYN Analysis",           "security"),
-    ("confusion",           "🧩", "Model Agreement Matrix",     "security"),
-    ("sensitivity",         "📐", "Contamination Sweep",        "security"),
+    ("browse_cat_s1",    "\U0001F50E", "Browsing Categories",     "browsing",  "s1"),
+    ("browse_hour_s1",   "\U0001F550", "Browsing by Hour",        "browsing",  "s1"),
+    ("browse_cat",       "\U0001F50E", "Browsing Categories",     "browsing",  "s2"),
+    ("browse_hour",      "\U0001F550", "Browsing by Hour",        "browsing",  "s2"),
+    ("ip_history",       "\U0001F50D", "IP Browsing History",     "browsing",  "any"),
 
-    ("adv_beaconing",       "🌀", "Beaconing (C2)",             "security"),
-    ("adv_dns_tunnel",      "🚧", "DNS Tunneling",              "security"),
-    ("adv_dga",             "🤖", "DGA Domains",                "security"),
-    ("adv_arp_dhcp",        "📡", "ARP / Rogue DHCP",           "security"),
-    ("adv_tls",             "🔐", "TLS Fingerprint",            "security"),
-    ("adv_killchain",       "⚔️", "Kill-Chain Risk",          "security"),
+    ("syn",              "\U0001F50D", "TCP SYN Analysis",        "security",  "any"),
+    ("confusion",        "\U0001F9E9", "Model Agreement Matrix",  "security",  "any"),
+    ("sensitivity",      "\U0001F4D0", "Contamination Sweep",     "security",  "any"),
 
-    ("cmp_traffic",         "🔄", "Traffic S1 vs S2",           "compare"),
-    ("cmp_new_gone",        "🆕", "New / Gone IPs",             "compare"),
-    ("cmp_delta",           "📉", "Traffic Delta",              "compare"),
+    ("adv_beaconing_s1", "\U0001F300", "Beaconing (C2)",          "security",  "s1"),
+    ("adv_dns_tunnel_s1","\U0001F6A7", "DNS Tunneling",           "security",  "s1"),
+    ("adv_dga_s1",       "\U0001F916", "DGA Domains",             "security",  "s1"),
+    ("adv_arp_dhcp_s1",  "\U0001F4E1", "ARP / Rogue DHCP",        "security",  "s1"),
+    ("adv_tls_s1",       "\U0001F510", "TLS Fingerprint",         "security",  "s1"),
+    ("adv_killchain_s1", "\u2694\uFE0F", "Kill-Chain Risk",         "security",  "s1"),
+    ("adv_beaconing_s2", "\U0001F300", "Beaconing (C2)",          "security",  "s2"),
+    ("adv_dns_tunnel_s2","\U0001F6A7", "DNS Tunneling",           "security",  "s2"),
+    ("adv_dga_s2",       "\U0001F916", "DGA Domains",             "security",  "s2"),
+    ("adv_arp_dhcp_s2",  "\U0001F4E1", "ARP / Rogue DHCP",        "security",  "s2"),
+    ("adv_tls_s2",       "\U0001F510", "TLS Fingerprint",         "security",  "s2"),
+    ("adv_killchain_s2", "\u2694\uFE0F", "Kill-Chain Risk",         "security",  "s2"),
 
-    ("dev_hierarchy_s2",    "🗂", "Device Hierarchy S2",        "inventory"),
-    ("dev_hierarchy_s1",    "🗂", "Device Hierarchy S1",        "inventory"),
-    ("device_map",          "🗺",  "Device Map (PCA)",           "inventory"),
-    ("proximity",           "📡", "Proximity Map (RSSI)",       "inventory"),
+    ("cmp_traffic",      "\U0001F504", "Traffic S1 vs S2",        "compare",   "s2"),
+    ("cmp_new_gone",     "\U0001F195", "New / Gone IPs",          "compare",   "s2"),
+    ("cmp_delta",        "\U0001F4C9", "Traffic Delta",           "compare",   "s2"),
 
-    ("external_combined",   "🌍", "External Traffic (S1+S2)",   "external"),
+    ("dev_hierarchy_s1", "\U0001F5C2", "Device Hierarchy",        "inventory", "s1"),
+    ("device_map",       "\U0001F5FA", "Device Map (PCA)",        "inventory", "s1"),
+    ("proximity",        "\U0001F4E1", "Proximity Map (RSSI)",    "inventory", "s1"),
+    ("dev_hierarchy_s2", "\U0001F5C2", "Device Hierarchy",        "inventory", "s2"),
+    ("device_map_s2",    "\U0001F5FA", "Device Map (PCA)",        "inventory", "s2"),
+    ("proximity_s2",     "\U0001F4E1", "Proximity Map (RSSI)",    "inventory", "s2"),
 
-    ("coverage_combined",   "🎯", "Identification Coverage",    "coverage"),
+    ("external_s1",      "\U0001F30D", "External Traffic",        "external",  "s1"),
+    ("external_s2",      "\U0001F30D", "External Traffic",        "external",  "s2"),
+
+    ("coverage_s1",      "\U0001F3AF", "Identification Coverage", "coverage",  "s1"),
+    ("coverage_s2",      "\U0001F3AF", "Identification Coverage", "coverage",  "s2"),
 ]
-LABEL_MAP = {nid:f"{icon}  {lbl}" for nid,icon,lbl,_ in NAV_ITEMS}
+LABEL_MAP = {nid:f"{icon}  {lbl}" for nid,icon,lbl,_,_ in NAV_ITEMS}
+
+# Per-chart session scope, plus the set of everything that needs S2 (the
+# whole S2 sub-tab stays locked until a second session exists).
+SESSION_SCOPE = {nid: scope for nid, _, _, _, scope in NAV_ITEMS}
+NEEDS_S2_IDS  = {nid for nid, scope in SESSION_SCOPE.items() if scope == "s2"}
+
+# S1 <-> S2 twin views: switching the session sub-tab keeps the user on the
+# equivalent chart of the other session.
+SESSION_TWIN = {
+    "talkers_s1":"talkers", "burst_s1":"burst", "dns_s1":"dns",
+    "devices_s1":"devices", "timeline_s1":"timeline",
+    "updown_s1":"updown_s2", "lstm_s1":"lstm",
+    "browse_cat_s1":"browse_cat", "browse_hour_s1":"browse_hour",
+    "dev_hierarchy_s1":"dev_hierarchy_s2", "device_map":"device_map_s2",
+    "proximity":"proximity_s2", "external_s1":"external_s2",
+    "coverage_s1":"coverage_s2",
+    "adv_beaconing_s1":"adv_beaconing_s2",
+    "adv_dns_tunnel_s1":"adv_dns_tunnel_s2",
+    "adv_dga_s1":"adv_dga_s2", "adv_arp_dhcp_s1":"adv_arp_dhcp_s2",
+    "adv_tls_s1":"adv_tls_s2", "adv_killchain_s1":"adv_killchain_s2",
+}
+SESSION_TWIN.update({v: k for k, v in list(SESSION_TWIN.items())})
 
 
 SECTION_TITLES = [
@@ -4754,21 +4799,30 @@ SECTION_TO_TAB = {
     "coverage":  "analyze",
     "security":  "security",
 }
-def _default_chart_for_tab(tab_id):
-    """First NAV item belonging to this tab - used after a tab click."""
-    for nid, _, _, sec in NAV_ITEMS:
-        if SECTION_TO_TAB.get(sec, "analyze") == tab_id:
-            return nid
+def _default_chart_for_tab(tab_id, session="s1"):
+    """First NAV item of this tab that is visible on the given session
+    sub-tab - used after a tab / session-tab click."""
+    for nid, _, _, sec, scope in NAV_ITEMS:
+        if SECTION_TO_TAB.get(sec, "analyze") != tab_id:
+            continue
+        if scope != "any" and scope != session:
+            continue
+        return nid
     return NAV_ITEMS[0][0]
 
 def _tab_for_chart(chart_id):
     """Which tab does this chart_id live under? Used to auto-sync the tab
     strip when active-chart changes from outside (e.g. handle_analyze_staged
-    sends the user to 'talkers' which is on the Analyze tab)."""
-    for nid, _, _, sec in NAV_ITEMS:
+    sends the user to 'talkers_s1' which is on the Analyze tab)."""
+    for nid, _, _, sec, _scope in NAV_ITEMS:
         if nid == chart_id:
             return SECTION_TO_TAB.get(sec, "analyze")
     return "analyze"
+
+def _session_for_chart(chart_id):
+    """'s1' / 's2' for session-scoped charts, None for shared views."""
+    scope = SESSION_SCOPE.get(chart_id)
+    return scope if scope in ("s1", "s2") else None
 # ========================================================================
 
 
@@ -5199,18 +5253,23 @@ def _build_floating_restart_pill():
                "pointerEvents":"auto"})
 
 
-def _build_edu_panel(location_key):
+def _build_edu_panel(location_key, open_by_default=False):
     """Educational-material panel with a collapse toggle. Multiple instances
     can coexist on the same page - each uses a pattern-matched id keyed by
     location_key so a single Dash callback (toggle_edu_panel) handles all of
-    them without conflicts."""
+    them without conflicts. open_by_default=True renders the material already
+    expanded (used on the analysis-wait screen, where reading it is the whole
+    point of the panel)."""
     return html.Div([
         html.Div([
-            html.Span("▼", id={"type":"edu-arrow","loc":location_key},
+            html.Span("▲" if open_by_default else "▼",
+                id={"type":"edu-arrow","loc":location_key},
                 style={"fontSize":"1.1rem","marginRight":"12px",
                        "color":VIOLET_BRIGHT,
                        "textShadow":f"0 0 14px {VIOLET_BRIGHT}aa"}),
-            html.Span("Click to show the educational material",
+            html.Span("Click to hide the educational material"
+                      if open_by_default else
+                      "Click to show the educational material",
                 id={"type":"edu-label","loc":location_key},
                 style={"fontFamily":"'JetBrains Mono', monospace",
                        "fontSize":"12px","color":INK,
@@ -5224,13 +5283,13 @@ def _build_edu_panel(location_key):
             "border":f"1px solid {VIOLET_BRIGHT}66",
             "textDecoration":"none","cursor":"pointer",
             "transition":"all 0.2s ease"}),
-        dbc.Collapse(_build_education_content(),
+        dbc.Collapse(_build_education_content(location_key),
                      id={"type":"edu-collapse","loc":location_key},
-                     is_open=False),
+                     is_open=open_by_default),
     ])
 
 
-def _build_education_content():
+def _build_education_content(location_key=""):
     """Educational panel shown beneath the file-loading area on the choice view.
     Holds all the protocol background, ML-algorithm explanations, device-classification
     overview, and threat-scoring tables that used to sit on the welcome splash.
@@ -5238,7 +5297,7 @@ def _build_education_content():
     being analyzed, and after analysis completes. Numbering and section dividers
     have been removed; thin 32-px spacers preserve visual rhythm between topics."""
     SPACER = html.Div(style={"height":"32px"})
-    return html.Div(id="edu-card-anchor", children=[
+    return html.Div(id=f"edu-card-anchor-{location_key}", children=[
 
                 # Prominent banner header so users cannot miss that this card exists.
                 html.Div([
@@ -6089,99 +6148,177 @@ def _build_second_staged_card(staged):
 
 
 def build_topbar():
-    """Glass topbar with brand mark, session chips, status pill."""
-    s_chips = []
-    for lbl, s in [("S1", S1), ("S2", S2)]:
-        if s is None:
-            s_chips.append(html.Div([
-                html.Div(style={"width":"7px","height":"7px","borderRadius":"50%",
-                                "background":INK_MUTE,"marginRight":"7px"}),
-                html.Span(f"{lbl}", style={"color":INK_MUTE}),
-                html.Span(" · not loaded", style={"color":INK_MUTE,"marginLeft":"6px"}),
-            ], style={"display":"flex","alignItems":"center","padding":"6px 12px",
-                      "borderRadius":"10px","background":GLASS_BG,
-                      "border":f"1px solid {GLASS_BORDER}",
-                      "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px"}))
-        else:
-            color = LIME if lbl == "S1" else CYAN_BRIGHT
-            _ssid  = s.get("wifi_ssid")  or "n/a"
-            _bssid = s.get("wifi_bssid") or "n/a"
-            s_chips.append(html.Div([
-                # Row 1: status dot + label + hours + packet count
-                html.Div([
-                    html.Div(style={"width":"7px","height":"7px","borderRadius":"50%",
-                                    "background":color,"marginRight":"7px",
-                                    "boxShadow":f"0 0 8px {color}"}),
-                    html.Span(lbl, style={"color":INK,"fontWeight":"500"}),
-                    html.Span(
-                        f" · {s['t0'].strftime('%H:%M')}–{s['t1'].strftime('%H:%M')} "
-                        f"· {s['n_pkts']:,} pkts",
-                        style={"color":INK_MUTE,"marginLeft":"6px"}),
-                ], style={"display":"flex","alignItems":"center"}),
-                # Row 2: SSID + BSSID - present on every chip, n/a fallback
-                html.Div([
-                    html.Span("SSID: ", style={"color":INK_MUTE}),
-                    html.Span(_ssid, style={"color":INK if _ssid != "n/a" else INK_MUTE}),
-                    html.Span(" · ", style={"color":INK_MUTE}),
-                    html.Span("BSSID: ", style={"color":INK_MUTE}),
-                    html.Span(_bssid, style={"color":INK if _bssid != "n/a" else INK_MUTE,
-                                              "fontFamily":"'JetBrains Mono', monospace"}),
-                ], style={"marginTop":"3px","paddingLeft":"14px","fontSize":"10.5px"}),
-            ], style={"display":"flex","flexDirection":"column","padding":"6px 12px",
-                      "borderRadius":"10px","background":GLASS_BG,
-                      "border":f"1px solid {GLASS_BORDER}",
-                      "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px"}))
-
+    """Glass topbar: one centered brand block (enlarged NETSEC wordmark +
+    subtitle). Session details live in the sidebar cards, so nothing here
+    duplicates them."""
     return html.Div([
-        dbc.Row([
-            dbc.Col(html.Div([
-                html.Div(
-                    html.Img(src=_build_netsec_mini_badge(height_px=32),
-                        style={"height":"32px","width":"auto","display":"block"}),
-                    style={
-                    "padding":"4px 10px","borderRadius":"10px",
-                    "background":"rgba(248,168,168,0.06)",
-                    "border":"1px solid rgba(248,168,168,0.25)",
-                    "marginRight":"14px","flexShrink":"0",
-                    "display":"inline-flex","alignItems":"center"}),
-                html.Div([
-                    html.Div("PCAP & Live Analysis", style={
-                        "fontWeight":"600","fontSize":"14px","letterSpacing":"-0.015em",
-                        "color":INK,"lineHeight":"1.1","whiteSpace":"nowrap"}),
-                    html.Div("tshark + ML · real-time analysis", style={
-                        "fontFamily":"'JetBrains Mono', monospace","fontSize":"10.5px",
-                        "color":INK_MUTE,"letterSpacing":"0.02em","marginTop":"2px",
-                        "whiteSpace":"nowrap"}),
-                ]),
-            ], id="brand-home", n_clicks=0,
-               style={"display":"flex","alignItems":"center","cursor":"pointer",
-                      "transition":"opacity .2s"},
-               title="Click to return to the main dashboard view"), width=4),
-
-            dbc.Col(html.Div(s_chips, style={
-                "display":"flex","gap":"10px","justifyContent":"center"}), width=5),
-
-            dbc.Col(html.Div([
-                html.Div([
-                    html.Span("●", style={
-                        "color":LIME if TSHARK_PATH else RED_ACCENT,
-                        "marginRight":"6px",
-                        "textShadow":f"0 0 8px {LIME if TSHARK_PATH else RED_ACCENT}"}),
-                    html.Span("tshark live" if TSHARK_PATH else "tshark missing",
-                              style={"color":INK_DIM}),
-                ], style={"display":"flex","alignItems":"center","padding":"6px 12px",
-                          "borderRadius":"999px","background":GLASS_BG,
-                          "border":f"1px solid {GLASS_BORDER}",
-                          "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px"}),
-            ], style={"display":"flex","justifyContent":"flex-end"}), width=3),
-        ], align="center"),
-    ], style={"margin":"18px 22px 0","padding":"14px 22px","borderRadius":"18px",
+        html.Div([
+            html.Div(
+                html.Img(src=_build_netsec_mini_badge(height_px=46),
+                    style={"height":"46px","width":"auto","display":"block"}),
+                style={
+                "padding":"6px 16px","borderRadius":"12px",
+                "background":"rgba(248,168,168,0.06)",
+                "border":"1px solid rgba(248,168,168,0.25)",
+                "boxShadow":"0 0 26px rgba(248,168,168,0.18)",
+                "display":"inline-flex","alignItems":"center"}),
+            html.Div([
+                html.Div("PCAP & Live Analysis", style={
+                    "fontWeight":"600","fontSize":"15px","letterSpacing":"-0.015em",
+                    "color":INK,"lineHeight":"1.1","whiteSpace":"nowrap"}),
+                html.Div("tshark + ML \u00b7 real-time analysis", style={
+                    "fontFamily":"'JetBrains Mono', monospace","fontSize":"10.5px",
+                    "color":INK_MUTE,"letterSpacing":"0.02em","marginTop":"3px",
+                    "whiteSpace":"nowrap"}),
+            ], style={"marginLeft":"16px"}),
+        ], id="brand-home", n_clicks=0,
+           style={"display":"inline-flex","alignItems":"center","cursor":"pointer",
+                  "transition":"opacity .2s"},
+           title="Click to return to the welcome screen"),
+    ], style={"margin":"18px 22px 0","padding":"12px 22px","borderRadius":"18px",
               "background":GLASS_BG,
               "backdropFilter":"blur(28px) saturate(140%)",
               "WebkitBackdropFilter":"blur(28px) saturate(140%)",
               "border":f"1px solid {GLASS_BORDER}",
               "boxShadow":"0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 60px -20px rgba(0,0,0,0.6)",
-              "position":"sticky","top":"0","zIndex":"50"})
+              "position":"sticky","top":"0","zIndex":"50",
+              "display":"flex","justifyContent":"center","alignItems":"center"})
+
+
+# ---- data-sufficiency layer ---------------------------------------------
+# A chart with nothing meaningful to show must SAY WHY instead of rendering
+# an empty or flat plot: attack PCAPs have no browsing life, wired captures
+# have no RSSI, spoofed floods produce byte-identical "top talkers".
+_DEGENERATE_NOTES = {
+    "talkers": ("All top sources sent byte-identical traffic - that is not "
+                "normal browsing, it is the signature of a spoofed-source "
+                "flood or synthetically generated traffic. The phenomenon "
+                "itself is captured under Security \u2192 TCP SYN Analysis."),
+    "dns":     ("No DNS queries were observed in this capture, so there are "
+                "no services to chart. Attack PCAPs and pure-transport "
+                "captures contain no name-resolution traffic."),
+    "browse":  ("No recognizable browsing (DNS) activity in this capture - "
+                "nothing to categorize. This is expected for attack PCAPs "
+                "or captures without client web traffic."),
+    "proximity": ("No WiFi signal-strength (RSSI) data in this capture - "
+                  "wired interfaces and non-monitor-mode recordings do not "
+                  "carry radiotap headers."),
+    "lstm":    ("The capture is too short or too uniform to train the LSTM "
+                "rhythm model - it needs several minutes of varied "
+                "per-second traffic."),
+    "updown":  ("No upload/download traffic split to chart - this capture "
+                "has no bidirectional client flows."),
+    "upload":  ("No upload traffic recorded for local devices in this "
+                "capture."),
+    "download": ("No download traffic recorded for local devices in this "
+                 "capture."),
+    "ext":     ("No identified external providers in this capture - all "
+                 "traffic stayed local, or there were no outbound flows."),
+    "external": ("No identified external providers in this capture - all "
+                 "traffic stayed local, or there were no outbound flows."),
+    "timeline": ("No per-minute traffic variation to plot - the capture is "
+                 "too short or carries a single burst."),
+    "devices":  ("No local devices could be identified in this capture."),
+}
+
+def _degenerate_note_for(chart_id):
+    base = chart_id[:-3] if chart_id.endswith(("_s1", "_s2")) else chart_id
+    for prefix, note in _DEGENERATE_NOTES.items():
+        if base.startswith(prefix):
+            return note
+    return ("This capture does not contain the kind of traffic this view "
+            "visualizes, so there is no meaningful signal to draw.")
+
+def _fig_health(fig):
+    """'empty' - nothing to draw; 'uniform' - a single bar trace whose
+    values are all identical (a ranking with no information); 'ok'
+    otherwise. Indicator gauges and tables are always 'ok' - they carry
+    their own empty semantics."""
+    try:
+        traces = list(fig.data)
+    except Exception:
+        return "ok"
+    if not traces:
+        return "empty"
+    pts = 0
+    for tr in traces:
+        ttype = getattr(tr, "type", "") or ""
+        if ttype in ("indicator", "table"):
+            return "ok"
+        for attr in ("x", "y", "values", "z", "r"):
+            v = getattr(tr, attr, None)
+            if v is None:
+                continue
+            try:
+                pts = max(pts, sum(1 for q in v if q is not None))
+            except TypeError:
+                pass
+    if pts == 0:
+        return "empty"
+    if len(traces) == 1 and (getattr(traces[0], "type", "") or "") == "bar":
+        y = getattr(traces[0], "y", None)
+        if y is None:
+            y = getattr(traces[0], "x", None)
+        try:
+            vals = [float(q) for q in y if q is not None]
+            if len(vals) >= 8 and len(set(vals)) == 1:
+                return "uniform"
+        except (TypeError, ValueError):
+            pass
+    return "ok"
+
+def _empty_state_card(chart_id, kind):
+    """Explains WHY a view has no meaningful signal, and where the
+    phenomenon (if any) was actually caught."""
+    if kind == "uniform":
+        icon, headline = "\U0001F6A9", "Uniform values - this is itself a finding"
+    else:
+        icon, headline = "\U0001FAD9", "No meaningful signal in this capture"
+    return html.Div([
+        html.Div(icon, style={"fontSize":"2.6rem","textAlign":"center",
+                              "marginBottom":"10px","opacity":"0.75"}),
+        html.Div(headline, style={"color":INK,"fontWeight":"500",
+            "textAlign":"center","fontSize":"1.25rem","marginBottom":"8px",
+            "fontFamily":"'Newsreader', Georgia, serif"}),
+        html.P(_degenerate_note_for(chart_id),
+            style={"color":INK_DIM,"textAlign":"center","fontSize":"0.92rem",
+                   "lineHeight":"1.6","maxWidth":"640px","margin":"0 auto"}),
+    ], style={"padding":"36px 20px 30px","borderRadius":"14px",
+              "background":("rgba(251,191,36,0.05)" if kind == "uniform"
+                            else "rgba(255,255,255,0.02)"),
+              "border":(f"1px solid rgba(251,191,36,0.25)" if kind == "uniform"
+                        else f"1px solid {GLASS_BORDER}"),
+              "marginBottom":"16px"})
+
+def _grid_graph(fig_key, height=380):
+    """dcc.Graph for one FIGS entry inside a per-session grid, swapping to
+    an explanation card when the figure carries no signal."""
+    if fig_key not in FIGS:
+        return html.Div(f"(chart {fig_key} not built)",
+            style={"color":INK_MUTE,"padding":"20px","textAlign":"center"})
+    health = _fig_health(FIGS[fig_key])
+    if health == "empty":
+        return _empty_state_card(fig_key, "empty")
+    return dcc.Graph(figure=FIGS[fig_key], style={"height":f"{height}px"},
+                     config={"displayModeBar":False, "responsive":True})
+
+def _render_session_grid(chart_id):
+    """Multi-figure per-session pages (Upload/Download, External Traffic)."""
+    if chart_id == "updown_s1":
+        return dbc.Row([dbc.Col(_grid_graph("upload_s1"), md=6),
+                        dbc.Col(_grid_graph("download_s1"), md=6)])
+    if chart_id == "updown_s2":
+        return dbc.Row([dbc.Col(_grid_graph("upload_s2"), md=6),
+                        dbc.Col(_grid_graph("download_s2"), md=6)])
+    if chart_id == "external_s1":
+        return html.Div([
+            dbc.Row([dbc.Col(_grid_graph("ext_provider_s1"), md=6),
+                     dbc.Col(_grid_graph("ext_type_s1"), md=6)])])
+    if chart_id == "external_s2":
+        return html.Div([
+            dbc.Row([dbc.Col(_grid_graph("ext_provider_s2"), md=6),
+                     dbc.Col(_grid_graph("ext_type_s2"), md=6)])])
+    return html.Div()
 
 
 def _get_chart_content(chart_id):
@@ -6264,24 +6401,28 @@ def _get_chart_content(chart_id):
         children.append(_render_ip_browsing_history())
         return html.Div(children)
 
-    if chart_id == "adv_beaconing":
-        children.append(_render_adv_engine("beaconing", "Beaconing (C2)", "T1071 / T1571 - regular outbound traffic to a single external peer (callback to command-and-control infrastructure)."))
-        return html.Div(children)
-    if chart_id == "adv_dns_tunnel":
-        children.append(_render_adv_engine("dns_tunnel", "DNS Tunneling", "T1071.004 - DNS used as a covert channel: many unique high-entropy subdomains under one apex, plus NXDOMAIN storms."))
-        return html.Div(children)
-    if chart_id == "adv_dga":
-        children.append(_render_adv_engine("dga", "DGA Domains", "T1568.002 - Domain Generation Algorithm: low-likelihood domain labels by a character-bigram model trained on the resolved domains in this capture."))
-        return html.Div(children)
-    if chart_id == "adv_arp_dhcp":
-        children.append(_render_adv_engine("arp_dhcp", "ARP / Rogue DHCP", "T1557 - one IP claimed by multiple MACs, one MAC announcing many IPs, gratuitous ARP floods, or unexpected DHCP servers offering leases."))
-        return html.Div(children)
-    if chart_id == "adv_tls":
-        children.append(_render_adv_engine("tls", "TLS Fingerprint", "T1071.001 / T1090 - rare JA3 client fingerprints, TLS to external IPs with no SNI, or SNI vs destination-IP provider mismatch (domain fronting)."))
-        return html.Div(children)
-    if chart_id == "adv_killchain":
-        children.append(_render_adv_killchain())
-        return html.Div(children)
+    _ADV_SPECS = {
+        "adv_beaconing":  ("beaconing", "T1071 / T1571 - regular outbound traffic to a single external peer (callback to command-and-control infrastructure)."),
+        "adv_dns_tunnel": ("dns_tunnel", "T1071.004 - DNS used as a covert channel: many unique high-entropy subdomains under one apex, plus NXDOMAIN storms."),
+        "adv_dga":        ("dga", "T1568.002 - Domain Generation Algorithm: low-likelihood domain labels by a character-bigram model trained on the resolved domains in this capture."),
+        "adv_arp_dhcp":   ("arp_dhcp", "T1557 - one IP claimed by multiple MACs, one MAC announcing many IPs, gratuitous ARP floods, or unexpected DHCP servers offering leases."),
+        "adv_tls":        ("tls", "T1071.001 / T1090 - rare JA3 client fingerprints, TLS to external IPs with no SNI, or SNI vs destination-IP provider mismatch (domain fronting)."),
+    }
+    if chart_id.startswith("adv_"):
+        _base = chart_id
+        _adv_sessions = ("S1", "S2")
+        if chart_id.endswith("_s1"):
+            _base, _adv_sessions = chart_id[:-3], ("S1",)
+        elif chart_id.endswith("_s2"):
+            _base, _adv_sessions = chart_id[:-3], ("S2",)
+        if _base in _ADV_SPECS:
+            _key, _desc = _ADV_SPECS[_base]
+            children.append(_render_adv_engine(_key, _base, _desc,
+                                               sessions=_adv_sessions))
+            return html.Div(children)
+        if _base == "adv_killchain":
+            children.append(_render_adv_killchain(sessions=_adv_sessions))
+            return html.Div(children)
 
     if chart_id in COMPARE_CHART_IDS:
         b = _needs_s2_banner()
@@ -6294,37 +6435,24 @@ def _get_chart_content(chart_id):
             return html.Div(children)
 
     if chart_id in ML_CHART_IDS:
-        if chart_id == "lstm_s1":
+        _scope = SESSION_SCOPE.get(chart_id)
+        if _scope == "s1":
             b = _ml_banner_for(S1, "Session 1")
             if b is not None: children.append(b)
-        elif chart_id == "lstm_combined":
+        elif _scope == "s2":
+            b = _ml_banner_for(S2, "Session 2")
+            if b is not None: children.append(b)
+        else:
             for s, lbl in [(S1, "Session 1"), (S2, "Session 2")]:
                 b = _ml_banner_for(s, lbl)
                 if b is not None: children.append(b)
-        else:
-            b = _ml_banner_for(S2 or S1, "Session 2" if S2 else "Session 1")
-            if b is not None: children.append(b)
 
-    # When only S1 is loaded, swap the S2-titled figure for the S1-titled
-    # one for chart_ids that have both variants. This makes single-session
-    # mode honestly say "Session 1" instead of "(Session 2)" when there is
-    # only S1 data.
-    if S2 is None and chart_id in ("talkers","burst","devices","timeline"):
-        chart_id_for_render = chart_id + "_s1"
-    else:
-        chart_id_for_render = chart_id
-    combined = _render_combined(chart_id)
-    if combined is not None:
-        if chart_id in EXPLANATIONS:
-            children.append(html.Div(EXPLANATIONS[chart_id],
-                style={"background":"rgba(251,191,36,0.06)",
-                       "border":f"1px solid rgba(251,191,36,0.20)",
-                       "borderRadius":"12px","padding":"14px 18px",
-                       "marginBottom":"18px","fontSize":"0.88rem","color":INK_DIM,
-                       "lineHeight":"1.6"}))
-        children.append(combined)
+    # Per-session multi-figure grids (Upload/Download, External Traffic).
+    if chart_id in ("updown_s1", "updown_s2", "external_s1", "external_s2"):
+        children.append(_render_session_grid(chart_id))
         return html.Div(children)
 
+    chart_id_for_render = chart_id
     if chart_id_for_render not in FIGS:
         children.append(html.P(
             "Chart not yet available - load a session first.",
@@ -6338,8 +6466,16 @@ def _get_chart_content(chart_id):
                    "borderRadius":"12px","padding":"14px 18px","marginBottom":"18px",
                    "fontSize":"0.88rem","color":INK_DIM,"lineHeight":"1.6"}))
 
+    _fig = FIGS[chart_id_for_render]
+    _health = _fig_health(_fig)
+    if _health == "empty":
+        children.append(_empty_state_card(chart_id, "empty"))
+        return html.Div(children)
+    if _health == "uniform":
+        children.append(_empty_state_card(chart_id, "uniform"))
+
     children.append(dcc.Graph(
-        figure=FIGS[chart_id_for_render], style={"minHeight":"500px"},
+        figure=_fig, style={"minHeight":"500px"},
         config={"displayModeBar":False,"scrollZoom":True}))
 
     return html.Div(children)
@@ -6382,24 +6518,64 @@ def build_tab_strip(active_tab):
         "alignItems":"center"})
 
 
-def build_chart_picker_strip(active_chart, active_tab):
-    """Horizontal scrollable chip strip - one chip per chart in the active
-    top-level tab. Sits directly under the Analyze / Security pills so the
-    user can switch charts without ever scrolling vertically. Each chip
-    re-uses the {"type":"nav-item","id":nid} id pattern, so the existing
-    click_nav callback fires unchanged."""
+def build_chart_picker_strip(active_chart, active_tab, active_session="s1"):
+    """Horizontal chip strip for the active top-level tab, filtered by the
+    S1 | S2 session sub-tab that leads the strip. The S2 pill stays locked
+    (greyed, tooltip) until a second session is loaded, so the strip never
+    fills with dead chips. Chips keep the {"type":"nav-item","id":nid}
+    pattern so click_nav fires unchanged."""
     has_s2 = S2 is not None
-    needs_s2 = {"dns_combined","upload_download","lstm_combined","browse_combined",
-                "browse_hour_combined","cmp_traffic","cmp_new_gone","cmp_delta",
-                "dev_hierarchy_s2","external_combined","coverage_combined"}
+    active_session = active_session if active_session in ("s1", "s2") else "s1"
+    if active_session == "s2" and not has_s2:
+        active_session = "s1"
+
+    pills = []
+    for sid, plabel in (("s1", "Session 1"), ("s2", "Session 2")):
+        is_on  = (sid == active_session)
+        locked = (sid == "s2" and not has_s2)
+        if is_on:
+            pstyle = {"padding":"8px 18px","borderRadius":"10px",
+                "background":f"linear-gradient(135deg, {VIOLET}, {CYAN})",
+                "color":"white","fontWeight":"700","cursor":"pointer",
+                "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px",
+                "letterSpacing":"0.14em","textTransform":"uppercase",
+                "whiteSpace":"nowrap","flexShrink":"0",
+                "boxShadow":"0 6px 20px -8px rgba(139,92,246,0.55)"}
+        elif locked:
+            pstyle = {"padding":"8px 18px","borderRadius":"10px",
+                "background":"rgba(255,255,255,0.02)",
+                "border":f"1px solid {GLASS_BORDER}","color":INK_MUTE,
+                "opacity":"0.45","cursor":"not-allowed",
+                "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px",
+                "letterSpacing":"0.14em","textTransform":"uppercase",
+                "whiteSpace":"nowrap","flexShrink":"0"}
+        else:
+            pstyle = {"padding":"8px 18px","borderRadius":"10px",
+                "background":"rgba(255,255,255,0.05)",
+                "border":f"1px solid {GLASS_BORDER_STRONG}","color":INK_DIM,
+                "cursor":"pointer","fontFamily":"'JetBrains Mono', monospace",
+                "fontSize":"11px","letterSpacing":"0.14em",
+                "textTransform":"uppercase","whiteSpace":"nowrap",
+                "flexShrink":"0","transition":"all .15s ease"}
+        pills.append(html.Div(plabel,
+            id={"type":"session-tab","id":sid},
+            n_clicks=0 if not locked else None,
+            title=("Load or record a second session to unlock S2 views"
+                   if locked else ""),
+            style=pstyle))
+    pills.append(html.Div(style={"width":"1px","alignSelf":"stretch",
+        "background":GLASS_BORDER_STRONG,"margin":"2px 6px","flexShrink":"0"}))
+
     chips = []
-    for nid, icon, lbl, sec in NAV_ITEMS:
+    for nid, icon, lbl, sec, scope in NAV_ITEMS:
         if SECTION_TO_TAB.get(sec, "analyze") != active_tab:
             continue
+        if scope != "any" and scope != active_session:
+            continue
         is_active   = (nid == active_chart)
-        is_disabled = (nid in needs_s2 and not has_s2)
-        # also disable the Live Recording chip when tshark is
-        # missing so the user cannot land on a page where Record does nothing.
+        is_disabled = (nid in NEEDS_S2_IDS and not has_s2)
+        # keep the Live Recording chip disabled when tshark is missing so
+        # the user cannot land on a page where Record does nothing.
         if nid == "live_recording" and not TSHARK_PATH:
             is_disabled = True
         if is_active:
@@ -6434,13 +6610,47 @@ def build_chart_picker_strip(active_chart, active_tab):
            style=style,
            className="aur-chip-active" if is_active else (
                "aur-chip-disabled" if is_disabled else "aur-chip")))
-    return html.Div(chips, id="chart-picker-strip-inner", style={
+    return html.Div(pills + chips, id="chart-picker-strip-inner", style={
         "display":"flex","gap":"8px","padding":"10px 22px 14px",
         "overflowX":"auto","overflowY":"hidden",
         "alignItems":"center"})
 
 
-def build_dashboard_view(active_chart="live_recording", active_tab="analyze"):
+def _build_analysis_wait_panel():
+    """Rendered by the chart-area dcc.Loading (custom_spinner) while a long
+    callback - Analyze on a staged PCAP, Analyze on a saved live recording,
+    or an S2 comparison build - recomputes the dashboard. Carries the same
+    educational material as the other loading surfaces, expanded by default,
+    so the wait doubles as reading time. Self-scrolls so the tallest sections
+    stay reachable inside the loading overlay."""
+    return html.Div([
+        html.Div([
+            html.Span("▮", style={
+                "animation":"netsec-blink 1.1s steps(1) infinite",
+                "color":VIOLET_BRIGHT,"fontSize":"13px","marginRight":"12px",
+                "textShadow":f"0 0 14px {VIOLET_BRIGHT}aa"}),
+            html.Span("ANALYZING CAPTURE · EXTRACTING FEATURES · RUNNING MODELS",
+                style={"fontFamily":"'JetBrains Mono', monospace",
+                       "fontSize":"12px","color":INK,
+                       "letterSpacing":"0.18em","fontWeight":"700"}),
+        ], style={"display":"flex","alignItems":"center",
+                  "justifyContent":"center","marginBottom":"8px"}),
+        html.Div("This can take a minute or two on large captures - the "
+                 "material below explains exactly what the analyzer is doing "
+                 "in the meantime.",
+            style={"color":INK_DIM,"fontSize":"0.9rem","textAlign":"center",
+                   "marginBottom":"2px"}),
+        _build_edu_panel("wait", open_by_default=True),
+    ], style={"width":"min(980px, 92vw)","margin":"0 auto",
+              "padding":"26px 24px 40px","textAlign":"left",
+              "maxHeight":"calc(100vh - 200px)","overflowY":"auto",
+              "borderRadius":"20px",
+              "background":"rgba(13,10,26,0.92)",
+              "border":f"1px solid {GLASS_BORDER_STRONG}",
+              "boxShadow":"0 20px 60px -20px rgba(0,0,0,0.7)"})
+
+
+def build_dashboard_view(active_chart="live_recording", active_tab="analyze", active_session="s1"):
     """Main dashboard layout. CRITICAL: chart-area is pre-populated with the
     right content at construction time so we don't rely on a separate callback
     that may not fire if it loses a Dash callback race."""
@@ -6448,7 +6658,7 @@ def build_dashboard_view(active_chart="live_recording", active_tab="analyze"):
         build_topbar(),
         html.Div(build_tab_strip(active_tab), id="tab-strip",
                  style={"padding":"6px 0 0"}),
-        html.Div(build_chart_picker_strip(active_chart, active_tab),
+        html.Div(build_chart_picker_strip(active_chart, active_tab, active_session),
                  id="chart-picker-strip",
                  style={"padding":"0"}),
         dbc.Container(fluid=True, style={"padding":"22px","position":"relative","zIndex":"2"}, children=[
@@ -6476,7 +6686,8 @@ def build_dashboard_view(active_chart="live_recording", active_tab="analyze"):
                     "border":f"1px solid {GLASS_BORDER}",
                     "minHeight":"500px",
                     "boxShadow":"0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 60px -20px rgba(0,0,0,0.6)"}),
-                    type="dot", color=VIOLET_BRIGHT,
+                    custom_spinner=_build_analysis_wait_panel(),
+                    delay_show=500,
                     parent_style={"minHeight":"500px"}),
                     md=9, lg=10),
             ]),
@@ -6666,12 +6877,65 @@ def _guard_reason(kind, state):
     return "This action is temporarily disabled"
 
 
-def _build_sidebar(active_chart, active_tab="analyze"):
-    """Sidebar with grouped nav items, filtered by the active top-level tab.
-    Items needing S2 are disabled when only S1 is loaded."""
+def _session_info_cards():
+    """Per-session detail cards for the sidebar top: source file, capture
+    window, packet count and WiFi identity when known. This replaces both
+    the old "S1: loaded / S2: not loaded" box and the topbar chips, so the
+    information appears exactly once."""
+    cards = []
+    for lbl, s, color in [("S1", S1, LIME), ("S2", S2, CYAN_BRIGHT)]:
+        if s is None:
+            cards.append(html.Div([
+                html.Span("\u25cf", style={"color":INK_MUTE,"marginRight":"6px"}),
+                html.Span(f"{lbl} \u00b7 not loaded",
+                          style={"color":INK_MUTE,"fontSize":"11px"}),
+            ], style={"padding":"7px 10px",
+                      "fontFamily":"'JetBrains Mono', monospace"}))
+            continue
+        src = SESSION_PCAPS.get(lbl)
+        src_name = os.path.basename(str(src)) if src else "live recording"
+        _ssid  = s.get("wifi_ssid")  or None
+        _bssid = s.get("wifi_bssid") or None
+        rows = [
+            html.Div([
+                html.Span("\u25cf", style={"color":color,"marginRight":"6px",
+                    "textShadow":f"0 0 8px {color}"}),
+                html.Span(lbl, style={"color":INK,"fontWeight":"700"}),
+                html.Span(f" \u00b7 {s['n_pkts']:,} pkts",
+                          style={"color":INK_MUTE}),
+            ], style={"display":"flex","alignItems":"center"}),
+            html.Div(src_name, title=str(src or ""), style={
+                "color":INK,"fontSize":"10.5px","paddingLeft":"13px",
+                "whiteSpace":"nowrap","overflow":"hidden",
+                "textOverflow":"ellipsis","marginTop":"2px"}),
+            html.Div(f"{s['t0'].strftime('%H:%M')}\u2013{s['t1'].strftime('%H:%M')}",
+                style={"color":INK_MUTE,"fontSize":"10.5px",
+                       "paddingLeft":"13px","marginTop":"1px"}),
+        ]
+        if _ssid or _bssid:
+            rows.append(html.Div(
+                f"SSID {_ssid or 'n/a'} \u00b7 BSSID {_bssid or 'n/a'}",
+                style={"color":INK_MUTE,"fontSize":"10px",
+                       "paddingLeft":"13px","marginTop":"1px",
+                       "whiteSpace":"nowrap","overflow":"hidden",
+                       "textOverflow":"ellipsis"}))
+        cards.append(html.Div(rows, style={"padding":"7px 10px",
+            "fontFamily":"'JetBrains Mono', monospace","fontSize":"11px"}))
+    return html.Div(cards, style={"marginBottom":"12px",
+        "borderRadius":"10px","background":"rgba(255,255,255,0.02)",
+        "border":f"1px solid {GLASS_BORDER}"})
+
+
+def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
+    """Sidebar with grouped nav items, filtered by the active top-level tab
+    AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
+    if active_session == "s2" and S2 is None:
+        active_session = "s1"
     items_by_sec = {}
-    for nid, icon, lbl, sec in NAV_ITEMS:
+    for nid, icon, lbl, sec, scope in NAV_ITEMS:
         if SECTION_TO_TAB.get(sec, "analyze") != active_tab:
+            continue
+        if scope != "any" and scope != active_session:
             continue
         items_by_sec.setdefault(sec, []).append((nid, icon, lbl))
 
@@ -6681,28 +6945,9 @@ def _build_sidebar(active_chart, active_tab="analyze"):
     # gather worker states once for the whole sidebar
     _wsum = _worker_state_summary()
 
-    needs_s2 = {"dns_combined","upload_download","lstm_combined","browse_combined",
-                "browse_hour_combined","cmp_traffic","cmp_new_gone","cmp_delta",
-                "dev_hierarchy_s2","external_combined","coverage_combined"}
+    needs_s2 = NEEDS_S2_IDS
 
-    children.append(html.Div([
-        html.Div([
-            html.Span("●", style={"color":LIME if has_s1 else INK_MUTE,
-                                  "marginRight":"6px",
-                                  "textShadow":f"0 0 6px {LIME}" if has_s1 else "none"}),
-            html.Span(f"S1: {'loaded' if has_s1 else 'not loaded'}",
-                      style={"color":INK if has_s1 else INK_MUTE,"fontSize":"11px"}),
-        ], style={"marginBottom":"4px","fontFamily":"'JetBrains Mono', monospace"}),
-        html.Div([
-            html.Span("●", style={"color":CYAN_BRIGHT if has_s2 else INK_MUTE,
-                                  "marginRight":"6px",
-                                  "textShadow":f"0 0 6px {CYAN_BRIGHT}" if has_s2 else "none"}),
-            html.Span(f"S2: {'loaded' if has_s2 else 'not loaded'}",
-                      style={"color":INK if has_s2 else INK_MUTE,"fontSize":"11px"}),
-        ], style={"fontFamily":"'JetBrains Mono', monospace"}),
-    ], style={"padding":"10px 12px","marginBottom":"12px",
-              "borderRadius":"10px","background":"rgba(255,255,255,0.02)",
-              "border":f"1px solid {GLASS_BORDER}"}))
+    children.append(_session_info_cards())
 
     if has_s1:
         # disable both S1 replaces if S1 worker is busy
@@ -7276,7 +7521,7 @@ def _build_live_recording_page():
 
 
 ML_MIN_PACKETS = 10_000
-ML_CHART_IDS   = {"burst","lstm","lstm_s1","lstm_combined","profile","zbar",
+ML_CHART_IDS   = {"burst","burst_s1","lstm","lstm_s1","profile","zbar",
                   "confusion","sensitivity"}
 COMPARE_CHART_IDS = {"cmp_traffic","cmp_new_gone","cmp_delta"}
 
@@ -7520,7 +7765,7 @@ def _adv_signals_table(rows):
         ],
     )
 
-def _adv_engine_card(engine_key, session_label, accent):
+def _adv_engine_card(engine_key, session_label, accent, md=6):
     rows, err = _adv_findings_for(engine_key, session_label)
     title = f"{session_label}"
     header = html.Div(title, style={"color":accent,"fontWeight":"700",
@@ -7540,20 +7785,22 @@ def _adv_engine_card(engine_key, session_label, accent):
         body = html.Div([summary, _adv_signals_table(rows)])
     return dbc.Col(html.Div([header, body],
         style={**CARD,"borderRadius":"14px","padding":"18px",
-               "borderLeft":f"3px solid {accent}","height":"100%"}), md=6)
+               "borderLeft":f"3px solid {accent}","height":"100%"}), md=md)
 
-def _render_adv_engine(engine_key, display_name, description):
-    """Render one of the 5 engine views (beaconing / dns_tunnel / dga / arp_dhcp / tls)."""
+def _render_adv_engine(engine_key, display_name, description, sessions=("S1", "S2")):
+    """Render one of the 5 engine views (beaconing / dns_tunnel / dga /
+    arp_dhcp / tls). The S1 / S2 sub-tabs pass a single session, which
+    renders one full-width card."""
+    _accent = {"S1": LIME, "S2": CYAN_BRIGHT}
+    _md = 12 if len(sessions) == 1 else 6
     return html.Div([
         html.Div(description, style={"color":INK_DIM,"fontSize":"0.92rem",
             "lineHeight":"1.55","marginBottom":"18px"}),
-        dbc.Row([
-            _adv_engine_card(engine_key, "S1", LIME),
-            _adv_engine_card(engine_key, "S2", CYAN_BRIGHT),
-        ]),
+        dbc.Row([_adv_engine_card(engine_key, s, _accent[s], md=_md)
+                 for s in sessions]),
     ])
 
-def _render_adv_killchain():
+def _render_adv_killchain(sessions=("S1", "S2")):
     """Per-device kill-chain risk from fusing the 5 engines + multi-technique boost."""
     intro = html.Div(
         "Each device's signals are fused inside a 15-minute window. The risk score "
@@ -7563,7 +7810,10 @@ def _render_adv_killchain():
         style={"color":INK_DIM,"fontSize":"0.92rem","lineHeight":"1.55",
                "marginBottom":"18px"})
     cols = []
+    _kc_md = 12 if len(sessions) == 1 else 6
     for label, sess, accent in [("S1", S1, LIME), ("S2", S2, CYAN_BRIGHT)]:
+        if label not in sessions:
+            continue
         if sess is None:
             cols.append(dbc.Col(html.Div([
                 html.Div(label, style={"color":accent,"fontWeight":"700",
@@ -7573,7 +7823,7 @@ def _render_adv_killchain():
                     style={"color":INK_MUTE,"fontSize":"0.92rem",
                            "padding":"24px","textAlign":"center"}),
             ], style={**CARD,"borderRadius":"14px","padding":"18px",
-                      "borderLeft":f"3px solid {accent}"}), md=6))
+                      "borderLeft":f"3px solid {accent}"}), md=_kc_md))
             continue
         threats = sess.get("threats") or {}
         if not threats.get("available", False):
@@ -7584,7 +7834,7 @@ def _render_adv_killchain():
                 html.Div(f"Threat scan unavailable: {threats.get('reason','n/a')}",
                     style={"color":INK_MUTE,"fontSize":"0.92rem","padding":"24px","textAlign":"center"}),
             ], style={**CARD,"borderRadius":"14px","padding":"18px",
-                      "borderLeft":f"3px solid {accent}"}), md=6))
+                      "borderLeft":f"3px solid {accent}"}), md=_kc_md))
             continue
         risk_rows = threats.get("device_risk") or []
         n_dev = len(risk_rows)
@@ -7651,7 +7901,7 @@ def _render_adv_killchain():
             ])
         cols.append(dbc.Col(html.Div([header, body],
             style={**CARD,"borderRadius":"14px","padding":"18px",
-                   "borderLeft":f"3px solid {accent}"}), md=6))
+                   "borderLeft":f"3px solid {accent}"}), md=_kc_md))
     return html.Div([intro, dbc.Row(cols)])
 
 
@@ -7945,7 +8195,8 @@ _atexit.register(_cleanup_all_workers_on_exit)
 
 app.layout = html.Div([
     dcc.Store(id="app-mode",     data="intro"),
-    dcc.Store(id="active-chart", data="talkers"),
+    dcc.Store(id="active-chart", data="talkers_s1"),
+    dcc.Store(id="active-session", data="s1"),
     dcc.Store(id="active-tab",   data="analyze"),
     dcc.Store(id="trigger-rebuild", data=0),
     dcc.Store(id="staged-pcap",    data=None),
@@ -7956,7 +8207,7 @@ app.layout = html.Div([
     dcc.Store(id="live-stats-store", data={}),
     html.Div(id="live-stats-bridge", style={"display":"none"}),
     dcc.Store(id="scroll-helper", data=0),
-    dcc.Store(id="last-chart-per-tab", data={"analyze":"talkers","security":"syn"}),
+    dcc.Store(id="last-chart-per-tab", data={"analyze":"talkers_s1","security":"syn"}),
     dcc.Store(id="replacing-s1", data=False),
     dcc.Interval(id="live-recording-tick", interval=3000, disabled=False, n_intervals=0),
     html.Div(id="main-container"),
@@ -7990,14 +8241,15 @@ app.layout = html.Div([
               Input("staged-pcap","data"),
               State("active-chart","data"),
               State("active-tab","data"),
+              State("active-session","data"),
               State("replacing-s1","data"))
-def render_main(mode, _rebuild_counter, staged_pcap, active_chart, active_tab, replacing_s1):
+def render_main(mode, _rebuild_counter, staged_pcap, active_chart, active_tab, active_session, replacing_s1):
     """forwards replacing-s1 flag to the choice view so it can render
     a "Replacing S1" banner without requiring the user to remember the
     sidebar button they pressed."""
     if mode == "intro":     return build_intro_view()
     if mode == "choice":    return build_choice_view(staged=staged_pcap, replacing_s1=replacing_s1)
-    if mode == "dashboard": return build_dashboard_view(active_chart or "live_recording", active_tab or "analyze")
+    if mode == "dashboard": return build_dashboard_view(active_chart or "live_recording", active_tab or "analyze", active_session or "s1")
     return build_intro_view()
 
 
@@ -8423,7 +8675,7 @@ def handle_analyze_staged(n_click, staged, rebuild_count, replacing_s1):
                 w._pending_snapshot = None
                 print("[analyze-staged] cleared stale S1 live pending snapshot")
         except Exception: pass
-        next_chart = "cmp_traffic" if (replacing_s1 and S2 is not None) else "talkers"
+        next_chart = "cmp_traffic" if (replacing_s1 and S2 is not None) else "talkers_s1"
         return ("dashboard", next_chart, (rebuild_count or 0)+1,
                 "", None, dash.no_update, dash.no_update, False)
     return (dash.no_update, dash.no_update, dash.no_update,
@@ -8667,7 +8919,6 @@ def _do_restart(rebuild_count, staged, staged_s2):
     to actually dispatch the reset: a multi-Input callback is silently
     skipped when one of the Inputs is absent from the current DOM, and
     restart-btn / restart-btn-welcome are never both present at once."""
-    print(f"[restart] _do_restart firing", flush=True)
     if staged_s2 and staged_s2.get("source") == "upload" and staged_s2.get("path"):
         try: os.remove(staged_s2["path"])
         except Exception: pass
@@ -8696,10 +8947,8 @@ def _do_restart(rebuild_count, staged, staged_s2):
     if staged and staged.get("source") == "upload" and staged.get("path"):
         try:
             os.remove(staged["path"])
-            print(f"  [restart] removed temp upload: {staged['path']}")
         except Exception:
             pass
-    print(f"[restart] state cleared, returning to intro view", flush=True)
     return "intro", "live_recording", (rebuild_count or 0)+1, None, False
 
 
@@ -8714,7 +8963,6 @@ def _do_restart(rebuild_count, staged, staged_s2):
               State("staged-second-pcap","data"),
               prevent_initial_call=True)
 def restart_app_from_dashboard(n, rebuild_count, staged, staged_s2):
-    print(f"[restart] dashboard button n={n}", flush=True)
     if not n:
         return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     # block Restart while analyzing AND surface why the
@@ -8724,7 +8972,6 @@ def restart_app_from_dashboard(n, rebuild_count, staged, staged_s2):
         try:
             _w = LIVE_SESSIONS.get(_sid)
             if _w is not None and getattr(_w, "_analyzing", False):
-                print(f"[restart] BLOCKED: {_sid} is analyzing", flush=True)
                 try: _w.error_msg = f"Restart blocked: {_sid} is still analyzing. Please wait for it to finish."
                 except Exception: pass
                 return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
@@ -8750,7 +8997,6 @@ def restart_app_from_welcome(n, rebuild_count, staged, staged_s2):
         try:
             _w = LIVE_SESSIONS.get(_sid)
             if _w is not None and getattr(_w, "_analyzing", False):
-                print(f"[restart] BLOCKED: {_sid} is analyzing", flush=True)
                 try: _w.error_msg = f"Restart blocked: {_sid} is still analyzing. Please wait."
                 except Exception: pass
                 return (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
@@ -8812,9 +9058,7 @@ def click_nav(_clicks, rebuild_count, active_tab, last_chart_per_tab):
     # hard-reject clicks on chips that require S2 when S2 is missing.
     # The visual disabled state uses n_clicks=None but Dash still tracks pattern
     # clicks; without this guard the callback would navigate to a placeholder.
-    _needs_s2 = {"dns_combined","upload_download","lstm_combined","browse_combined",
-                 "browse_hour_combined","cmp_traffic","cmp_new_gone","cmp_delta",
-                 "dev_hierarchy_s2","external_combined","coverage_combined"}
+    _needs_s2 = NEEDS_S2_IDS
     if new_chart in _needs_s2 and S2 is None:
         print(f"[nav] blocked click on {new_chart} - S2 not loaded", flush=True)
         return dash.no_update, dash.no_update, dash.no_update
@@ -8927,24 +9171,26 @@ def handle_replace_s1_live(n, rebuild_count):
 @app.callback(Output("sidebar","children"),
               Input("active-chart","data"),
               Input("active-tab","data"),
+              Input("active-session","data"),
               Input("trigger-rebuild","data"),
               Input("live-rec-tick","data"))
-def update_sidebar(active_chart, active_tab, _rebuild, _tick):
+def update_sidebar(active_chart, active_tab, active_session, _rebuild, _tick):
     # live-rec-tick bumps on every worker action AND
     # every 3s while on the live page, so the sidebar guard state
     # stays fresh and buttons enable/disable in real time.
-    return _build_sidebar(active_chart, active_tab or "analyze")
+    return _build_sidebar(active_chart, active_tab or "analyze", active_session or "s1")
 
 
 @app.callback(Output("chart-picker-strip","children"),
               Input("active-chart","data"),
               Input("active-tab","data"),
+              Input("active-session","data"),
               Input("trigger-rebuild","data"))
-def update_chart_picker_strip(active_chart, active_tab, _rebuild):
+def update_chart_picker_strip(active_chart, active_tab, active_session, _rebuild):
     """Keep the horizontal chip strip in sync with the active chart / tab.
     Mirrors the sidebar refresh path so the highlighted chip follows the
     user's selection (incl. programmatic navigation after Analyze)."""
-    return build_chart_picker_strip(active_chart, active_tab or "analyze")
+    return build_chart_picker_strip(active_chart, active_tab or "analyze", active_session or "s1")
 
 # ---- Top-tab callbacks -------------------------------------------------
 @app.callback(Output("tab-strip","children"),
@@ -8961,8 +9207,9 @@ def render_tab_strip(active_tab):
               Input({"type":"tab-btn","id":ALL}, "n_clicks"),
               State("trigger-rebuild","data"),
               State("last-chart-per-tab","data"),
+              State("active-session","data"),
               prevent_initial_call=True)
-def click_tab(_clicks, rebuild_count, last_chart_per_tab):
+def click_tab(_clicks, rebuild_count, last_chart_per_tab, active_session):
     """User clicked one of the Analyze / Security pills.
     if a chart was previously selected on the target tab, restore it
     instead of falling back to the first item."""
@@ -8976,7 +9223,10 @@ def click_tab(_clicks, rebuild_count, last_chart_per_tab):
     if val is None or not isinstance(val, (int, float)) or val <= 0:
         return dash.no_update, dash.no_update, dash.no_update
     tab_id = trig.get("id")
-    target_chart = (last_chart_per_tab or {}).get(tab_id) or _default_chart_for_tab(tab_id)
+    target_chart = ((last_chart_per_tab or {}).get(tab_id)
+                    or _default_chart_for_tab(tab_id, active_session or "s1"))
+    if target_chart in NEEDS_S2_IDS and S2 is None:
+        target_chart = _default_chart_for_tab(tab_id, "s1")
     if target_chart != "live_recording":
         _pause_active_live_workers()
     return tab_id, target_chart, (rebuild_count or 0)+1
@@ -8995,6 +9245,63 @@ def sync_tab_to_chart(chart_id, current_tab):
     expected = _tab_for_chart(chart_id)
     if expected and expected != current_tab:
         return expected
+    return dash.no_update
+
+
+@app.callback(Output("active-session","data", allow_duplicate=True),
+              Output("active-chart","data", allow_duplicate=True),
+              Output("trigger-rebuild","data", allow_duplicate=True),
+              Output("last-chart-per-tab","data", allow_duplicate=True),
+              Input({"type":"session-tab","id":ALL}, "n_clicks"),
+              State("active-session","data"),
+              State("active-chart","data"),
+              State("active-tab","data"),
+              State("trigger-rebuild","data"),
+              State("last-chart-per-tab","data"),
+              prevent_initial_call=True)
+def click_session_tab(_clicks, cur_session, cur_chart, cur_tab, rebuild_count, memory):
+    """S1 | S2 sub-tab click: keep the user on the twin view of the other
+    session when one exists, otherwise land on the sub-tab's first chart.
+    Uses the same real-click guard as click_nav (strip rebuilds recreate
+    the pills with n_clicks=0)."""
+    trig = ctx.triggered_id
+    if not isinstance(trig, dict):
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    triggered = ctx.triggered or []
+    if not triggered:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    val = triggered[0].get("value")
+    if val is None or not isinstance(val, (int, float)) or val <= 0:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    new_session = trig.get("id")
+    if new_session not in ("s1", "s2") or new_session == (cur_session or "s1"):
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    if new_session == "s2" and S2 is None:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    tab = cur_tab or "analyze"
+    if SESSION_SCOPE.get(cur_chart) == "any":
+        new_chart = cur_chart
+    else:
+        new_chart = (SESSION_TWIN.get(cur_chart)
+                     or _default_chart_for_tab(tab, new_session))
+    if new_chart != "live_recording":
+        _pause_active_live_workers()
+    mem = dict(memory or {})
+    mem[tab] = new_chart
+    return new_session, new_chart, (rebuild_count or 0)+1, mem
+
+
+@app.callback(Output("active-session","data", allow_duplicate=True),
+              Input("active-chart","data"),
+              State("active-session","data"),
+              prevent_initial_call=True)
+def sync_session_to_chart(chart_id, current_session):
+    """Programmatic navigation (e.g. the jump to cmp_traffic after an S2
+    analyze) must move the session sub-tab with it, exactly like
+    sync_tab_to_chart does for the top-level tabs."""
+    scope = _session_for_chart(chart_id)
+    if scope and scope != (current_session or "s1"):
+        return scope
     return dash.no_update
 # ------------------------------------------------------------------------
 
@@ -9286,7 +9593,7 @@ def handle_live_analyze(n_click, rebuild_count, s2_tick):
     # Success path: leave the live-recording page so the user actually
     # SEES the new session. Comparison view if S2 is now populated,
     # otherwise the talkers view of S1.
-    next_chart = "cmp_traffic" if (S1 is not None and S2 is not None) else "talkers"
+    next_chart = "cmp_traffic" if (S1 is not None and S2 is not None) else "talkers_s1"
     next_s2_tick = (s2_tick or 0) + 1 if session_id == "S2" else (s2_tick or 0)
     return (_build_session_panel(session_id),
             next_chart,
