@@ -27,3 +27,7 @@ settings.local.json
 
 # pytest cache (created by running tests/)
 .pytest_cache/
+
+# LLM judge runtime artifacts (optional add-on; see llm_judge/README.md)
+llm_judge/cache/
+llm_judge/output/

@@ -1,0 +1,13 @@
+# Extra dependencies for the OPTIONAL LLM-as-Judge notebook only.
+# The main dashboard (app/) does not need any of this.
+#
+# Install on top of the project root requirements.txt:
+#     pip install -r llm_judge/requirements.txt
+#
+# Latest SDK required: the judge uses structured outputs (output_config)
+# and adaptive thinking.
+anthropic
+
+# Ollama needs no Python package - the client talks to the local daemon
+# over stdlib urllib. Install the daemon itself from https://ollama.com
+# and pull a model, e.g.:  ollama pull llama3.1

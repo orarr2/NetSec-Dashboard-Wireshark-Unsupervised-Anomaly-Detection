@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "candidate_context.schema.json",
+  "title": "Candidate context (LLM input contract)",
+  "description": "Compact JSON blob (2-4 KB budget) describing one flagged entity. Built by judge_core.assemble_candidates() from the run_pipeline S-dict and rule findings. Nulls and empty lists mean 'not applicable'. kind 'session' extends the spec's ip|flow for aggregate floods, where spoofed sources have no meaningful per-IP identity.",
+  "type": "object",
+  "properties": {
+    "candidate_id": {
+      "type": "string",
+      "description": "An IP address, a 'src>dst/proto' flow key, or 'session:<label>'"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["ip", "flow", "session"]
+    },
+    "session_context": {
+      "type": "object",
+      "properties": {
+        "duration_s": {"type": "number"},
+        "total_packets": {"type": "integer"},
+        "total_ips": {"type": "integer"}
+      }
+    },
+    "features": {
+      "type": "object",
+      "description": "kind=ip: the 10 per-IP columns fed to IsolationForest/DBSCAN (mean_len, std_len, count, burst_score, unique_dsts, syn_count, rst_count, fin_count, null_count, xmas_count). kind=session: flood aggregates (total_syn, syn_sources, syn_per_sec, syn_per_source, spoofed_source_pattern)."
+    },
+    "ml_signals": {
+      "type": "object",
+      "properties": {
+        "iso_score": {"type": ["number", "null"]},
+        "iso_stability": {"type": ["number", "null"]},
+        "anomaly": {"type": ["boolean", "null"]},
+        "cluster": {"type": ["integer", "null"], "description": "-1 = DBSCAN noise"},
+        "silhouette": {"type": ["number", "null"]},
+        "lstm_bin_flag_count": {"type": ["integer", "null"]}
+      }
+    },
+    "rule_signals": {
+      "type": "object",
+      "properties": {
+        "scan_alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "enum": ["SYN", "FIN", "NULL", "XMAS"]},
+              "count": {"type": "integer"},
+              "unique_dsts": {"type": "integer"},
+              "ratio": {"type": "number"}
+            }
+          }
+        },
+        "flood_alerts": {"type": "array"},
+        "amp_alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "responses": {"type": "integer"},
+              "mean_size": {"type": "number"}
+            }
+          }
+        },
+        "arp_multi_mac": {"type": "boolean"}
+      }
+    },
+    "advanced_signals": {
+      "type": "object",
+      "description": "Reserved for the dashboard's advanced threat engines. Always null in the standalone pipeline (v1).",
+      "properties": {
+        "beaconing": {},
+        "dns_tunneling": {},
+        "dga": {},
+        "tls_anomaly": {},
+        "fusion_score": {}
+      }
+    },
+    "device_context": {
+      "type": "object",
+      "properties": {
+        "category": {"type": "string"},
+        "hostname": {"type": ["string", "null"]},
+        "oui_vendor": {"type": ["string", "null"]}
+      }
+    },
+    "enrichments": {
+      "type": "object",
+      "properties": {
+        "is_private": {"type": ["boolean", "null"]},
+        "reverse_dns": {"type": ["string", "null"]},
+        "asn": {"type": ["string", "integer", "null"]},
+        "baseline_seen_before": {"type": ["boolean", "null"]}
+      }
+    },
+    "trigger_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["isolation_forest", "dbscan_noise", "scan_rule", "amp_rule", "arp_rule", "flood_rule", "lstm"]
+      },
+      "description": "Which detectors put this candidate in the queue."
+    }
+  },
+  "required": ["candidate_id", "kind", "features", "ml_signals"]
+}

@@ -39,6 +39,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `app/dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
+| `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
@@ -72,8 +73,9 @@ NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
 │   └── dns_fingerprints.json
 ├── attack_tests/                           ← 5 real attack PCAPs + CLI pipeline + labeled ground truth
 ├── tests/                                  ← pytest regression suite vs labeled ground truth
+├── llm_judge/                              ← OPTIONAL: standalone LLM-as-Judge triage notebook (own README)
 ├── tools/                                  ← export_dashboard_module.py (notebook → .py sync)
-└── docs/                                   ← MODELS.md + deep-dive docs + decision graphs
+└── docs/                                   ← MODELS.md + deep-dive docs + decision graphs + LLM_JUDGE_SPEC.md
 ```
 
 The notebook locates the JSON data files automatically whether you launch
