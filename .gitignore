@@ -6,6 +6,8 @@ __pycache__/
 *.tmp
 _*.py
 _*.json
+# ...but never ignore package __init__.py files (they start with underscore)
+!**/__init__.py
 netsec_upload_*.pcapng
 
 # Hebrew documentation versions - kept locally, English-only in the repo
@@ -24,6 +26,7 @@ netsec_sessions/
 settings.local.json
 .vscode/
 .idea/
+anaconda_projects/
 
 # pytest cache (created by running tests/)
 .pytest_cache/
