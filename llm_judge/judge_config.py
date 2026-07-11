@@ -40,7 +40,7 @@ MAX_CANDIDATES_PER_BATCH = int(os.environ.get("LLM_JUDGE_MAX_CANDIDATES", "40"))
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a
 # bump automatically invalidates cached verdicts.
-PROMPT_VERSION = "v0.1.0"
+PROMPT_VERSION = "v0.2.0"
 
 # Ensemble weights (spec section 9).
 W_ANOM = 0.20        # baseline detector floor

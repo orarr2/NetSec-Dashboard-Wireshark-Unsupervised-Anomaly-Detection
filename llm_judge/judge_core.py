@@ -80,13 +80,23 @@ least one unsupervised detector or deterministic rule has flagged. Your job:
    this system will execute.
 7. confidence is a number between 0.0 and 1.0. reasoning is a single
    paragraph, no newlines, at most 400 characters.
+8. The deterministic rules are HIGH-PRECISION. If any rule has fired -
+   rule_signals.scan_alerts / amp_alerts / flood_alerts is non-empty, or
+   arp_multi_mac is true - classify into the matching attack category and
+   do NOT return "benign". Only override a fired rule if you can name
+   concrete evidence in the blob that it misfired.
 
 Schema:
 {schema}
 
 Category cheat sheet:
-- port_scan: high unique_dsts + one dominant TCP flag counter + high
-  ratio of that flag to total packets. Attackers touch many destinations.
+- port_scan: rule_signals.scan_alerts is non-empty (the deterministic scan
+  rule fired) OR one TCP flag counter dominates with a high ratio to total
+  packets. This covers BOTH shapes: a horizontal scan (high unique_dsts,
+  one host touching many destinations) AND a vertical scan (many packets
+  of one flag - e.g. a large syn_count - toward one or few destinations,
+  so unique_dsts is LOW but the flag-to-packet ratio is high). Low
+  unique_dsts does NOT rule out a port scan.
 - syn_flood: session-level SYN rate high AND many spoofed sources (see
   session_context and rule_signals.flood_alerts). Candidates of kind
   "session" with a flood alert are this category.
@@ -96,8 +106,9 @@ Category cheat sheet:
 - beaconing_c2: advanced_signals.beaconing non-null and periodic.
 - dns_tunnel: advanced_signals.dns_tunneling non-null OR unusually long
   DNS query strings.
-- benign_anomaly: any statistical outlier without a matching attack
-  pattern in the signals. Prefer this over "malicious" when in doubt.
+- benign_anomaly: a statistical outlier flagged ONLY by the ML detectors
+  (isolation_forest / dbscan_noise) with NO deterministic rule fired and
+  no matching attack pattern. Do NOT use this when any rule has fired.
 """.format(schema=json.dumps(VERDICT_SCHEMA, indent=2))
 
 
