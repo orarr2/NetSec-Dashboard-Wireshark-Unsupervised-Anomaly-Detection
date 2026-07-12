@@ -80,7 +80,8 @@ toggling the guardrail never needs a cache reset.
 
 | File | Role |
 |---|---|
-| `LLM_Judge_Notebook.ipynb` | The user-facing entry point — the only thing you run |
+| `LLM_Judge_Notebook.ipynb` | Interactive entry point (Jupyter) |
+| `judge_cli.py` | **Headless CLI** — same pipeline, no Jupyter, used by the GitHub Actions workflow (also handy locally) |
 | `judge_config.py` | Provider/model, guardrail, weights, thresholds, prompt version |
 | `judge_core.py` | Candidate assembly, system prompt, verdict validation, rule guardrail, SQLite cache, ensemble ranking |
 | `llm_clients.py` | `ClaudeClient` + `OllamaClient` + `OpenAICompatClient` |
@@ -91,6 +92,41 @@ toggling the guardrail never needs a cache reset.
 | `PROMPT_CHANGELOG.md` | Prompt version history + kappa per version |
 | `calibration/results/` | Committed calibration reports (CI gate reads the newest) |
 | `cache/`, `output/` | Runtime artifacts — gitignored, safe to delete |
+
+## Run without Jupyter — the CLI
+
+```bash
+python llm_judge/judge_cli.py path/to.pcap \
+    --output verdicts.json \
+    --markdown verdicts.md
+```
+
+Same detection pipeline as the notebook, same guardrail, same provider
+env vars. Writes:
+
+- `verdicts.json` — full machine-readable batch (stats + ranked results + drops + capped).
+- `verdicts.md` — GitHub-Issue-friendly report with the verdict table.
+
+This is the entry point of the autonomous-agent path below.
+
+## Autonomous agent — GitHub Actions (no VM needed)
+
+`.github/workflows/analyze-pcap.yml` turns the judge into a hands-off
+agent that runs in GitHub's cloud, free of charge, on any PCAP you push
+(or on demand from mobile). Flow:
+
+1. Push a `.pcap`/`.pcapng` to `incoming/` (or **Actions → Analyze PCAP →
+   Run workflow** for a manual trigger with a chosen path/model).
+2. A GitHub-hosted runner: installs `tshark`, installs the project's
+   Python deps, installs Ollama (default model `llama3.2`, cached
+   between runs), and calls `judge_cli.py`.
+3. Uploads `verdicts.json` + `verdicts.md` + logs as a run artifact.
+4. Opens a **GitHub Issue** with the verdict table, labeled
+   `judge-verdict` — visible from mobile without leaving GitHub.
+
+Cost: `ubuntu-latest` runners are free (unlimited on public repos; 2,000
+min/month on private). Ollama runs locally on the runner, so no LLM API
+key or bill. See `incoming/README.md` for the full trigger reference.
 
 Tests live with the rest of the suite: `tests/test_llm_judge_unit.py` and
 `tests/test_llm_judge_providers.py` (mocked LLM + in-process mock

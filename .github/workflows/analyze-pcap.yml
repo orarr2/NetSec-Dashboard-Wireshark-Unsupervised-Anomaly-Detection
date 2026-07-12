@@ -1,0 +1,151 @@
+name: Analyze PCAP (LLM Judge)
+
+# Runs the exact detection pipeline of the dashboard + the LLM judge on any
+# PCAP dropped into `incoming/`, or on demand from the Actions UI (great
+# from mobile). LLM provider: local Ollama on the runner - no key, no cost.
+# The verdict table lands in a GitHub Issue, and the full JSON batch is
+# uploaded as a workflow artifact.
+
+on:
+  push:
+    paths:
+      - "incoming/**.pcap"
+      - "incoming/**.pcapng"
+  workflow_dispatch:
+    inputs:
+      pcap_path:
+        description: >
+          PCAP path (relative to repo). Leave blank to pick the first file
+          under `incoming/`; if that's empty, uses
+          attack_tests/pcaps/tcp_syn_scan.pcap as a demo.
+        required: false
+        default: ""
+      llm_model:
+        description: "Ollama model to use"
+        required: false
+        default: "llama3.2"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  # sequential per PCAP path so two rapid pushes don't fight over Ollama
+  group: analyze-pcap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      LLM_JUDGE_PROVIDER: ollama
+      OLLAMA_MODEL: ${{ github.event.inputs.llm_model || 'llama3.2' }}
+      OLLAMA_HOST: http://localhost:11434
+      LLM_JUDGE_RULE_GUARDRAIL: "1"
+      # runners can be slow on first model load
+      LLM_JUDGE_TIMEOUT_S: "600"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tshark
+        run: |
+          echo "wireshark-common wireshark-common/install-setuid boolean false" | sudo debconf-set-selections
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
+          tshark --version | head -1
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python deps (CPU torch, then requirements.txt)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install -r requirements.txt
+
+      - name: Cache Ollama models
+        id: cache-ollama
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-${{ env.OLLAMA_MODEL }}-v1
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama server
+        run: |
+          nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:11434/api/version >/dev/null; then
+              echo "ollama is up"; break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:11434/api/version || (echo "ollama failed to start"; cat ollama.log; exit 1)
+
+      - name: Pull ${{ env.OLLAMA_MODEL }}
+        run: ollama pull "$OLLAMA_MODEL"
+
+      - name: Determine PCAP path
+        id: pcap
+        run: |
+          INPUT="${{ github.event.inputs.pcap_path }}"
+          if [ -n "$INPUT" ] && [ -f "$INPUT" ]; then
+            PCAP="$INPUT"
+          else
+            PCAP="$(find incoming -type f \( -iname '*.pcap' -o -iname '*.pcapng' \) 2>/dev/null | sort | head -1)"
+            if [ -z "$PCAP" ]; then
+              PCAP="attack_tests/pcaps/tcp_syn_scan.pcap"
+              echo "no PCAP under incoming/ - falling back to $PCAP"
+            fi
+          fi
+          echo "path=$PCAP" >> "$GITHUB_OUTPUT"
+          echo "base=$(basename "$PCAP")" >> "$GITHUB_OUTPUT"
+          echo "Selected PCAP: $PCAP"
+
+      - name: Run judge (analyze + judge)
+        run: |
+          python llm_judge/judge_cli.py \
+            "${{ steps.pcap.outputs.path }}" \
+            --output verdicts.json \
+            --markdown verdicts.md \
+          | tee analyze.log
+
+      - name: Upload verdicts + logs (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verdicts-${{ github.run_number }}
+          path: |
+            verdicts.json
+            verdicts.md
+            analyze.log
+            ollama.log
+          if-no-files-found: warn
+
+      - name: Ensure `judge-verdict` label exists
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create judge-verdict \
+            --description "LLM Judge verdicts, produced by analyze-pcap.yml" \
+            --color BFD4F2 2>/dev/null || true
+
+      - name: Open GitHub Issue with the verdict table
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Judge verdicts — ${{ steps.pcap.outputs.base }} · run #${{ github.run_number }}" \
+            --body-file verdicts.md \
+            --label judge-verdict \
+          | tee issue.txt
