@@ -40,6 +40,8 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
 | `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
+| `.github/workflows/analyze-pcap.yml` | **Autonomous agent** — GitHub Actions workflow that runs the full pipeline + LLM Judge on any PCAP pushed to `incoming/`, or on manual trigger. Opens a GitHub Issue with the verdict table. Free, no VM, no key. See "Run on your own PCAPs" below |
+| `incoming/` | Watched directory - drop `.pcap`/`.pcapng` files here in your fork to trigger the agent |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
@@ -81,6 +83,54 @@ NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
 The notebook locates the JSON data files automatically whether you launch
 from `app/` (Jupyter) or from the repo root (VS Code), so you don't need to
 move anything to run it.
+
+## Run on your own PCAPs (three ways)
+
+The project ships with three interchangeable ways to analyze a capture -
+pick the one that matches your comfort level.
+
+### A. Fork this repo and let GitHub run it for you (recommended)
+
+Zero setup on your machine. Any PCAP you push to `incoming/` in your fork
+triggers the autonomous agent workflow, and you get a GitHub Issue with a
+ranked, explained verdict table - visible from mobile.
+
+1. Click the **Fork** button at the top-right of this page → creates your
+   own copy of the repo under your account.
+2. In your fork, upload a `.pcap`/`.pcapng` to `incoming/`:
+   - via browser: **Add file → Upload files** in the `incoming/` folder;
+   - or with git: `git add incoming/mycapture.pcap && git commit -m "..." && git push`.
+3. Watch **Actions** in your fork - a run starts within seconds. When it
+   finishes (2-8 minutes, first run cached), it opens an **Issue** labeled
+   `judge-verdict` with the verdict table + a `verdicts.json` artifact.
+
+There is no LLM API key involved: the runner installs Ollama with
+`llama3.2` locally. Public forks get unlimited free Actions minutes;
+private forks have 2000 free minutes/month. See
+`.github/workflows/analyze-pcap.yml` and `incoming/README.md` for the
+trigger reference.
+
+### B. Run the headless CLI on your own machine
+
+For users who don't want to touch GitHub. Same detection pipeline, same
+LLM Judge, no notebook required.
+
+```
+pip install -r requirements.txt          # (once)
+pip install -r llm_judge/requirements.txt # only if you want Claude
+python llm_judge/judge_cli.py path/to.pcap \
+    --output verdicts.json --markdown verdicts.md
+```
+
+Requires `tshark` on PATH (installed with Wireshark), Ollama running
+locally for the free provider, or `ANTHROPIC_API_KEY` set for Claude. See
+`llm_judge/README.md` for env var options.
+
+### C. Open the notebook (interactive, exploratory)
+
+`llm_judge/LLM_Judge_Notebook.ipynb` in Jupyter - same code, but you can
+poke around, benchmark models, and see the verdict table inline. This is
+the entry point of the main dashboard flow (`app/Network_Security_Dashboard.ipynb`).
 
 ## Testing
 

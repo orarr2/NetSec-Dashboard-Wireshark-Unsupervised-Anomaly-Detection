@@ -5,7 +5,7 @@ judges every flagged candidate through the configured provider (see the
 LLM_JUDGE_* env vars in llm_judge/judge_config.py), and writes:
 
 - verdicts.json  : machine-readable batch (stats + results + drops + capped)
-- verdicts.md    : GitHub-Issue-friendly report with a verdict table
+- verdicts.md    : GitHub-Issue-friendly report with pipeline stats + verdicts
 
 Provider is picked via env vars only; no key is read from argv or written
 back to disk. Designed to be the entry point of the GitHub Actions
@@ -31,10 +31,95 @@ from llm_judge import judge_config, judge_core        # noqa: E402
 from llm_judge.llm_clients import make_client         # noqa: E402
 
 
-def _render_markdown(pcap_path, out, assembled, client):
+# --------------------------------------------------------------------------
+# Context extraction: turn the raw S / findings dicts into a compact,
+# JSON-serializable summary the renderer (and tests) can use without
+# touching pandas or the pipeline internals.
+# --------------------------------------------------------------------------
+def _fmt_ts(ts):
+    return ts.strftime("%Y-%m-%d %H:%M:%S") if ts is not None else ""
+
+
+def build_context(S, findings, assembled):
+    """Extract renderer-ready facts from the pipeline output."""
+    ip_agg = S["ip_agg"]
+    duration = (S["t1"] - S["t0"]).total_seconds()
+
+    cols = getattr(ip_agg, "columns", [])
+    has_ml = "anomaly" in cols
+    has_dbscan = "cluster" in cols
+
+    if_anom_count = int(ip_agg["anomaly"].sum()) if has_ml else 0
+    dbscan_noise = int((ip_agg["cluster"] == -1).sum()) if has_dbscan else 0
+    dbscan_clusters = (len(set(ip_agg["cluster"][ip_agg["cluster"] != -1]))
+                       if has_dbscan else 0)
+
+    flagged_ip_ids = {c["candidate_id"] for c in assembled["candidates"]
+                      if c["kind"] == "ip"}
+    capped_set = set(assembled["capped"])
+    all_ips = list(ip_agg.index)
+    not_flagged = []
+    for ip in all_ips:
+        if ip in flagged_ip_ids or ip in capped_set:
+            continue
+        row = ip_agg.loc[ip]
+        not_flagged.append({
+            "ip": ip,
+            "packets": int(row["count"]),
+            "iso_score": round(float(row["iso_score"]), 3) if has_ml
+                         else None,
+            "cluster": int(row["cluster"]) if has_dbscan else None,
+        })
+    not_flagged.sort(key=lambda x: -x["packets"])
+
+    scan_alerts = findings.get("scan_alerts") or []
+    scan_summary = []
+    for a in scan_alerts[:5]:
+        scan_summary.append(f"{a['type']} from `{a['src']}` "
+                            f"({a['count']} pkts, ratio {a['ratio']})")
+
+    return {
+        "n_packets": int(S["n_pkts"]),
+        "duration_s": round(duration, 1),
+        "time_range": [_fmt_ts(S["t0"]), _fmt_ts(S["t1"])],
+        "total_ips": len(S["ips_src"]),
+        "total_macs": len(S["macs"]),
+        "top_protocols": dict(S["protocols"].most_common(5)),
+        "ml": {
+            "isolation_forest_anomalies": if_anom_count,
+            "dbscan_noise": dbscan_noise,
+            "dbscan_clusters": dbscan_clusters,
+            "dbscan_meaningful": dbscan_clusters >= 1,
+        },
+        "rules": {
+            "scan_alerts": len(scan_alerts),
+            "scan_alerts_summary": scan_summary,
+            "flood_alerts": len(findings.get("flood_alerts") or []),
+            "amp_alerts": len(findings.get("amp_alerts") or []),
+            "arp_spoofing_ips": len(findings.get("arp_spoofing_ips") or {}),
+            "dns_nxdomain": int(findings.get("dns_nxdomain") or 0),
+            "dns_long_queries": len(findings.get("dns_long_queries") or []),
+        },
+        "flagged_ip_ids": sorted(flagged_ip_ids),
+        "not_flagged_ips": not_flagged,
+        "capped_ips": list(assembled["capped"]),
+    }
+
+
+# --------------------------------------------------------------------------
+# Markdown renderer. Sections, in order:
+#   1. Metadata table (PCAP, model, prompt, guardrail)
+#   2. Pipeline stats (packets, IPs, detections)
+#   3. Top verdict (highest priority row)
+#   4. Triaged queue (full verdict table)
+#   5. Not queued for judgment (IPs the pipeline analyzed and cleared)
+#   6. Dropped / Capped (only if non-empty)
+#   7. How to interpret
+# --------------------------------------------------------------------------
+def _render_markdown(pcap_path, out, assembled, client, context=None):
     """Turn a judged batch into a GitHub-Issue-ready markdown report."""
     stats = out["stats"]
-    top = out["results"][0] if out["results"] else None
+    ctx = context or {}
     lines = [
         f"# Judge verdicts — `{os.path.basename(pcap_path)}`",
         "",
@@ -49,7 +134,51 @@ def _render_markdown(pcap_path, out, assembled, client):
         f"| **Candidates judged** | {stats['judged']} · dropped: {stats['dropped']} · capped: {len(assembled['capped'])} |",
         "",
     ]
-    if top:
+
+    # ----- 2. Pipeline stats ---------------------------------------------
+    if ctx:
+        protos = ", ".join(f"{k} {v:,}"
+                           for k, v in ctx["top_protocols"].items())
+        ml = ctx["ml"]
+        rules = ctx["rules"]
+        rule_hits = []
+        if rules["scan_alerts"]:
+            rule_hits.append(f"**{rules['scan_alerts']} scan alert(s)**")
+        if rules["flood_alerts"]:
+            rule_hits.append(f"**{rules['flood_alerts']} flood alert(s)**")
+        if rules["amp_alerts"]:
+            rule_hits.append(f"**{rules['amp_alerts']} DNS-amp alert(s)**")
+        if rules["arp_spoofing_ips"]:
+            rule_hits.append(
+                f"**{rules['arp_spoofing_ips']} ARP-multi-MAC IP(s)**")
+        rule_line = " · ".join(rule_hits) if rule_hits \
+            else "no deterministic rule fired"
+
+        lines += [
+            "## Pipeline stats",
+            "",
+            f"- **Duration**: {ctx['duration_s']} seconds "
+            f"({ctx['time_range'][0]} → {ctx['time_range'][1]})",
+            f"- **Packets analyzed**: {ctx['n_packets']:,}",
+            f"- **Source IPs**: {ctx['total_ips']} · "
+            f"**MACs**: {ctx['total_macs']}",
+            f"- **Top protocols**: {protos}",
+            f"- **ML layer**: "
+            f"{ml['isolation_forest_anomalies']} IsolationForest anomal"
+            f"{'y' if ml['isolation_forest_anomalies'] == 1 else 'ies'} · "
+            f"{ml['dbscan_noise']} DBSCAN noise "
+            f"({ml['dbscan_clusters']} cluster"
+            f"{'' if ml['dbscan_clusters'] == 1 else 's'} found"
+            f"{'' if ml['dbscan_meaningful'] else ', clustering not meaningful'})",
+            f"- **Deterministic rules**: {rule_line}",
+        ]
+        for s in rules.get("scan_alerts_summary") or []:
+            lines.append(f"  - {s}")
+        lines.append("")
+
+    # ----- 3. Top verdict -----------------------------------------------
+    if out["results"]:
+        top = out["results"][0]
         v = top["verdict"]
         lines += [
             "## Top verdict",
@@ -61,6 +190,7 @@ def _render_markdown(pcap_path, out, assembled, client):
             "",
         ]
 
+    # ----- 4. Triaged queue ---------------------------------------------
     if out["results"]:
         lines += [
             "## Triaged queue (ranked by ensemble priority)",
@@ -95,6 +225,34 @@ def _render_markdown(pcap_path, out, assembled, client):
             "",
         ]
 
+    # ----- 5. Not queued for judgment (the honest "we looked at these") -
+    not_flagged = (ctx.get("not_flagged_ips") or []) if ctx else []
+    if not_flagged:
+        lines += [
+            "## Not queued for judgment (traffic considered normal)",
+            "",
+            f"The pipeline analyzed **{len(not_flagged)} additional IP"
+            f"{'' if len(not_flagged) == 1 else 's'}** but did not flag "
+            f"{'it' if len(not_flagged) == 1 else 'them'} — no ML anomaly "
+            "and no deterministic rule fired. Included here so you can see "
+            "the full traffic set the pipeline reasoned about.",
+            "",
+            "| IP | Packets | iso_score |",
+            "|---|--:|--:|",
+        ]
+        MAX_ROWS = 20
+        for entry in not_flagged[:MAX_ROWS]:
+            iso = "—" if entry["iso_score"] is None \
+                else f"{entry['iso_score']:+.3f}"
+            lines.append(
+                f"| `{entry['ip']}` | {entry['packets']:,} | {iso} |")
+        if len(not_flagged) > MAX_ROWS:
+            lines.append(
+                f"| _(+ {len(not_flagged) - MAX_ROWS} more, "
+                f"see `verdicts.json`)_ | | |")
+        lines.append("")
+
+    # ----- 6. Dropped / Capped ------------------------------------------
     if out["dropped"]:
         lines += ["## Dropped by the provider (after 1 retry)", ""]
         for d in out["dropped"]:
@@ -112,7 +270,25 @@ def _render_markdown(pcap_path, out, assembled, client):
             "Raise `LLM_JUDGE_MAX_CANDIDATES` to include them.",
             "",
         ]
+
+    # ----- 7. How to interpret ------------------------------------------
     lines += [
+        "## How to interpret",
+        "",
+        "- **Verdict**: `benign` (no attack pattern), `suspicious` (weak or "
+        "ambiguous signal), `malicious` (strong, unambiguous evidence).",
+        "- **Category**: the attack shape — `port_scan`, `syn_flood`, "
+        "`dns_amp`, `arp_mitm`, `beaconing_c2`, `dns_tunnel`, or "
+        "`benign_anomaly` (statistical outlier that isn't an attack).",
+        "- **Priority**: ensemble rank score, "
+        "`0.20·anomaly + 0.40·confidence + 0.30·category_severity`. "
+        "Higher = more urgent for the analyst.",
+        "- **⚑ Rule guardrail**: a candidate whose deterministic rule fired "
+        "(scan / flood / amp / ARP) can never be judged `benign` by the "
+        "model. When the model tries to, the guardrail overrides to "
+        "`suspicious` with the rule-implied category; the raw model verdict "
+        "stays in `verdicts.json` for auditing.",
+        "",
         "---",
         "",
         "*Full machine-readable batch: `verdicts.json` in the run's "
@@ -122,8 +298,11 @@ def _render_markdown(pcap_path, out, assembled, client):
     return "\n".join(lines) + "\n"
 
 
+# --------------------------------------------------------------------------
+# Pipeline + judge orchestration
+# --------------------------------------------------------------------------
 def analyze_and_judge(pcap_path, label="S1", verbose=True):
-    """Run the pipeline + judge; returns (out, assembled, client)."""
+    """Run the pipeline + judge; returns (out, assembled, client, context)."""
     import run_pipeline as rp  # imports tshark - keep lazy for tests
 
     if verbose:
@@ -135,19 +314,21 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
     if verbose:
         print("[cli] assembling candidates...", flush=True)
     assembled = judge_core.assemble_candidates(S, findings)
+    context = build_context(S, findings, assembled)
     if verbose:
         print(f"[cli] provider={judge_config.LLM_JUDGE_PROVIDER} "
               f"guardrail={'on' if judge_config.RULE_GUARDRAIL else 'off'} "
               f"prompt={judge_config.PROMPT_VERSION}", flush=True)
         print(f"[cli] {len(assembled['candidates'])} candidate(s) "
-              f"({len(assembled['capped'])} capped)", flush=True)
+              f"({len(assembled['capped'])} capped, "
+              f"{len(context['not_flagged_ips'])} not-flagged)", flush=True)
 
     client = make_client(verdict_schema=judge_core.VERDICT_SCHEMA)
     if verbose:
         print(f"[cli] model={client.model_id} - judging...", flush=True)
     out = judge_core.judge_candidates(assembled["candidates"], client=client,
                                       verbose=verbose)
-    return out, assembled, client
+    return out, assembled, client, context
 
 
 def main(argv=None):
@@ -169,7 +350,8 @@ def main(argv=None):
         print(f"ERROR: PCAP file not found: {args.pcap}", file=sys.stderr)
         return 2
 
-    out, assembled, client = analyze_and_judge(args.pcap, label=args.label)
+    out, assembled, client, context = analyze_and_judge(args.pcap,
+                                                        label=args.label)
 
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump({
@@ -184,16 +366,17 @@ def main(argv=None):
             "results": out["results"],
             "dropped": out["dropped"],
             "capped": assembled["capped"],
+            "context": context,
         }, f, indent=2)
     print(f"[cli] wrote {args.output}", flush=True)
 
     if args.markdown:
-        md = _render_markdown(args.pcap, out, assembled, client)
+        md = _render_markdown(args.pcap, out, assembled, client,
+                              context=context)
         with open(args.markdown, "w", encoding="utf-8") as f:
             f.write(md)
         print(f"[cli] wrote {args.markdown}", flush=True)
 
-    # exit 0 unless the pipeline itself failed (handled above by exception)
     return 0
 
 

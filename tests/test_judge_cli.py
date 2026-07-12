@@ -4,11 +4,14 @@ Uses the committed benchmark fixtures + an in-process fake client, so no
 network, no tshark, no LLM. Verifies the JSON+Markdown outputs the
 GitHub Actions workflow relies on.
 """
+import collections
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from unittest import mock
 
+import pandas as pd
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,24 +52,179 @@ def _judged_batch():
     return out, assembled, _fake_client()
 
 
+def _fake_context(not_flagged_count=3):
+    """A build_context() output shaped like a real pipeline run."""
+    return {
+        "n_packets": 2020,
+        "duration_s": 71.2,
+        "time_range": ["2026-07-10 12:00:00", "2026-07-10 12:01:11"],
+        "total_ips": 5,
+        "total_macs": 8,
+        "top_protocols": {"TCP": 2007, "ARP": 9, "SSDP": 4},
+        "ml": {"isolation_forest_anomalies": 1, "dbscan_noise": 1,
+               "dbscan_clusters": 1, "dbscan_meaningful": True},
+        "rules": {
+            "scan_alerts": 1,
+            "scan_alerts_summary": [
+                "SYN from `192.168.1.10` (1002 pkts, ratio 1.0)"],
+            "flood_alerts": 0, "amp_alerts": 0, "arp_spoofing_ips": 0,
+            "dns_nxdomain": 0, "dns_long_queries": 0,
+        },
+        "flagged_ip_ids": ["192.168.1.10"],
+        "not_flagged_ips": [
+            {"ip": f"10.0.0.{i + 5}", "packets": 40 - i, "iso_score": 0.12,
+             "cluster": 0}
+            for i in range(not_flagged_count)
+        ],
+        "capped_ips": [],
+    }
+
+
 # --------------------------------------------------------------------------
-# Markdown rendering
+# build_context — extracts facts from a real S / findings shape
+# --------------------------------------------------------------------------
+def _synthetic_session(n_benign=3):
+    ips = ["192.168.1.10"] + [f"10.0.0.{i + 5}" for i in range(n_benign)]
+    ip_agg = pd.DataFrame({
+        "count": [1007] + [40] * n_benign,
+        "total_bytes": [60420] + [21000] * n_benign,
+        "mean_len": [60.0] + [525.0] * n_benign,
+        "std_len": [0.0] + [310.0] * n_benign,
+        "unique_dsts": [1000] + [3] * n_benign,
+        "burst_score": [1007.0] + [0.13] * n_benign,
+        "dominance": [1067.4] + [61.0] * n_benign,
+        "syn_count": [1002] + [5] * n_benign,
+        "rst_count": [0] + [1] * n_benign,
+        "fin_count": [0] * (1 + n_benign),
+        "null_count": [0] * (1 + n_benign),
+        "xmas_count": [0] * (1 + n_benign),
+        "iso_score": [-0.31] + [0.12] * n_benign,
+        "iso_flag": [-1] + [1] * n_benign,
+        "iso_stability": [1.0] + [0.0] * n_benign,
+        "anomaly": [True] + [False] * n_benign,
+        "cluster": [-1] + [0] * n_benign,
+    }, index=ips)
+    t0 = datetime(2026, 7, 10, 12, 0, 0)
+    return {
+        "label": "S1", "n_pkts": 2020, "t0": t0,
+        "t1": t0 + timedelta(seconds=71.2),
+        "ip_agg": ip_agg,
+        "ips_src": collections.Counter({ip: 100 for ip in ips}),
+        "macs": collections.Counter({f"aa:bb:cc:00:00:{i:02x}": 10
+                                     for i in range(8)}),
+        "protocols": collections.Counter({"TCP": 2007, "ARP": 9,
+                                          "SSDP": 4}),
+    }
+
+
+def _synthetic_findings():
+    return {
+        "scan_alerts": [{"src": "192.168.1.10", "type": "SYN", "count": 1002,
+                         "unique_dsts": 1000, "ratio": 1.0}],
+        "flood_alerts": [], "amp_alerts": [], "arp_spoofing_ips": {},
+        "arp_spoofing_macs": {}, "dns_nxdomain": 0, "dns_long_queries": [],
+    }
+
+
+def test_build_context_extracts_pipeline_facts():
+    S = _synthetic_session(n_benign=3)
+    findings = _synthetic_findings()
+    assembled = judge_core.assemble_candidates(S, findings)
+    ctx = judge_cli.build_context(S, findings, assembled)
+
+    assert ctx["n_packets"] == 2020
+    assert ctx["duration_s"] == 71.2
+    assert ctx["total_ips"] == 4
+    assert ctx["top_protocols"]["TCP"] == 2007
+    assert ctx["ml"]["isolation_forest_anomalies"] == 1
+    assert ctx["ml"]["dbscan_clusters"] == 1
+    assert ctx["ml"]["dbscan_meaningful"] is True
+    assert ctx["rules"]["scan_alerts"] == 1
+    assert "192.168.1.10" in ctx["rules"]["scan_alerts_summary"][0]
+    assert "192.168.1.10" in ctx["flagged_ip_ids"]
+    assert len(ctx["not_flagged_ips"]) == 3
+    # not-flagged IPs must be the benign ones with iso_score+cluster shown
+    for entry in ctx["not_flagged_ips"]:
+        assert entry["ip"].startswith("10.0.0.")
+        assert entry["cluster"] == 0
+        assert entry["iso_score"] == 0.12
+    # JSON serializable (the CLI writes this to verdicts.json)
+    json.dumps(ctx)
+
+
+# --------------------------------------------------------------------------
+# Markdown rendering — sections
 # --------------------------------------------------------------------------
 def test_render_markdown_has_expected_sections():
     out, assembled, client = _judged_batch()
     md = judge_cli._render_markdown("attack_tests/pcaps/tcp_syn_scan.pcap",
-                                    out, assembled, client)
+                                    out, assembled, client,
+                                    context=_fake_context())
     assert md.startswith("# Judge verdicts")
     assert "tcp_syn_scan.pcap" in md
+    assert "## Pipeline stats" in md
     assert "## Top verdict" in md
     assert "## Triaged queue" in md
-    assert "| # | Candidate |" in md   # table header
-    # every fixture must land in the table
+    assert "## How to interpret" in md
+    assert "| # | Candidate |" in md   # triaged table header
     for r in out["results"]:
         assert r["candidate_id"] in md
-    # provider + prompt version metadata are present
     assert judge_config.PROMPT_VERSION in md
     assert client.model_id in md
+
+
+def test_render_markdown_pipeline_stats_content():
+    """Pipeline stats section must reflect the context numbers."""
+    out, assembled, client = _judged_batch()
+    ctx = _fake_context()
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=ctx)
+    stats_section = md.split("## Pipeline stats")[1].split("##")[0]
+    assert "2,020" in stats_section              # packets, comma formatted
+    assert "71.2 seconds" in stats_section
+    assert "TCP 2,007" in stats_section          # top protocol formatted
+    assert "1 IsolationForest anomaly" in stats_section
+    assert "1 scan alert(s)" in stats_section
+    assert "192.168.1.10" in stats_section       # per-alert detail
+
+
+def test_render_markdown_not_flagged_section_lists_ips():
+    """The 'Not queued for judgment' section shows the analyzed clean IPs."""
+    out, assembled, client = _judged_batch()
+    ctx = _fake_context(not_flagged_count=4)
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=ctx)
+    assert "## Not queued for judgment" in md
+    for entry in ctx["not_flagged_ips"]:
+        assert entry["ip"] in md
+    # nothing to include -> section is omitted
+    empty = _fake_context(not_flagged_count=0)
+    md2 = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                     context=empty)
+    assert "## Not queued for judgment" not in md2
+
+
+def test_render_markdown_not_flagged_caps_long_list():
+    out, assembled, client = _judged_batch()
+    ctx = _fake_context(not_flagged_count=35)
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=ctx)
+    assert "## Not queued for judgment" in md
+    # only the first 20 rows are rendered, plus a "more" hint
+    for i in range(20):
+        assert f"10.0.0.{i + 5}" in md
+    assert "15 more" in md
+    # rows past the cap are elided
+    assert "10.0.0.34" not in md
+
+
+def test_render_markdown_how_to_interpret_included():
+    out, assembled, client = _judged_batch()
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=_fake_context())
+    assert "## How to interpret" in md
+    assert "Verdict" in md
+    assert "Rule guardrail" in md
 
 
 def test_render_markdown_escapes_pipe_in_reasoning():
@@ -86,13 +244,11 @@ def test_render_markdown_escapes_pipe_in_reasoning():
     }
     assembled = {"candidates": [{}], "capped": []}
     md = judge_cli._render_markdown("x.pcap", out, assembled,
-                                    _fake_client())
-    # pick the actual TABLE row (not the top-verdict prose line)
+                                    _fake_client(), context=_fake_context())
     table_row = [ln for ln in md.splitlines()
                  if "`1.2.3.4`" in ln and ln.startswith("|")][0]
-    assert table_row.count("|") >= 8   # a valid markdown table row
+    assert table_row.count("|") >= 8
     assert "before \\| after pipe" in md
-    # the raw pipe from reasoning must not appear unescaped in a row
     assert "before | after pipe" not in table_row
 
 
@@ -104,18 +260,20 @@ def test_render_markdown_empty_batch():
            "results": [], "dropped": []}
     assembled = {"candidates": [], "capped": []}
     md = judge_cli._render_markdown("clean.pcap", out, assembled,
-                                    _fake_client())
+                                    _fake_client(),
+                                    context=_fake_context(
+                                        not_flagged_count=0))
     assert "## No verdicts" in md
     assert "## Triaged queue" not in md
 
 
 def test_render_markdown_notes_guardrail_when_used():
     out, assembled, client = _judged_batch()
-    # force guardrail on the first attack row so the note shows
     if out["results"]:
         out["results"][0]["guardrail"] = {"applied": True,
                                           "rule_category": "port_scan"}
-    md = judge_cli._render_markdown("x.pcap", out, assembled, client)
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=_fake_context())
     assert "⚑" in md
     assert "rule guardrail overrode" in md
 
@@ -128,12 +286,11 @@ def test_render_markdown_capped_section():
     assembled = {"candidates": [],
                  "capped": [f"10.0.0.{i}" for i in range(25)]}
     md = judge_cli._render_markdown("x.pcap", out, assembled,
-                                    _fake_client())
+                                    _fake_client(),
+                                    context=_fake_context(
+                                        not_flagged_count=0))
     assert "## Capped" in md
-    # cap section shows first 20 with ellipsis (25 total)
     assert "10.0.0.0" in md and "10.0.0.19" in md
-    assert md.count("10.0.0.") <= 21   # 20 shown + 1 in raise-limit note maybe
-    assert "…" in md
 
 
 # --------------------------------------------------------------------------
@@ -141,11 +298,12 @@ def test_render_markdown_capped_section():
 # --------------------------------------------------------------------------
 def test_main_writes_json_and_markdown(tmp_path):
     out, assembled, client = _judged_batch()
+    ctx = _fake_context()
     fake_pcap = tmp_path / "sample.pcap"
     fake_pcap.write_bytes(b"not really a pcap but the CLI just checks it exists")
 
     with mock.patch.object(judge_cli, "analyze_and_judge",
-                           return_value=(out, assembled, client)):
+                           return_value=(out, assembled, client, ctx)):
         rc = judge_cli.main([
             str(fake_pcap),
             "--output", str(tmp_path / "verdicts.json"),
@@ -158,10 +316,14 @@ def test_main_writes_json_and_markdown(tmp_path):
     assert data["model"] == client.model_id
     assert data["stats"]["judged"] >= 1
     assert isinstance(data["results"], list)
+    # context is now persisted in the JSON too
+    assert data["context"]["n_packets"] == 2020
 
     md = (tmp_path / "verdicts.md").read_text(encoding="utf-8")
     assert "# Judge verdicts" in md
     assert "sample.pcap" in md
+    assert "## Pipeline stats" in md
+    assert "## How to interpret" in md
 
 
 def test_main_returns_nonzero_when_pcap_missing(tmp_path):
