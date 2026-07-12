@@ -1,0 +1,723 @@
+{
+ "_comment": "Labeled candidate blobs for llm_judge/benchmark.py, extracted from attack_tests PCAPs by the real pipeline. Regenerate only when assemble_candidates or the pipeline changes.",
+ "fixtures": [
+  {
+   "source_pcap": "tcp_syn_scan.pcap",
+   "truth_category": "port_scan",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "192.168.1.10",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 1.2,
+     "total_packets": 2020,
+     "total_ips": 5
+    },
+    "features": {
+     "mean_len": 57.9801,
+     "std_len": 0.2813,
+     "count": 1007.0,
+     "burst_score": 785.9224,
+     "unique_dsts": 1.0,
+     "syn_count": 1002.0,
+     "rst_count": 5.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.0082,
+     "iso_stability": 1.0,
+     "anomaly": true,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [
+      {
+       "type": "SYN",
+       "count": 1002,
+       "unique_dsts": 1,
+       "ratio": 1.0
+      }
+     ],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": true,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "dbscan_noise",
+     "isolation_forest",
+     "scan_rule"
+    ]
+   }
+  },
+  {
+   "source_pcap": "xmas_scan.pcap",
+   "truth_category": "port_scan",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "192.168.1.10",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.1,
+     "total_packets": 2000,
+     "total_ips": 2
+    },
+    "features": {
+     "mean_len": 54.0,
+     "std_len": 0.0,
+     "count": 1000.0,
+     "burst_score": 1000.0,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 1000.0
+    },
+    "ml_signals": {
+     "iso_score": 0.0,
+     "iso_stability": 0.0,
+     "anomaly": false,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [
+      {
+       "type": "XMAS",
+       "count": 1000,
+       "unique_dsts": 1,
+       "ratio": 1.0
+      }
+     ],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": true,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "scan_rule"
+    ]
+   }
+  },
+  {
+   "source_pcap": "arpspoof.pcap",
+   "truth_category": "arp_mitm",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "192.168.1.1",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 543.3,
+     "total_packets": 16285,
+     "total_ips": 25
+    },
+    "features": {
+     "mean_len": 209.6857,
+     "std_len": 90.6958,
+     "count": 280.0,
+     "burst_score": 3.0536,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": 0.1704,
+     "iso_stability": 0.0,
+     "anomaly": false,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [
+      {
+       "responses": 271,
+       "mean_size": 207.7
+      }
+     ],
+     "arp_multi_mac": true
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": true,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "amp_rule",
+     "arp_rule",
+     "dbscan_noise"
+    ]
+   }
+  },
+  {
+   "source_pcap": "arpspoof.pcap",
+   "truth_category": "benign_anomaly",
+   "truth_kind": "benign",
+   "candidate": {
+    "candidate_id": "151.101.193.140",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 543.3,
+     "total_packets": 16285,
+     "total_ips": 25
+    },
+    "features": {
+     "mean_len": 1408.794,
+     "std_len": 268.2255,
+     "count": 5024.0,
+     "burst_score": 18.6609,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 13.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.0048,
+     "iso_stability": 1.0,
+     "anomaly": true,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "dbscan_noise",
+     "isolation_forest"
+    ]
+   }
+  },
+  {
+   "source_pcap": "arpspoof.pcap",
+   "truth_category": "benign_anomaly",
+   "truth_kind": "benign",
+   "candidate": {
+    "candidate_id": "151.101.129.140",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 543.3,
+     "total_packets": 16285,
+     "total_ips": 25
+    },
+    "features": {
+     "mean_len": 1382.3028,
+     "std_len": 317.7096,
+     "count": 4986.0,
+     "burst_score": 15.6443,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 9.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": 0.0194,
+     "iso_stability": 0.0,
+     "anomaly": false,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "dbscan_noise"
+    ]
+   }
+  },
+  {
+   "source_pcap": "synflood.pcap",
+   "truth_category": "syn_flood",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "session:S1",
+    "kind": "session",
+    "session_context": {
+     "duration_s": 23.7,
+     "total_packets": 37841,
+     "total_ips": 37623
+    },
+    "features": {
+     "total_syn": 37841,
+     "syn_sources": 37623,
+     "syn_per_sec": 1597.8,
+     "syn_per_source": 1.01,
+     "spoofed_source_pattern": true
+    },
+    "ml_signals": {
+     "iso_score": null,
+     "iso_stability": null,
+     "anomaly": null,
+     "cluster": null,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [
+      {
+       "type": "SYN_FLOOD",
+       "total_syn": 37841,
+       "syn_sources": 37623,
+       "syn_per_sec": 1597.8,
+       "syn_per_source": 1.01,
+       "spoofed_source_pattern": true
+      }
+     ],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": null,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "flood_rule"
+    ]
+   }
+  },
+  {
+   "source_pcap": "dns_amp.pcap",
+   "truth_category": "dns_amp",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "212.8.51.69",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.6,
+     "total_packets": 12000,
+     "total_ips": 79
+    },
+    "features": {
+     "mean_len": 1340.7107,
+     "std_len": 188.6529,
+     "count": 750.0,
+     "burst_score": 3.9546,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.0859,
+     "iso_stability": 1.0,
+     "anomaly": true,
+     "cluster": 0,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [
+      {
+       "responses": 250,
+       "mean_size": 1090.1
+      }
+     ],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "amp_rule",
+     "isolation_forest"
+    ]
+   }
+  },
+  {
+   "source_pcap": "dns_amp.pcap",
+   "truth_category": "dns_amp",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "212.8.51.71",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.6,
+     "total_packets": 12000,
+     "total_ips": 79
+    },
+    "features": {
+     "mean_len": 1349.3099,
+     "std_len": 179.3543,
+     "count": 555.0,
+     "burst_score": 3.0773,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.0042,
+     "iso_stability": 0.6,
+     "anomaly": true,
+     "cluster": 0,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [
+      {
+       "responses": 185,
+       "mean_size": 1115.9
+      }
+     ],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "amp_rule",
+     "isolation_forest"
+    ]
+   }
+  },
+  {
+   "source_pcap": "dns_amp.pcap",
+   "truth_category": "dns_amp",
+   "truth_kind": "attack",
+   "candidate": {
+    "candidate_id": "212.8.51.99",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.6,
+     "total_packets": 12000,
+     "total_ips": 79
+    },
+    "features": {
+     "mean_len": 1361.2328,
+     "std_len": 163.07,
+     "count": 408.0,
+     "burst_score": 2.4867,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": 0.0457,
+     "iso_stability": 0.0,
+     "anomaly": false,
+     "cluster": 0,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [
+      {
+       "responses": 136,
+       "mean_size": 1151.7
+      }
+     ],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "amp_rule"
+    ]
+   }
+  },
+  {
+   "source_pcap": "dns_amp.pcap",
+   "truth_category": "benign_anomaly",
+   "truth_kind": "benign",
+   "candidate": {
+    "candidate_id": "8.8.8.8",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.6,
+     "total_packets": 12000,
+     "total_ips": 79
+    },
+    "features": {
+     "mean_len": 62.0,
+     "std_len": 0.0,
+     "count": 6430.0,
+     "burst_score": 6430.0,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.2868,
+     "iso_stability": 1.0,
+     "anomaly": true,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "dbscan_noise",
+     "isolation_forest"
+    ]
+   }
+  },
+  {
+   "source_pcap": "dns_amp.pcap",
+   "truth_category": "benign_anomaly",
+   "truth_kind": "benign",
+   "candidate": {
+    "candidate_id": "8.8.4.4",
+    "kind": "ip",
+    "session_context": {
+     "duration_s": 0.6,
+     "total_packets": 12000,
+     "total_ips": 79
+    },
+    "features": {
+     "mean_len": 62.0,
+     "std_len": 0.0,
+     "count": 847.0,
+     "burst_score": 847.0,
+     "unique_dsts": 1.0,
+     "syn_count": 0.0,
+     "rst_count": 0.0,
+     "fin_count": 0.0,
+     "null_count": 0.0,
+     "xmas_count": 0.0
+    },
+    "ml_signals": {
+     "iso_score": -0.1633,
+     "iso_stability": 1.0,
+     "anomaly": true,
+     "cluster": -1,
+     "silhouette": null,
+     "lstm_bin_flag_count": null
+    },
+    "rule_signals": {
+     "scan_alerts": [],
+     "flood_alerts": [],
+     "amp_alerts": [],
+     "arp_multi_mac": false
+    },
+    "advanced_signals": {
+     "beaconing": null,
+     "dns_tunneling": null,
+     "dga": null,
+     "tls_anomaly": null,
+     "fusion_score": null
+    },
+    "device_context": {
+     "category": "unknown",
+     "hostname": null,
+     "oui_vendor": null
+    },
+    "enrichments": {
+     "is_private": false,
+     "reverse_dns": null,
+     "asn": null,
+     "baseline_seen_before": null
+    },
+    "trigger_reasons": [
+     "dbscan_noise",
+     "isolation_forest"
+    ]
+   }
+  }
+ ]
+}

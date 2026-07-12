@@ -109,7 +109,29 @@ Category cheat sheet:
 - benign_anomaly: a statistical outlier flagged ONLY by the ML detectors
   (isolation_forest / dbscan_noise) with NO deterministic rule fired and
   no matching attack pattern. Do NOT use this when any rule has fired.
-""".format(schema=json.dumps(VERDICT_SCHEMA, indent=2))
+
+Worked examples (abbreviated input -> correct output):
+
+Example 1 - vertical SYN scan. Input has features {"syn_count": 1002,
+"count": 1007, "unique_dsts": 1} and rule_signals.scan_alerts
+[{"type": "SYN", "count": 1002, "unique_dsts": 1, "ratio": 1.0}].
+unique_dsts is LOW but the scan rule fired and nearly every packet is a
+SYN - this is a port scan against one host:
+{"verdict": "malicious", "category": "port_scan", "confidence": 0.95,
+ "evidence_features": ["rule_signals.scan_alerts", "syn_count", "count"],
+ "reasoning": "The deterministic scan rule fired: 1002 of 1007 packets are
+ SYNs (ratio 1.0) against a single destination - a vertical SYN scan.",
+ "recommended_action": "investigate"}
+
+Example 2 - ML-only outlier. Input has ml_signals {"anomaly": true,
+"cluster": -1} but every rule_signals list is empty and arp_multi_mac is
+false. A statistical outlier with no attack pattern:
+{"verdict": "benign", "category": "benign_anomaly", "confidence": 0.6,
+ "evidence_features": ["ml_signals.anomaly", "ml_signals.cluster"],
+ "reasoning": "Flagged only by the unsupervised detectors; no deterministic
+ rule fired and no attack-shaped signal is present in the blob.",
+ "recommended_action": "monitor"}
+""".replace("{schema}", json.dumps(VERDICT_SCHEMA, indent=2))
 
 
 class JudgeValidationError(ValueError):
@@ -400,6 +422,54 @@ def priority_score(candidate, verdict, iso_min, iso_max):
 
 
 # --------------------------------------------------------------------------
+# Rule guardrail. The deterministic rules are high-precision; a fired rule
+# implies its attack category. Small local models were measured overriding
+# a fired rule with "benign" (while hallucinating that no rule fired), so
+# with the guardrail on such a verdict is raised to "suspicious" with the
+# rule-implied category. The model's original verdict stays in the result
+# for transparency; the raw model verdict is what gets cached, so toggling
+# the guardrail needs no cache invalidation.
+# --------------------------------------------------------------------------
+def rule_expected_category(candidate):
+    """The attack category implied by whichever deterministic rule fired,
+    or None when no rule fired (ML-only candidates)."""
+    rs = candidate.get("rule_signals", {})
+    if rs.get("flood_alerts"):
+        return "syn_flood"
+    if rs.get("arp_multi_mac"):
+        return "arp_mitm"
+    if rs.get("amp_alerts"):
+        return "dns_amp"
+    if rs.get("scan_alerts"):
+        return "port_scan"
+    return None
+
+
+def apply_rule_guardrail(candidate, verdict):
+    """Return (effective_verdict, guardrail_info). guardrail_info is None
+    when nothing was overridden."""
+    expected = rule_expected_category(candidate)
+    if expected is None or verdict["verdict"] != "benign":
+        return verdict, None
+    corrected = dict(verdict)
+    corrected["verdict"] = "suspicious"
+    corrected["category"] = expected
+    corrected["confidence"] = max(float(verdict["confidence"]), 0.6)
+    corrected["recommended_action"] = "investigate"
+    if "rule_signals" not in " ".join(corrected["evidence_features"]):
+        corrected["evidence_features"] = (["rule_signals"]
+                                          + corrected["evidence_features"])[:12]
+    corrected["reasoning"] = (
+        f"[rule guardrail] The deterministic {expected} rule fired for this "
+        f"candidate, so a benign verdict is not allowed. Model said: "
+        + verdict["reasoning"])[:400]
+    return corrected, {"applied": True,
+                       "rule_category": expected,
+                       "model_verdict": verdict["verdict"],
+                       "model_category": verdict["category"]}
+
+
+# --------------------------------------------------------------------------
 # The judge loop (spec section 5): cache -> LLM -> validate -> retry once ->
 # drop-and-log. A single bad response never poisons the batch.
 # --------------------------------------------------------------------------
@@ -448,16 +518,22 @@ def judge_candidates(candidates, client=None, cache_db=None,
                     continue
                 cache.put(fp, prompt_version, verdict, client.model_id,
                           latency_ms)
+            guardrail_info = None
+            if judge_config.RULE_GUARDRAIL:
+                verdict, guardrail_info = apply_rule_guardrail(cand, verdict)
             results.append({
                 "candidate_id": cand["candidate_id"],
                 "kind": cand["kind"],
                 "verdict": verdict,
+                "guardrail": guardrail_info,
                 "priority": priority_score(cand, verdict, iso_min, iso_max),
                 "cached": was_cached,
                 "latency_ms": latency_ms,
             })
             if verbose:
                 tag = "cache" if was_cached else f"{latency_ms} ms"
+                if guardrail_info:
+                    tag += ", guardrail"
                 v = verdict
                 print(f"[judge] {i}/{len(candidates)} "
                       f"{cand['candidate_id']:<24} {v['verdict']:<10} "

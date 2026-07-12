@@ -1,0 +1,364 @@
+"""Tests for the judge upgrades: rule guardrail, the OpenAI-compatible
+client (against an in-process mock server - no network), and the model
+benchmark harness with its committed fixtures."""
+import json
+import os
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import pytest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from llm_judge import benchmark, judge_config, judge_core  # noqa: E402
+from llm_judge.llm_clients import OpenAICompatClient  # noqa: E402
+
+
+def good_verdict(**over):
+    v = {"verdict": "malicious", "category": "port_scan", "confidence": 0.95,
+         "evidence_features": ["syn_count"],
+         "reasoning": "Scan rule fired.", "recommended_action": "investigate"}
+    v.update(over)
+    return v
+
+
+def scan_candidate():
+    return {"candidate_id": "192.168.1.10", "kind": "ip",
+            "features": {"syn_count": 1002},
+            "ml_signals": {"iso_score": -0.3, "iso_stability": 1.0,
+                           "anomaly": True, "cluster": -1,
+                           "silhouette": None, "lstm_bin_flag_count": None},
+            "rule_signals": {"scan_alerts": [{"type": "SYN", "count": 1002,
+                                              "unique_dsts": 1,
+                                              "ratio": 1.0}],
+                             "flood_alerts": [], "amp_alerts": [],
+                             "arp_multi_mac": False}}
+
+
+def ml_only_candidate():
+    c = scan_candidate()
+    c["candidate_id"] = "10.0.0.9"
+    c["rule_signals"]["scan_alerts"] = []
+    return c
+
+
+# --------------------------------------------------------------------------
+# Rule guardrail
+# --------------------------------------------------------------------------
+def test_guardrail_overrides_benign_on_fired_rule():
+    benign = good_verdict(verdict="benign", category="benign_anomaly",
+                          confidence=0.5, recommended_action="monitor")
+    corrected, info = judge_core.apply_rule_guardrail(scan_candidate(),
+                                                      benign)
+    assert corrected["verdict"] == "suspicious"
+    assert corrected["category"] == "port_scan"
+    assert corrected["confidence"] >= 0.6
+    assert corrected["reasoning"].startswith("[rule guardrail]")
+    assert len(corrected["reasoning"]) <= 400
+    assert info == {"applied": True, "rule_category": "port_scan",
+                    "model_verdict": "benign",
+                    "model_category": "benign_anomaly"}
+    # the corrected verdict must still pass the strict validator
+    judge_core.validate_verdict(corrected)
+
+
+def test_guardrail_leaves_non_benign_and_ml_only_alone():
+    v, info = judge_core.apply_rule_guardrail(scan_candidate(),
+                                              good_verdict())
+    assert info is None and v["verdict"] == "malicious"
+    benign = good_verdict(verdict="benign", category="benign_anomaly")
+    v2, info2 = judge_core.apply_rule_guardrail(ml_only_candidate(), benign)
+    assert info2 is None and v2["verdict"] == "benign"
+
+
+@pytest.mark.parametrize("signals,expected", [
+    ({"flood_alerts": [{"type": "SYN_FLOOD"}]}, "syn_flood"),
+    ({"arp_multi_mac": True}, "arp_mitm"),
+    ({"amp_alerts": [{"responses": 250}]}, "dns_amp"),
+    ({"scan_alerts": [{"type": "SYN"}]}, "port_scan"),
+    ({}, None),
+])
+def test_rule_expected_category(signals, expected):
+    base = {"scan_alerts": [], "flood_alerts": [], "amp_alerts": [],
+            "arp_multi_mac": False}
+    base.update(signals)
+    assert judge_core.rule_expected_category(
+        {"rule_signals": base}) == expected
+
+
+def test_judge_candidates_applies_guardrail(tmp_path, monkeypatch):
+    monkeypatch.setattr(judge_config, "RULE_GUARDRAIL", True)
+
+    class BenignClient:
+        model_id = "always-benign"
+
+        def judge(self, system_prompt, user_content):
+            return json.dumps(good_verdict(
+                verdict="benign", category="benign_anomaly",
+                confidence=0.5, recommended_action="monitor"))
+
+    out = judge_core.judge_candidates([scan_candidate()],
+                                      client=BenignClient(),
+                                      cache_db=str(tmp_path / "c.sqlite"),
+                                      verbose=False)
+    r = out["results"][0]
+    assert r["verdict"]["verdict"] == "suspicious"
+    assert r["verdict"]["category"] == "port_scan"
+    assert r["guardrail"]["applied"] is True
+    # priority must be computed from the POST-guardrail verdict:
+    # single candidate -> norm_anom 0; 0.4*conf(0.6) + 0.3*weight(0.8)
+    assert r["priority"] == pytest.approx(0.48, abs=1e-6)
+    # the CACHE must keep the raw model verdict, not the corrected one
+    fp = judge_core.fingerprint(scan_candidate(),
+                                judge_config.PROMPT_VERSION, "always-benign")
+    cache = judge_core.JudgeCache(str(tmp_path / "c.sqlite"))
+    assert cache.get(fp)["verdict"] == "benign"
+    cache.close()
+
+    # second run: the verdict now comes from the CACHE (raw benign) and the
+    # guardrail must still be applied to it
+    out_cached = judge_core.judge_candidates([scan_candidate()],
+                                             client=BenignClient(),
+                                             cache_db=str(tmp_path
+                                                          / "c.sqlite"),
+                                             verbose=False)
+    rc = out_cached["results"][0]
+    assert rc["cached"] is True
+    assert rc["verdict"]["verdict"] == "suspicious"
+    assert rc["guardrail"]["applied"] is True
+
+    # guardrail off -> raw verdict flows through
+    monkeypatch.setattr(judge_config, "RULE_GUARDRAIL", False)
+    out2 = judge_core.judge_candidates([scan_candidate()],
+                                       client=BenignClient(),
+                                       cache_db=str(tmp_path / "c.sqlite"),
+                                       verbose=False)
+    assert out2["results"][0]["verdict"]["verdict"] == "benign"
+    assert out2["results"][0]["guardrail"] is None
+
+
+# --------------------------------------------------------------------------
+# OpenAI-compatible client against an in-process mock server
+# --------------------------------------------------------------------------
+class _MockOpenAIHandler(BaseHTTPRequestHandler):
+    reject_json_schema = False
+    reject_everything = False
+    requests_seen = []
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(
+            int(self.headers["Content-Length"])).decode("utf-8"))
+        type(self).requests_seen.append(
+            {"path": self.path, "body": body,
+             "auth": self.headers.get("Authorization")})
+        rf = body.get("response_format") or {}
+        if type(self).reject_everything:
+            self._send(400, b'{"error": "model not found"}')
+            return
+        if type(self).reject_json_schema and rf.get("type") == "json_schema":
+            self._send(400, b'{"error": "json_schema not supported"}')
+            return
+        reply = {"choices": [{"finish_reason": "stop", "message": {
+            "role": "assistant",
+            "content": json.dumps(good_verdict())}}]}
+        self._send(200, json.dumps(reply).encode("utf-8"))
+
+    def _send(self, status, data):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture()
+def mock_openai_server(monkeypatch):
+    # a developer's real key in the environment must not leak into the
+    # mock-server assertions
+    monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
+    _MockOpenAIHandler.requests_seen = []
+    _MockOpenAIHandler.reject_json_schema = False
+    _MockOpenAIHandler.reject_everything = False
+    server = HTTPServer(("127.0.0.1", 0), _MockOpenAIHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/v1"
+    server.shutdown()
+    thread.join(timeout=5)
+
+
+def test_openai_compat_happy_path(mock_openai_server):
+    client = OpenAICompatClient(model="test-model",
+                                base_url=mock_openai_server,
+                                api_key="test-key", timeout_s=10,
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+    raw = client.judge("system prompt", "{\"candidate_id\": \"x\"}")
+    verdict = judge_core.validate_verdict(json.loads(raw))
+    assert verdict["category"] == "port_scan"
+    req = _MockOpenAIHandler.requests_seen[0]
+    assert req["path"] == "/v1/chat/completions"
+    assert req["auth"] == "Bearer test-key"
+    assert req["body"]["model"] == "test-model"
+    assert req["body"]["messages"][0]["role"] == "system"
+    assert req["body"]["response_format"]["type"] == "json_schema"
+    assert (req["body"]["response_format"]["json_schema"]["schema"]
+            == judge_core.VERDICT_SCHEMA)
+
+
+def test_openai_compat_falls_back_to_json_object(mock_openai_server):
+    _MockOpenAIHandler.reject_json_schema = True
+    client = OpenAICompatClient(model="test-model",
+                                base_url=mock_openai_server,
+                                timeout_s=10,
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+    raw = client.judge("system prompt", "{}")
+    assert json.loads(raw)["category"] == "port_scan"
+    kinds = [r["body"]["response_format"]["type"]
+             for r in _MockOpenAIHandler.requests_seen]
+    assert kinds == ["json_schema", "json_object"]
+    # no Authorization header when no key was given
+    assert _MockOpenAIHandler.requests_seen[-1]["auth"] is None
+    # the downgrade sticks: the next call skips json_schema entirely
+    client.judge("system prompt", "{}")
+    assert (_MockOpenAIHandler.requests_seen[-1]["body"]
+            ["response_format"]["type"]) == "json_object"
+
+
+def test_openai_compat_unrelated_400_reports_both_attempts(
+        mock_openai_server):
+    from llm_judge.llm_clients import JudgeClientError
+    _MockOpenAIHandler.reject_everything = True
+    client = OpenAICompatClient(model="no-such-model",
+                                base_url=mock_openai_server, timeout_s=10,
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+    with pytest.raises(JudgeClientError) as exc:
+        client.judge("system prompt", "{}")
+    msg = str(exc.value)
+    assert "json_schema attempt" in msg and "json_object attempt" in msg
+    assert "model not found" in msg          # server body surfaced
+    assert client._schema_unsupported is False  # no bogus downgrade sticks
+
+
+def test_openai_compat_requires_model():
+    from llm_judge.llm_clients import JudgeClientError
+    with pytest.raises(JudgeClientError):
+        OpenAICompatClient(model="", base_url="http://localhost:9/v1")
+
+
+# --------------------------------------------------------------------------
+# Benchmark harness + committed fixtures
+# --------------------------------------------------------------------------
+def test_fixture_file_is_valid():
+    fixtures = benchmark.load_fixtures()
+    assert len(fixtures) >= 8
+    kinds = {f["truth_kind"] for f in fixtures}
+    assert kinds == {"attack", "benign"}
+    cats = {f["truth_category"] for f in fixtures}
+    assert {"port_scan", "arp_mitm", "syn_flood",
+            "dns_amp", "benign_anomaly"} <= cats
+    for f in fixtures:
+        c = f["candidate"]
+        assert {"candidate_id", "kind", "features",
+                "ml_signals", "rule_signals"} <= set(c)
+        assert f["truth_category"] in judge_core.CATEGORIES
+        # truth_kind and truth_category must agree - the scoring
+        # partitions rely on it
+        expected_kind = ("benign" if f["truth_category"] == "benign_anomaly"
+                         else "attack")
+        assert f["truth_kind"] == expected_kind
+        json.dumps(c)  # serializable
+
+
+class OracleClient:
+    """Answers every fixture correctly using the same rule logic - the
+    benchmark of the benchmark: a perfect model must score 1.0."""
+    model_id = "oracle"
+
+    def judge(self, system_prompt, user_content):
+        cand = json.loads(user_content)
+        cat = judge_core.rule_expected_category(cand) or "benign_anomaly"
+        verdict = "benign" if cat == "benign_anomaly" else "malicious"
+        action = "monitor" if verdict == "benign" else "investigate"
+        return json.dumps(good_verdict(verdict=verdict, category=cat,
+                                       confidence=0.9,
+                                       recommended_action=action))
+
+
+class AlwaysBenignClient:
+    """Worst realistic case: the failure mode measured on a small local
+    model. The guardrail must still rescue every rule-fired attack."""
+    model_id = "always-benign"
+
+    def judge(self, system_prompt, user_content):
+        return json.dumps(good_verdict(
+            verdict="benign", category="benign_anomaly", confidence=0.5,
+            recommended_action="monitor"))
+
+
+def test_benchmark_oracle_scores_perfect():
+    report = benchmark.run_benchmark(OracleClient(), guardrail=True,
+                                     verbose=False)
+    assert report["category_accuracy"] == 1.0
+    assert report["detection_rate"] == 1.0
+    assert report["benign_accuracy"] == 1.0
+    assert report["dropped"] == 0
+    assert report["guardrail_saves"] == 0
+    assert "GOOD" in benchmark.verdict_line(report)
+
+
+def test_benchmark_guardrail_rescues_always_benign_model():
+    with_gr = benchmark.run_benchmark(AlwaysBenignClient(), guardrail=True,
+                                      verbose=False)
+    without_gr = benchmark.run_benchmark(AlwaysBenignClient(),
+                                         guardrail=False, verbose=False)
+    # without the guardrail the model detects nothing
+    assert without_gr["detection_rate"] == 0.0
+    # with it, EVERY rule-fired attack is rescued to suspicious - and every
+    # rescue is counted as a save (all attack fixtures are rule-fired)
+    n_attacks = sum(1 for f in benchmark.load_fixtures()
+                    if f["truth_kind"] == "attack")
+    assert with_gr["detection_rate"] == 1.0
+    assert with_gr["guardrail_saves"] == n_attacks
+    # benign fixtures stay benign either way
+    assert with_gr["benign_accuracy"] == 1.0
+
+
+class FlakyOracleClient(OracleClient):
+    """Oracle that fails hard (invalid JSON twice) on every syn_flood and
+    dns_amp fixture - models a provider that chokes on some inputs."""
+    model_id = "flaky-oracle"
+
+    def judge(self, system_prompt, user_content):
+        cand = json.loads(user_content)
+        if judge_core.rule_expected_category(cand) in ("syn_flood",
+                                                       "dns_amp"):
+            return "***not json***"
+        return super().judge(system_prompt, user_content)
+
+
+def test_benchmark_dropped_fixtures_count_as_wrong():
+    """A model that errors on attack fixtures must NOT get an inflated
+    score - drops count against every metric (review finding)."""
+    fixtures = benchmark.load_fixtures()
+    n = len(fixtures)
+    n_attacks = sum(1 for f in fixtures if f["truth_kind"] == "attack")
+    n_flaky = sum(1 for f in fixtures
+                  if f["truth_category"] in ("syn_flood", "dns_amp"))
+    assert n_flaky > 0
+    report = benchmark.run_benchmark(FlakyOracleClient(), guardrail=True,
+                                     verbose=False)
+    assert report["dropped"] == n_flaky
+    # detection_rate divides by ALL attack fixtures, drops included
+    assert report["detection_rate"] == round(
+        (n_attacks - n_flaky) / n_attacks, 3)
+    assert report["category_accuracy"] == round((n - n_flaky) / n, 3)
+    assert "every attack" not in benchmark.verdict_line(report)
+    # dropped rows carry the error and no latency
+    err_rows = [r for r in report["rows"] if r["error"]]
+    assert len(err_rows) == n_flaky
+    assert all(r["latency_ms"] is None for r in err_rows)
