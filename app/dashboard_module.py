@@ -6927,30 +6927,6 @@ def _session_info_cards():
         "border":f"1px solid {GLASS_BORDER}"})
 
 
-def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
-    """Sidebar with grouped nav items, filtered by the active top-level tab
-    AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
-    if active_session == "s2" and S2 is None:
-        active_session = "s1"
-    items_by_sec = {}
-    for nid, icon, lbl, sec, scope in NAV_ITEMS:
-        if SECTION_TO_TAB.get(sec, "analyze") != active_tab:
-            continue
-        if scope != "any" and scope != active_session:
-            continue
-        items_by_sec.setdefault(sec, []).append((nid, icon, lbl))
-
-    children = []
-    has_s1 = S1 is not None
-    has_s2 = S2 is not None
-    # gather worker states once for the whole sidebar
-    _wsum = _worker_state_summary()
-
-    needs_s2 = NEEDS_S2_IDS
-
-    children.append(_session_info_cards())
-
-
 def _github_upload_url():
     """Best-effort: derive the GitHub 'upload files' URL for incoming/ from
     the current fork's `git remote get-url origin`. Falls back to the
@@ -7022,6 +6998,29 @@ def _render_ai_judge_link(session, session_key):
                    "fontFamily":"'Inter Tight', sans-serif"}),
     ], style={"marginTop":"8px"})
 
+
+def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
+    """Sidebar with grouped nav items, filtered by the active top-level tab
+    AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
+    if active_session == "s2" and S2 is None:
+        active_session = "s1"
+    items_by_sec = {}
+    for nid, icon, lbl, sec, scope in NAV_ITEMS:
+        if SECTION_TO_TAB.get(sec, "analyze") != active_tab:
+            continue
+        if scope != "any" and scope != active_session:
+            continue
+        items_by_sec.setdefault(sec, []).append((nid, icon, lbl))
+
+    children = []
+    has_s1 = S1 is not None
+    has_s2 = S2 is not None
+    # gather worker states once for the whole sidebar
+    _wsum = _worker_state_summary()
+
+    needs_s2 = NEEDS_S2_IDS
+
+    children.append(_session_info_cards())
     if has_s1:
         # disable both S1 replaces if S1 worker is busy
         _s1_disabled = _wsum["s1_busy"]
