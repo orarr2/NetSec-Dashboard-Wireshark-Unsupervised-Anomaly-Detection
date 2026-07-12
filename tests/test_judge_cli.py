@@ -330,3 +330,92 @@ def test_main_returns_nonzero_when_pcap_missing(tmp_path):
     rc = judge_cli.main([str(tmp_path / "does-not-exist.pcap"),
                          "--output", str(tmp_path / "verdicts.json")])
     assert rc == 2
+
+
+# --------------------------------------------------------------------------
+# Analyst commentary
+# --------------------------------------------------------------------------
+def test_analyst_commentary_returns_prose(monkeypatch):
+    """A schema-less follow-up client yields a plain paragraph the CLI
+    inserts at the top of the report."""
+    from llm_judge import judge_core
+
+    class ProseClient:
+        model_id = "fake-prose"
+
+        def judge(self, sp, uc):
+            # Simulate a real analyst reply.
+            return ("The capture shows a single host running a SYN "
+                    "scan against many destinations. Priority for a "
+                    "human review is high; recommend blocking that IP "
+                    "at the perimeter and correlating with proxy logs.")
+
+    monkeypatch.setattr("llm_judge.llm_clients.make_client",
+                        lambda **_k: ProseClient())
+    ctx = {"n_packets": 2020, "duration_s": 71.2, "total_ips": 5,
+           "top_protocols": {"TCP": 2007},
+           "ml": {"isolation_forest_anomalies": 1, "dbscan_noise": 1,
+                  "dbscan_clusters": 1, "dbscan_meaningful": True},
+           "rules": {"scan_alerts": 1, "flood_alerts": 0,
+                     "amp_alerts": 0, "arp_spoofing_ips": 0,
+                     "dns_nxdomain": 0, "dns_long_queries": 0,
+                     "scan_alerts_summary": []},
+           "not_flagged_ips": []}
+    verdicts = {"results": [{
+        "candidate_id": "192.168.1.10", "kind": "ip", "cached": False,
+        "priority": 0.48, "latency_ms": 100, "guardrail": None,
+        "verdict": {"verdict": "suspicious", "category": "port_scan",
+                    "confidence": 0.6, "evidence_features": [],
+                    "reasoning": "SYN scan.",
+                    "recommended_action": "investigate"},
+    }]}
+    text = judge_core.analyst_commentary(None, ctx, verdicts,
+                                          session_label="S1")
+    assert "SYN scan" in text or "port scan" in text.lower()
+    assert "\n" not in text                # single paragraph
+    assert len(text) <= 2000
+
+
+def test_analyst_commentary_swallows_errors(monkeypatch):
+    """A dead provider must not crash the batch."""
+    from llm_judge import judge_core
+
+    class DeadClient:
+        model_id = "fake-dead"
+
+        def judge(self, sp, uc):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr("llm_judge.llm_clients.make_client",
+                        lambda **_k: DeadClient())
+    text = judge_core.analyst_commentary(None, {"n_packets": 0}, {"results": []})
+    assert text.startswith("(Analyst commentary unavailable")
+    assert "boom" in text
+
+
+def test_main_includes_commentary_in_json_and_markdown(tmp_path):
+    """End-to-end: the CLI writes analyst_commentary to both outputs."""
+    out, assembled, client = _judged_batch()
+    ctx = _fake_context()
+    out["analyst_commentary"] = ("Overall the capture is dominated by "
+                                 "DNS amplification traffic aimed at "
+                                 "the victim; recommend blocking the "
+                                 "reflector list and rate-limiting "
+                                 "UDP/53 at the edge.")
+    fake_pcap = tmp_path / "sample.pcap"
+    fake_pcap.write_bytes(b"placeholder pcap bytes")
+
+    with mock.patch.object(judge_cli, "analyze_and_judge",
+                           return_value=(out, assembled, client, ctx)):
+        rc = judge_cli.main([str(fake_pcap),
+                             "--output", str(tmp_path / "verdicts.json"),
+                             "--markdown", str(tmp_path / "verdicts.md")])
+    assert rc == 0
+    data = json.loads((tmp_path / "verdicts.json").read_text(encoding="utf-8"))
+    assert "analyst_commentary" in data
+    assert "DNS amplification" in data["analyst_commentary"]
+    md = (tmp_path / "verdicts.md").read_text(encoding="utf-8")
+    assert "## Analyst commentary" in md
+    assert "> Overall the capture is dominated by" in md
+    # The commentary must appear before the pipeline stats section
+    assert md.index("## Analyst commentary") < md.index("## Pipeline stats")

@@ -445,6 +445,79 @@ def rule_expected_category(candidate):
     return None
 
 
+COMMENTARY_SYSTEM_PROMPT = """You are a network-security analyst reviewing
+one packet capture that has been fully processed by an automated pipeline.
+You receive a JSON summary of what the pipeline found and the per-candidate
+verdicts. Write a brief analyst commentary in 3-5 sentences that:
+
+1. States what the capture likely shows overall (attack, benign traffic
+   with anomalies, or mixed).
+2. Names the most concerning finding, if any, and why.
+3. Notes any relationships between findings (e.g. the same IP appears
+   under multiple detectors, one host explains multiple alerts).
+4. Ends with a plain-language suggested next action for the human analyst.
+
+Respond in prose only. No bullet lists, no JSON, no markdown headings, no
+code fences. Do not restate numbers verbatim - interpret them. Keep it
+under 6 sentences and grounded in the JSON you received; never invent
+facts."""
+
+
+def analyst_commentary(client, context, verdicts, session_label="S1"):
+    """One extra LLM call at the end of a judge run: turn all findings
+    into a free-form analyst-style paragraph. Uses the same provider as
+    the judge but with the verdict schema turned off, so the response is
+    plain prose.
+
+    Never raises: on any failure, returns a short error notice string so
+    the caller can still write out the JSON/Markdown report."""
+    try:
+        # A fresh, schema-less client of the same provider - the passed-in
+        # client is bound to the strict verdict schema and would try to
+        # coerce prose into JSON.
+        try:
+            from . import llm_clients
+        except ImportError:
+            import llm_clients
+        prose_client = llm_clients.make_client(verdict_schema=None)
+
+        payload = {
+            "session": session_label,
+            "pipeline_stats": {
+                "packets": context.get("n_packets"),
+                "duration_s": context.get("duration_s"),
+                "total_ips": context.get("total_ips"),
+                "top_protocols": context.get("top_protocols"),
+                "ml": context.get("ml"),
+                "rules": context.get("rules"),
+            },
+            "verdicts": [
+                {
+                    "candidate": r["candidate_id"],
+                    "verdict": r["verdict"]["verdict"],
+                    "category": r["verdict"]["category"],
+                    "confidence": r["verdict"]["confidence"],
+                    "priority": r["priority"],
+                    "guardrail_applied": bool(r.get("guardrail")),
+                    "reasoning": r["verdict"]["reasoning"],
+                }
+                for r in verdicts.get("results", [])
+            ],
+            "not_flagged_sample": [
+                e["ip"] for e in
+                (context.get("not_flagged_ips") or [])[:10]
+            ],
+        }
+        raw = prose_client.judge(COMMENTARY_SYSTEM_PROMPT,
+                                 json.dumps(payload, indent=2))
+        # Normalize: single paragraph, trimmed.
+        text = " ".join(raw.strip().split())
+        return text[:2000]
+    except Exception as e:
+        return (f"(Analyst commentary unavailable: "
+                f"{type(e).__name__}: {e})")
+
+
 def apply_rule_guardrail(candidate, verdict):
     """Return (effective_verdict, guardrail_info). guardrail_info is None
     when nothing was overridden."""

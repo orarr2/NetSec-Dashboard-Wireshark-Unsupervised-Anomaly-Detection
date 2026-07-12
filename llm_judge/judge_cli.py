@@ -120,6 +120,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
     """Turn a judged batch into a GitHub-Issue-ready markdown report."""
     stats = out["stats"]
     ctx = context or {}
+    commentary = out.get("analyst_commentary")
     lines = [
         f"# Judge verdicts — `{os.path.basename(pcap_path)}`",
         "",
@@ -134,6 +135,15 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         f"| **Candidates judged** | {stats['judged']} · dropped: {stats['dropped']} · capped: {len(assembled['capped'])} |",
         "",
     ]
+
+    # ----- 0. Analyst commentary (top of report - the human read) --------
+    if commentary:
+        lines += [
+            "## Analyst commentary",
+            "",
+            f"> {commentary}",
+            "",
+        ]
 
     # ----- 2. Pipeline stats ---------------------------------------------
     if ctx:
@@ -328,6 +338,10 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
         print(f"[cli] model={client.model_id} - judging...", flush=True)
     out = judge_core.judge_candidates(assembled["candidates"], client=client,
                                       verbose=verbose)
+    if verbose:
+        print("[cli] generating analyst commentary...", flush=True)
+    out["analyst_commentary"] = judge_core.analyst_commentary(
+        client, context, out, session_label=label)
     return out, assembled, client, context
 
 
@@ -362,6 +376,7 @@ def main(argv=None):
             "model": client.model_id,
             "prompt_version": judge_config.PROMPT_VERSION,
             "guardrail": bool(judge_config.RULE_GUARDRAIL),
+            "analyst_commentary": out.get("analyst_commentary"),
             "stats": out["stats"],
             "results": out["results"],
             "dropped": out["dropped"],
