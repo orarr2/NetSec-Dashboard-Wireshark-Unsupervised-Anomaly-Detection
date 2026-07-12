@@ -1152,14 +1152,6 @@ def process_session(S, my_ip):
         S["lstm_errors"]    = [0.0] * 10
         S["lstm_threshold"] = 0.0
     S["_security_findings"] = run_security_scans(S)
-    # Fresh capture -> clear any AI Second Opinion verdicts
-    # from a previous run in this notebook session.
-    try:
-        from ai_advisor_panel import reset_cache_for_session
-        reset_cache_for_session("s1")
-        reset_cache_for_session("s2")
-    except Exception:
-        pass
     return S
 
 
@@ -4684,22 +4676,6 @@ CARD = {"background":GLASS_BG, "padding":"18px", "borderRadius":"18px",
 
 from dash import MATCH, ALL
 
-try:
-    from ai_advisor_panel import (
-        render_ai_advisor_panel as _render_ai_advisor_panel,
-        render_verdicts_card as _render_ai_verdicts_card,
-        run_judge as _run_ai_judge,
-        AI_JUDGE_CACHE as _AI_JUDGE_CACHE,
-        reset_cache_for_session as _reset_ai_cache,
-        _palette as _ai_palette,
-    )
-    _AI_ADVISOR_IMPORTED = True
-    _AI_ADVISOR_IMPORT_ERROR = None
-except Exception as _ai_exc:
-    _AI_ADVISOR_IMPORTED = False
-    _AI_ADVISOR_IMPORT_ERROR = f"{type(_ai_exc).__name__}: "
-    _AI_ADVISOR_IMPORT_ERROR += str(_ai_exc)
-
 
 NAV_ITEMS = [
     # (nav_id, icon, label, section, scope)
@@ -4751,9 +4727,6 @@ NAV_ITEMS = [
     ("adv_tls_s2",       "\U0001F510", "TLS Fingerprint",         "security",  "s2"),
     ("adv_killchain_s2", "\u2694\uFE0F", "Kill-Chain Risk",         "security",  "s2"),
 
-    ("ai_advisor_s1",    "\U0001F9E0", "AI Second Opinion",       "security",  "s1"),
-    ("ai_advisor_s2",    "\U0001F9E0", "AI Second Opinion",       "security",  "s2"),
-
     ("cmp_traffic",      "\U0001F504", "Traffic S1 vs S2",        "compare",   "s2"),
     ("cmp_new_gone",     "\U0001F195", "New / Gone IPs",          "compare",   "s2"),
     ("cmp_delta",        "\U0001F4C9", "Traffic Delta",           "compare",   "s2"),
@@ -4792,7 +4765,6 @@ SESSION_TWIN = {
     "adv_dns_tunnel_s1":"adv_dns_tunnel_s2",
     "adv_dga_s1":"adv_dga_s2", "adv_arp_dhcp_s1":"adv_arp_dhcp_s2",
     "adv_tls_s1":"adv_tls_s2", "adv_killchain_s1":"adv_killchain_s2",
-    "ai_advisor_s1":"ai_advisor_s2",
 }
 SESSION_TWIN.update({v: k for k, v in list(SESSION_TWIN.items())})
 
@@ -6428,34 +6400,6 @@ def _get_chart_content(chart_id):
     if chart_id == "ip_history":
         children.append(_render_ip_browsing_history())
         return html.Div(children)
-
-    if chart_id in ("ai_advisor_s1", "ai_advisor_s2"):
-        _sess = "s1" if chart_id == "ai_advisor_s1" else "s2"
-        _S = S1 if _sess == "s1" else S2
-        if not _AI_ADVISOR_IMPORTED:
-            return html.Div([
-                html.H4("\U0001F9E0 AI Second Opinion",
-                    style={"color":INK,"fontWeight":"500",
-                           "marginBottom":"14px",
-                           "fontFamily":"'Newsreader', Georgia, serif",
-                           "fontSize":"1.6rem","letterSpacing":"-0.02em"}),
-                html.Div("Optional add-on not importable: "
-                    + (_AI_ADVISOR_IMPORT_ERROR or ""),
-                    style={"color":INK_DIM,
-                           "fontFamily":"'JetBrains Mono', monospace",
-                           "fontSize":"0.85rem",
-                           "padding":"10px 14px",
-                           "background":"rgba(0,0,0,0.25)",
-                           "borderRadius":"8px"})])
-        _pal = _ai_palette(INK=INK, INK_DIM=INK_DIM, INK_MUTE=INK_MUTE,
-                           VIOLET=VIOLET, VIOLET_BRIGHT=VIOLET_BRIGHT,
-                           CYAN=CYAN, GLASS_BG=GLASS_BG,
-                           GLASS_BORDER=GLASS_BORDER,
-                           GLASS_BORDER_STRONG=GLASS_BORDER_STRONG)
-        _findings = (_S.get("_security_findings")
-                     if _S is not None else None)
-        return _render_ai_advisor_panel(_sess, _S, _findings,
-                                        palette=_pal)
 
     _ADV_SPECS = {
         "adv_beaconing":  ("beaconing", "T1071 / T1571 - regular outbound traffic to a single external peer (callback to command-and-control infrastructure)."),
@@ -9784,56 +9728,3 @@ print(f"  Dashboard -> http://127.0.0.1:{PORT}")
 print("  Stop: press Interrupt (square button) in Jupyter")
 print("=" * 52)
 app.run(debug=False, port=PORT, use_reloader=False, jupyter_mode="external")
-
-# ---------- AI Second Opinion: run-button callback -----------------------
-@app.callback(
-    Output({"type":"ai-advisor-content","session":MATCH}, "children"),
-    Input({"type":"ai-run-btn","session":MATCH}, "n_clicks"),
-    State({"type":"ai-run-btn","session":MATCH}, "id"),
-    prevent_initial_call=True,
-)
-def _run_ai_advisor_click(n_clicks, id_):
-    """Click 'Run AI Second Opinion' (or 'Re-run'): fires the judge on the
-    matching session's S and its cached findings, stores the result in
-    AI_JUDGE_CACHE, and re-renders the panel content. dcc.Loading (wrapped
-    around this content by render_ai_advisor_panel) shows a spinner during
-    the wait."""
-    if not n_clicks:
-        raise PreventUpdate
-    if not _AI_ADVISOR_IMPORTED:
-        return html.Div("AI add-on not available.",
-                        style={"color":INK_DIM})
-    sess = id_["session"]
-    S = S1 if sess == "s1" else S2
-    if S is None:
-        return html.Div(f"{sess.upper()} is not loaded.",
-                        style={"color":INK_DIM})
-    findings = S.get("_security_findings")
-    if findings is None:
-        try:
-            findings = run_security_scans(S)
-            S["_security_findings"] = findings
-        except Exception as e:
-            return html.Div(f"Could not recompute findings: {e}",
-                            style={"color":"#f59e0b"})
-    pal = _ai_palette(INK=INK, INK_DIM=INK_DIM, INK_MUTE=INK_MUTE,
-                     VIOLET=VIOLET, VIOLET_BRIGHT=VIOLET_BRIGHT, CYAN=CYAN,
-                     GLASS_BG=GLASS_BG, GLASS_BORDER=GLASS_BORDER,
-                     GLASS_BORDER_STRONG=GLASS_BORDER_STRONG)
-    try:
-        out = _run_ai_judge(S, findings)
-        _AI_JUDGE_CACHE[sess] = out
-        return _render_ai_verdicts_card(out, sess, pal)
-    except Exception as e:
-        return html.Div([
-            html.Div("Judge failed:",
-                     style={"color":"#f59e0b","fontWeight":"600",
-                            "marginBottom":"6px"}),
-            html.Pre(str(e),
-                     style={"color":INK_DIM,
-                            "fontFamily":"'JetBrains Mono', monospace",
-                            "fontSize":"0.82rem",
-                            "background":"rgba(0,0,0,0.25)",
-                            "padding":"10px 14px","borderRadius":"8px",
-                            "overflow":"auto"}),
-        ])
