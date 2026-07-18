@@ -126,11 +126,19 @@ Requires `tshark` on PATH (installed with Wireshark), Ollama running
 locally for the free provider, or `ANTHROPIC_API_KEY` set for Claude. See
 `llm_judge/README.md` for env var options.
 
+Want a second opinion on every verdict? Set
+`LLM_JUDGE_PANEL=<model1>,<model2>[,...]` and the same command runs an
+**expert panel**: N models judge independently, argue when they disagree,
+and the report carries a per-judge participation audit. Details in
+`llm_judge/README.md`.
+
 ### C. Open the notebook (interactive, exploratory)
 
-`llm_judge/LLM_Judge_Notebook.ipynb` in Jupyter - same code, but you can
-poke around, benchmark models, and see the verdict table inline. This is
-the entry point of the main dashboard flow (`app/Network_Security_Dashboard.ipynb`).
+`llm_judge/LLM_Judge_Notebook.ipynb` in Jupyter - same code as the CLI,
+but you can poke around, benchmark models, run the expert panel, and see
+the verdict table inline. (The main dashboard has its own separate
+notebook, `app/Network_Security_Dashboard.ipynb`, which does not depend
+on any of this.)
 
 ## Testing
 

@@ -27,8 +27,8 @@ for _p in (_ROOT, os.path.join(_ROOT, "attack_tests")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from llm_judge import judge_config, judge_core        # noqa: E402
-from llm_judge.llm_clients import make_client         # noqa: E402
+from llm_judge import judge_config, judge_core                  # noqa: E402
+from llm_judge.llm_clients import make_client, make_panel_clients  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -138,6 +138,17 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         lines.append(
             f"| **Committee** | `{stats['model']}` + `{stats.get('model_b')}` "
             f"· {stats.get('needs_review', 0)} need human review |")
+    if stats.get("panel"):
+        lines.append(
+            f"| **Panel** | {' + '.join(f'`{m}`' for m in stats['models'])} "
+            f"· debate {'on' if stats.get('debate_enabled') else 'off'} "
+            f"· {stats.get('debated_candidates', 0)} debated "
+            f"· {stats.get('needs_review', 0)} need human review |")
+        if stats.get("panel_init_failures"):
+            excluded = ", ".join(f"`{f['entry']}`"
+                                 for f in stats["panel_init_failures"])
+            lines.append(f"| **Excluded judges** | {excluded} "
+                         f"(failed to initialize; details in run log) |")
     lines.append("")
 
     # ----- 0. Analyst commentary (top of report - the human read) --------
@@ -215,8 +226,8 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         for i, r in enumerate(out["results"], 1):
             v = r["verdict"]
             flags = ("⚑" if r.get("guardrail") else "") \
-                + ("⚖" if (r.get("committee") or {}).get("needs_human_review")
-                   else "")
+                + ("⚖" if ((r.get("committee") or r.get("panel") or {})
+                           .get("needs_human_review")) else "")
             reasoning = v["reasoning"].replace("|", "\\|")
             lines.append(
                 f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
@@ -231,6 +242,53 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                 "verdict is preserved in `verdicts.json`.",
                 "",
             ]
+        panel_review = [r for r in out["results"]
+                        if (r.get("panel") or {}).get("needs_human_review")]
+        if panel_review:
+            models = stats.get("models") or []
+            lines += [
+                "> ⚖ = the panel did not reach consensus (or a judge "
+                "failed): the effective verdict is the fail-safe, more "
+                "severe side, and the candidate is flagged for human "
+                "review. Per-judge positions and rebuttals are in "
+                "`verdicts.json` under `panel`.",
+                "",
+                "### Panel disputes",
+                "",
+                "| Candidate | " + " | ".join(f"`{m}`" for m in models)
+                + " | Effective | Note |",
+                "|---|" + "---|" * len(models) + "---|---|",
+            ]
+            for r in panel_review:
+                by_model = {j["model"]: j for j in r["panel"]["judges"]}
+                cells = []
+                for m in models:
+                    j = by_model.get(m)
+                    if j is None or j.get("failed"):
+                        cells.append("_failed_")
+                    else:
+                        jv = j["verdict"]
+                        cell = f"{jv['verdict']} ({jv['confidence']})"
+                        if j.get("revised"):
+                            cell += " ↺"
+                        cells.append(cell)
+                note = (r["panel"].get("note") or "").replace("|", "\\|")
+                lines.append(
+                    f"| `{r['candidate_id']}` | " + " | ".join(cells)
+                    + f" | **{r['verdict']['verdict']}** | {note} |")
+            lines.append("")
+            rebutted = [
+                (r["candidate_id"], j)
+                for r in panel_review for j in r["panel"]["judges"]
+                if j.get("rebuttal")]
+            if rebutted:
+                lines += ["**Debate positions (defended verdicts):**", ""]
+                for cand_id, j in rebutted:
+                    lines.append(
+                        f"- `{cand_id}` — `{j['model']}` "
+                        f"({j['stance']}): {j['rebuttal']}")
+                lines.append("")
+
         review = [r for r in out["results"]
                   if (r.get("committee") or {}).get("needs_human_review")]
         if review:
@@ -313,6 +371,39 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             "",
         ]
 
+    # ----- 6.5 Panel participation (the per-judge audit) -----------------
+    if stats.get("panel"):
+        pr = stats["panel_report"]
+        lines += [
+            "## Panel participation",
+            "",
+            "Per-judge audit of this run: what each model received, how "
+            "often it answered validly, revised its position in debate, "
+            "and aligned with the final verdict. A failing judge never "
+            "blocks the panel - its failures are counted here and the "
+            "remaining judges carry the batch.",
+            "",
+            "| Model | Received | Valid | Failures | Debates | Revised | "
+            "Agreed with final | Cache hits | Mean latency |",
+            "|---|--:|--:|--:|--:|--:|--:|--:|--:|",
+        ]
+        for m in stats["models"]:
+            row = pr[m]
+            ml = (f"{row['mean_latency_ms']} ms"
+                  if row["mean_latency_ms"] is not None else "—")
+            lines.append(
+                f"| `{m}` | {row['assigned']} | {row['valid_verdicts']} | "
+                f"{row['failures']} | {row['debates']} | {row['revised']} | "
+                f"{row['agreed_with_final']} | {row['cache_hits']} | {ml} |")
+        lines.append("")
+        examples = [(m, pr[m]["failure_examples"]) for m in stats["models"]
+                    if pr[m]["failure_examples"]]
+        for m, ex in examples:
+            lines.append(f"- `{m}` failure examples: "
+                         + "; ".join(ex[:3]))
+        if examples:
+            lines.append("")
+
     # ----- 7. How to interpret ------------------------------------------
     lines += [
         "## How to interpret",
@@ -330,6 +421,10 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         "model. When the model tries to, the guardrail overrides to "
         "`suspicious` with the rule-implied category; the raw model verdict "
         "stays in `verdicts.json` for auditing.",
+        "- **⚖ Panel review**: the panel's judges still disagreed after the "
+        "debate round (or too few judges answered), so the fail-safe "
+        "verdict is shown and a human should make the final call. ↺ marks "
+        "a judge that changed its position during the debate.",
         "",
         "---",
         "",
@@ -348,8 +443,8 @@ def _validate_committee_config():
     pipeline run. The default committee model B is a Groq model; on any
     other provider it would silently fail every Judge B call, flooding
     needs_human_review on 100% of candidates with no visible error."""
-    if not judge_config.LLM_JUDGE_COMMITTEE:
-        return
+    if judge_config.LLM_JUDGE_PANEL or not judge_config.LLM_JUDGE_COMMITTEE:
+        return  # panel takes precedence over the legacy committee flag
     provider = judge_config.LLM_JUDGE_PROVIDER.lower()
     explicitly_set = "LLM_JUDGE_COMMITTEE_MODEL_B" in os.environ
     if provider != "openai_compat" and not explicitly_set:
@@ -361,9 +456,35 @@ def _validate_committee_config():
             f"exists on '{provider}'.")
 
 
+def _build_panel():
+    """Parse LLM_JUDGE_PANEL and construct its clients.
+
+    Returns (entries, clients, init_failures). Raises ValueError on a spec
+    that cannot yield a working panel (bad syntax, duplicates, or fewer
+    than two constructible judges) - loudly, BEFORE the expensive pipeline
+    run, mirroring _validate_committee_config."""
+    entries = judge_core.parse_panel_spec(judge_config.LLM_JUDGE_PANEL)
+    clients, init_failures = make_panel_clients(
+        entries, verdict_schema=judge_core.VERDICT_SCHEMA)
+    for f in init_failures:
+        print(f"[cli] WARNING: panel judge {f['entry']} failed to "
+              f"initialize and is excluded: {f['error']}", flush=True)
+    if len(clients) < 2:
+        raise ValueError(
+            f"LLM_JUDGE_PANEL={judge_config.LLM_JUDGE_PANEL!r}: only "
+            f"{len(clients)} of {len(entries)} judges could be "
+            f"constructed - a panel needs at least two. Failures: "
+            + "; ".join(f"{f['entry']}: {f['error']}"
+                        for f in init_failures))
+    return entries, clients, init_failures
+
+
 def analyze_and_judge(pcap_path, label="S1", verbose=True):
     """Run the pipeline + judge; returns (out, assembled, client, context)."""
     _validate_committee_config()
+    panel = None
+    if judge_config.LLM_JUDGE_PANEL:
+        panel = _build_panel()  # fail fast before the expensive pipeline
     import run_pipeline as rp  # imports tshark - keep lazy for tests
 
     if verbose:
@@ -384,8 +505,21 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
               f"({len(assembled['capped'])} capped, "
               f"{len(context['not_flagged_ips'])} not-flagged)", flush=True)
 
-    client = make_client(verdict_schema=judge_core.VERDICT_SCHEMA)
-    if judge_config.LLM_JUDGE_COMMITTEE:
+    commentary_provider, commentary_model = None, None
+    if panel is not None:
+        entries, clients, init_failures = panel
+        client = clients[0]
+        commentary_provider, commentary_model = entries[0]
+        if verbose:
+            print(f"[cli] panel: {' + '.join(c.model_id for c in clients)} "
+                  f"(debate {'on' if judge_config.LLM_JUDGE_DEBATE else 'off'})"
+                  f" - judging...", flush=True)
+        out = judge_core.judge_candidates_panel(
+            assembled["candidates"], clients=clients, verbose=verbose)
+        if init_failures:
+            out["stats"]["panel_init_failures"] = init_failures
+    elif judge_config.LLM_JUDGE_COMMITTEE:
+        client = make_client(verdict_schema=judge_core.VERDICT_SCHEMA)
         client_b = make_client(verdict_schema=judge_core.VERDICT_SCHEMA,
                                model=judge_config.COMMITTEE_MODEL_B)
         if verbose:
@@ -395,6 +529,7 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
             assembled["candidates"], clients=[client, client_b],
             verbose=verbose)
     else:
+        client = make_client(verdict_schema=judge_core.VERDICT_SCHEMA)
         if verbose:
             print(f"[cli] model={client.model_id} - judging...", flush=True)
         out = judge_core.judge_candidates(assembled["candidates"],
@@ -402,7 +537,8 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
     if verbose:
         print("[cli] generating analyst commentary...", flush=True)
     out["analyst_commentary"] = judge_core.analyst_commentary(
-        client, context, out, session_label=label)
+        client, context, out, session_label=label,
+        provider=commentary_provider, model=commentary_model)
     return out, assembled, client, context
 
 
@@ -435,6 +571,7 @@ def main(argv=None):
                                     .isoformat(timespec="seconds"),
             "provider": judge_config.LLM_JUDGE_PROVIDER,
             "model": client.model_id,
+            "models": out["stats"].get("models", [client.model_id]),
             "prompt_version": judge_config.PROMPT_VERSION,
             "guardrail": bool(judge_config.RULE_GUARDRAIL),
             "analyst_commentary": out.get("analyst_commentary"),

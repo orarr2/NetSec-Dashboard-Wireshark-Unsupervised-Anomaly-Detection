@@ -65,6 +65,48 @@ models are thus usable for detection-level triage; their raw judgment
 quality only shows on candidates no rule covers, which is where a
 stronger model still earns its keep.
 
+## Expert panel — a network of judges (opt-in)
+
+Instead of trusting one model, `LLM_JUDGE_PANEL` runs every candidate
+through **N independent judges** and makes them argue before anything is
+reported:
+
+```bash
+# Two Groq models on one key (comma-separated, same provider):
+set LLM_JUDGE_PANEL=llama-3.3-70b-versatile,llama-3.1-8b-instant
+# Or mix providers explicitly with "provider:model" entries:
+set LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,ollama:llama3.2
+```
+
+Flow per candidate:
+
+1. **Independent round** — every judge returns a strict-schema verdict
+   (cached per model, so re-runs are free).
+2. **Debate round** — only when judges disagree on the verdict or the
+   category: each judge sees the peers' anonymized analyses and must
+   either **revise** its position or **defend** it with a rebuttal that
+   cites fields from the candidate blob. Agreed candidates never trigger
+   extra calls.
+3. **Deterministic resolution** — consensus takes the highest-confidence
+   verdict; a surviving dispute takes the fail-safe (more severe) side
+   and flags `needs_human_review` (⚖). The rule guardrail still sits
+   above the whole panel.
+
+Every run also emits a **participation report** (in `verdicts.json` and
+the markdown): per model — candidates received, valid verdicts, failures
+(with examples), debates, revisions, agreement with the final verdict,
+cache hits and mean latency. A judge that fails to initialize or answers
+garbage is excluded/logged and the remaining judges carry the batch; the
+run only fails when fewer than two judges can be constructed.
+
+Adding another engine = adding one entry to `LLM_JUDGE_PANEL` (optionally
+with a `provider:` prefix). No code changes. Two judges must not share a
+model name — verdicts are cached per model id, so duplicates would fake
+agreement.
+
+The older `LLM_JUDGE_COMMITTEE` (fixed two-model shape, no debate) is
+kept as a legacy mode; when both are set, the panel wins.
+
 ## The rule guardrail
 
 The deterministic rule layer is high-precision. Small local models were
@@ -146,6 +188,8 @@ result; skips until the first one exists).
 | `OPENAI_COMPAT_BASE_URL` | `http://localhost:1234/v1` | OpenAI-style endpoint (default: LM Studio local server) |
 | `OPENAI_COMPAT_MODEL` | — | Model name at that endpoint (required for this provider) |
 | `OPENAI_COMPAT_API_KEY` | — | Bearer key, only if the endpoint needs one |
+| `LLM_JUDGE_PANEL` | — | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off |
+| `LLM_JUDGE_DEBATE` | `1` | `0` skips the debate round (plain N-way vote) |
 | `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` disables the benign-override guardrail |
 | `LLM_JUDGE_EFFORT` | `medium` | Claude reasoning effort (`low`/`medium`/`high`) |
 | `LLM_JUDGE_TIMEOUT_S` | `300` | Per-request timeout (local models can need minutes on first load) |

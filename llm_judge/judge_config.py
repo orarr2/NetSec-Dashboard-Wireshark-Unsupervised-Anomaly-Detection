@@ -69,6 +69,24 @@ LLM_JUDGE_COMMITTEE = os.environ.get("LLM_JUDGE_COMMITTEE",
 COMMITTEE_MODEL_B = os.environ.get("LLM_JUDGE_COMMITTEE_MODEL_B",
                                    "llama-3.1-8b-instant")
 
+# Expert panel (opt-in; generalizes committee mode to N models plus a
+# debate round). Comma-separated judge list; each entry is a model name on
+# the configured provider, optionally prefixed with an explicit provider:
+#   LLM_JUDGE_PANEL="llama-3.3-70b-versatile,llama-3.1-8b-instant"
+#   LLM_JUDGE_PANEL="openai_compat:llama-3.3-70b-versatile,ollama:llama3.2"
+# Empty (the default) = panel off. When set, the panel takes precedence
+# over LLM_JUDGE_COMMITTEE. At least two distinct models are required
+# (verdicts are cached per model id, so duplicates would fake agreement).
+LLM_JUDGE_PANEL = os.environ.get("LLM_JUDGE_PANEL", "").strip()
+
+# Debate round. When panel judges disagree on the verdict label or the
+# category, each judge that returned a valid verdict receives the peers'
+# anonymized analyses and must either revise its position or defend it
+# with a rebuttal grounded in the candidate blob. Costs one extra call per
+# valid judge per DISPUTED candidate only; agreed candidates never debate.
+LLM_JUDGE_DEBATE = os.environ.get("LLM_JUDGE_DEBATE",
+                                  "1").lower() not in ("0", "false")
+
 # Prompt versioning (spec section 10). Bump on every prompt change, re-run
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a

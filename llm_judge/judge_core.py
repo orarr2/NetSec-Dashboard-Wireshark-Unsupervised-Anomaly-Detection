@@ -463,11 +463,14 @@ under 6 sentences and grounded in the JSON you received; never invent
 facts."""
 
 
-def analyst_commentary(client, context, verdicts, session_label="S1"):
+def analyst_commentary(client, context, verdicts, session_label="S1",
+                       provider=None, model=None):
     """One extra LLM call at the end of a judge run: turn all findings
     into a free-form analyst-style paragraph. Uses the same provider as
     the judge but with the verdict schema turned off, so the response is
-    plain prose.
+    plain prose. `provider`/`model` override the configured default - the
+    panel path passes its first judge so commentary never depends on a
+    provider that isn't part of the run.
 
     Never raises: on any failure, returns a short error notice string so
     the caller can still write out the JSON/Markdown report."""
@@ -479,7 +482,9 @@ def analyst_commentary(client, context, verdicts, session_label="S1"):
             from . import llm_clients
         except ImportError:
             import llm_clients
-        prose_client = llm_clients.make_client(verdict_schema=None)
+        prose_client = llm_clients.make_client(provider=provider,
+                                               verdict_schema=None,
+                                               model=model)
 
         payload = {
             "session": session_label,
@@ -788,6 +793,426 @@ def judge_candidates_committee(candidates, clients, cache_db=None,
                       "committee": True,
                       "model": client_a.model_id,
                       "model_b": client_b.model_id}}
+
+
+# --------------------------------------------------------------------------
+# Expert panel (opt-in): N models judge every candidate independently; on
+# disagreement each judge sees the peers' analyses and must revise or defend
+# (one debate round), then a deterministic resolver produces the effective
+# verdict. Disputes that survive the debate are flagged needs_human_review.
+# The 2-model committee above remains as the legacy fixed-shape mode.
+# --------------------------------------------------------------------------
+PANEL_PROVIDERS = ("claude", "ollama", "openai_compat")
+
+
+def parse_panel_spec(spec, default_provider=None):
+    """Parse LLM_JUDGE_PANEL into [(provider, model), ...].
+
+    Each comma-separated entry is "model" (configured/default provider) or
+    "provider:model". A colon prefix counts as a provider only when it is
+    one of PANEL_PROVIDERS - Ollama model names themselves contain colons
+    ("gemma3:4b"), so "gemma3:4b" is a model and "ollama:gemma3:4b" is
+    provider + model. Raises ValueError on an empty spec, on fewer than
+    two judges, and on duplicate model names - the verdict cache keys on
+    the model id, so two judges with the same model would be served each
+    other's cached verdicts and could never genuinely disagree.
+    """
+    default_provider = (default_provider
+                        or judge_config.LLM_JUDGE_PROVIDER).lower()
+    entries = []
+    for raw in (spec or "").split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        head, _, tail = raw.partition(":")
+        if head.strip().lower() in PANEL_PROVIDERS:
+            provider, model = head.strip().lower(), tail.strip()
+        else:
+            provider, model = default_provider, raw
+        if not model:
+            raise ValueError(f"panel entry {raw!r} has no model name")
+        entries.append((provider, model))
+    if len(entries) < 2:
+        raise ValueError(
+            "LLM_JUDGE_PANEL needs at least two judges "
+            f"(got {len(entries)}); for a single judge leave the panel off")
+    models = [m for _, m in entries]
+    dupes = sorted({m for m in models if models.count(m) > 1})
+    if dupes:
+        raise ValueError(
+            f"panel has duplicate model name(s) {dupes} - verdicts are "
+            "cached per model id, so duplicate judges would fake agreement")
+    return entries
+
+
+DEBATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "stance": {"type": "string", "enum": ["maintain", "revise"]},
+        "verdict": {"type": "string", "enum": VERDICTS},
+        "category": {"type": "string", "enum": CATEGORIES},
+        "confidence": {"type": "number", "description": "0.0 to 1.0"},
+        "evidence_features": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Field names (or dotted paths) from the input blob",
+        },
+        "reasoning": {
+            "type": "string",
+            "description": "One paragraph, no newlines, at most 400 characters",
+        },
+        "recommended_action": {"type": "string", "enum": ACTIONS},
+        "rebuttal": {
+            "type": "string",
+            "description": "One paragraph addressing the strongest opposing "
+                           "point, at most 300 characters",
+        },
+    },
+    "required": ["stance", "verdict", "category", "confidence",
+                 "evidence_features", "reasoning", "recommended_action",
+                 "rebuttal"],
+    "additionalProperties": False,
+}
+
+DEBATE_SYSTEM_PROMPT = """You are one analyst on a network-security triage
+panel. You already issued a verdict for this candidate. Other analysts
+reviewed the SAME input blob and reached different conclusions; their
+analyses are included below yours, anonymized.
+
+Re-examine the candidate blob against the peer analyses:
+
+1. If a peer cites concrete evidence in the blob that you missed or
+   misread, REVISE: set stance "revise" and return your corrected verdict
+   fields.
+2. If your original verdict still fits the evidence best, DEFEND it: set
+   stance "maintain", keep your verdict (you may adjust confidence), and
+   use "rebuttal" to address the strongest opposing point directly, citing
+   field names from the blob.
+3. Ground every claim in the candidate blob. Never invent facts. The
+   deterministic rules remain HIGH-PRECISION: if a rule fired, "benign"
+   is wrong unless the blob itself shows the rule misfired.
+4. Return one strict JSON object matching the schema. No prose outside
+   the JSON. No markdown fences. "reasoning" is your full post-debate
+   justification; "rebuttal" speaks to the peers' strongest argument.
+
+Schema:
+{schema}
+""".replace("{schema}", json.dumps(DEBATE_SCHEMA, indent=2))
+
+
+def validate_debate_response(obj):
+    """Validate a debate-round response: the verdict subset goes through
+    validate_verdict; stance and rebuttal are checked here. Returns
+    (verdict_dict, stance, rebuttal) or raises JudgeValidationError."""
+    if not isinstance(obj, dict):
+        raise JudgeValidationError(
+            f"debate response is {type(obj).__name__}, not object")
+    stance = obj.get("stance")
+    if stance not in ("maintain", "revise"):
+        raise JudgeValidationError(f"bad stance {stance!r}")
+    rebuttal = obj.get("rebuttal")
+    if not isinstance(rebuttal, str) or not rebuttal.strip():
+        raise JudgeValidationError("rebuttal is empty or not a string")
+    verdict = validate_verdict({k: obj[k] for k in VERDICT_SCHEMA["required"]
+                                if k in obj})
+    return verdict, stance, " ".join(rebuttal.split())[:300]
+
+
+def _panel_disagrees(verdicts):
+    """True when valid round-1 verdicts differ on label OR category."""
+    labels = {v["verdict"] for v in verdicts}
+    cats = {v["category"] for v in verdicts}
+    return len(labels) > 1 or len(cats) > 1
+
+
+def _debate_payload(candidate, own_verdict, peers):
+    """User-content blob for one judge's debate turn. Deterministic (peers
+    in panel order, slim verdicts + reasoning) so it doubles as the cache
+    fingerprint payload: same dispute -> same blob -> cache hit on re-runs."""
+    return {
+        "debate": {
+            "candidate": candidate,
+            "your_previous_verdict": {
+                "verdict": own_verdict["verdict"],
+                "category": own_verdict["category"],
+                "confidence": own_verdict["confidence"],
+                "reasoning": own_verdict["reasoning"],
+            },
+            "peer_analyses": peers,
+        }
+    }
+
+
+def _debate_from_client(cand, own_verdict, peers, client, cache,
+                        prompt_version):
+    """One judge's debate turn: cache -> LLM -> validate -> retry once.
+    Returns (verdict, stance, rebuttal, latency_ms, was_cached, error).
+    On failure the judge's round-1 verdict stands (stance "maintain") and
+    the error is reported - a broken judge must not sink the debate."""
+    payload = _debate_payload(cand, own_verdict, peers)
+    fp = fingerprint(payload, prompt_version + ":debate", client.model_id)
+    cached = cache.get(fp)
+    if cached is not None:
+        return (cached["verdict"], cached["stance"], cached["rebuttal"],
+                0, True, None)
+    last_err = None
+    latency_ms = 0
+    for _attempt in (1, 2):
+        try:
+            t0 = time.perf_counter()
+            raw = client.judge(DEBATE_SYSTEM_PROMPT,
+                               json.dumps(payload, indent=2))
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            verdict, stance, rebuttal = validate_debate_response(
+                json.loads(raw))
+            try:
+                cache.put(fp, prompt_version + ":debate",
+                          {"verdict": verdict, "stance": stance,
+                           "rebuttal": rebuttal},
+                          client.model_id, latency_ms)
+            except Exception as e:
+                print(f"[panel] WARNING: debate cache write failed ({e}) - "
+                      f"continuing with the uncached position", flush=True)
+            return verdict, stance, rebuttal, latency_ms, False, None
+        except Exception as e:
+            last_err = e
+    return dict(own_verdict), "maintain", None, latency_ms, False, last_err
+
+
+def resolve_panel(positions):
+    """Deterministic resolution of post-debate positions (no LLM call).
+
+    positions: [{"model": id, "verdict": dict|None, ...}] - one per panel
+    judge, verdict None when that judge failed both rounds.
+
+    Policy (fail-safe, mirrors the committee):
+      - one valid verdict            -> use it, needs review (uncorroborated)
+      - all agree on label+category  -> consensus, highest confidence wins
+      - same label, category split   -> highest confidence wins, needs review
+      - label split                  -> most severe label wins (highest
+                                        confidence within it), needs review
+    Returns (effective_verdict|None, info). None only when every judge
+    failed.
+    """
+    valid = [p for p in positions if p["verdict"] is not None]
+    if not valid:
+        return None, {"agreement": False, "needs_human_review": True,
+                      "note": "every panel judge failed"}
+    if len(valid) == 1:
+        return dict(valid[0]["verdict"]), {
+            "agreement": False, "needs_human_review": True,
+            "note": "only one panel judge returned a valid verdict"}
+    labels = {p["verdict"]["verdict"] for p in valid}
+    cats = {p["verdict"]["category"] for p in valid}
+    if len(labels) == 1 and len(cats) == 1:
+        eff = max(valid, key=lambda p: p["verdict"]["confidence"])
+        return dict(eff["verdict"]), {
+            "agreement": True, "needs_human_review": False,
+            "note": None}
+    if len(labels) == 1:
+        eff = max(valid, key=lambda p: p["verdict"]["confidence"])
+        return dict(eff["verdict"]), {
+            "agreement": False, "needs_human_review": True,
+            "note": "judges agree on the verdict but dispute the category"}
+    worst = max(labels, key=lambda v: SEVERITY[v])
+    side = [p for p in valid if p["verdict"]["verdict"] == worst]
+    eff = max(side, key=lambda p: p["verdict"]["confidence"])
+    return dict(eff["verdict"]), {
+        "agreement": False, "needs_human_review": True,
+        "note": "judges disagree after debate; using the more severe "
+                "verdict"}
+
+
+def judge_candidates_panel(candidates, clients, cache_db=None,
+                           prompt_version=None, verbose=True, debate=None):
+    """Panel variant of judge_candidates: every candidate is judged by all
+    `clients` independently; disputes go through one debate round (when
+    `debate`); a deterministic resolver picks the effective verdict.
+
+    Same return shape as judge_candidates, plus per-result `panel` blocks
+    and a per-model `panel_report` in stats (the participation audit: what
+    each judge received, answered, revised and got wrong-or-right)."""
+    prompt_version = prompt_version or judge_config.PROMPT_VERSION
+    if debate is None:
+        debate = judge_config.LLM_JUDGE_DEBATE
+    if not judge_config.LLM_JUDGE_ENABLED:
+        if verbose:
+            print("[panel] LLM_JUDGE_ENABLED=0 - skipping all candidates")
+        return {"results": [], "dropped": [],
+                "stats": {"total": len(candidates), "judged": 0,
+                          "cache_hits": 0, "dropped": 0, "disabled": True}}
+    if not clients or len(clients) < 2:
+        raise ValueError("panel needs at least two clients")
+    ids = [c.model_id for c in clients]
+    dupes = sorted({m for m in ids if ids.count(m) > 1})
+    if dupes:
+        raise ValueError(
+            f"panel clients must use distinct models - duplicated: {dupes}")
+    cache = JudgeCache(cache_db or judge_config.CACHE_DB)
+
+    report = {c.model_id: {"assigned": 0, "valid_verdicts": 0,
+                           "failures": 0, "failure_examples": [],
+                           "debates": 0, "revised": 0,
+                           "agreed_with_final": 0, "cache_hits": 0,
+                           "latency_ms_total": 0}
+              for c in clients}
+    iso_min, iso_max = _iso_bounds(candidates)
+    results, dropped = [], []
+    cache_hits = needs_review = debated_candidates = 0
+    try:
+        for i, cand in enumerate(candidates, 1):
+            positions = []
+            for cl in clients:
+                r = report[cl.model_id]
+                r["assigned"] += 1
+                verdict, latency, was_cached, err = _verdict_from_client(
+                    cand, cl, cache, prompt_version)
+                r["latency_ms_total"] += latency
+                if was_cached:
+                    r["cache_hits"] += 1
+                    cache_hits += 1
+                if verdict is None:
+                    r["failures"] += 1
+                    if len(r["failure_examples"]) < 3:
+                        r["failure_examples"].append(str(err))
+                else:
+                    r["valid_verdicts"] += 1
+                positions.append({"model": cl.model_id, "client": cl,
+                                  "verdict": verdict, "stance": None,
+                                  "rebuttal": None, "revised": False,
+                                  "failed": verdict is None,
+                                  "cached": was_cached,
+                                  "latency_ms": latency,
+                                  "error": str(err) if err else None})
+
+            valid = [p for p in positions if p["verdict"] is not None]
+            did_debate = False
+            if (debate and len(valid) >= 2
+                    and _panel_disagrees([p["verdict"] for p in valid])):
+                did_debate = True
+                debated_candidates += 1
+                # Peers are anonymized by panel position, in config order,
+                # so every judge sees the identical dispute framing.
+                pre_debate = {p["model"]: dict(p["verdict"]) for p in valid}
+                for p in valid:
+                    r = report[p["model"]]
+                    r["debates"] += 1
+                    peers = [{"analyst": f"Analyst {k + 1}",
+                              "verdict": pre_debate[q["model"]]["verdict"],
+                              "category": pre_debate[q["model"]]["category"],
+                              "confidence":
+                                  pre_debate[q["model"]]["confidence"],
+                              "reasoning":
+                                  pre_debate[q["model"]]["reasoning"]}
+                             for k, q in enumerate(positions)
+                             if q["verdict"] is not None
+                             and q["model"] != p["model"]]
+                    (verdict, stance, rebuttal, latency, was_cached,
+                     err) = _debate_from_client(
+                        cand, pre_debate[p["model"]], peers, p["client"],
+                        cache, prompt_version)
+                    r["latency_ms_total"] += latency
+                    if was_cached:
+                        r["cache_hits"] += 1
+                        cache_hits += 1
+                    if err is not None:
+                        # Round-1 verdict stands; the failure is recorded
+                        # but does not discard an already-valid judgment.
+                        r["failures"] += 1
+                        if len(r["failure_examples"]) < 3:
+                            r["failure_examples"].append(
+                                f"debate: {err}")
+                    before = pre_debate[p["model"]]
+                    revised = (stance == "revise"
+                               or verdict["verdict"] != before["verdict"]
+                               or verdict["category"] != before["category"])
+                    if revised:
+                        r["revised"] += 1
+                    p.update(verdict=verdict, stance=stance,
+                             rebuttal=rebuttal, revised=revised,
+                             latency_ms=p["latency_ms"] + latency)
+
+            effective, info = resolve_panel(positions)
+            if effective is None:
+                dropped.append({
+                    "candidate_id": cand["candidate_id"],
+                    "error": "; ".join(
+                        f"{p['model']}: {p['error']}" for p in positions)})
+                if verbose:
+                    print(f"[panel] {i}/{len(candidates)} "
+                          f"{cand['candidate_id']}: DROPPED (all failed)")
+                continue
+
+            guardrail_info = None
+            if judge_config.RULE_GUARDRAIL:
+                effective, guardrail_info = apply_rule_guardrail(cand,
+                                                                 effective)
+                if guardrail_info:
+                    # Every judge (or the lone survivor) called a
+                    # fired-rule candidate benign - the exact failure mode
+                    # the panel exists to catch, so always escalate.
+                    info["needs_human_review"] = True
+                    note = ("rule guardrail overrode a benign panel "
+                            "verdict")
+                    info["note"] = (f"{info['note']}; {note}"
+                                    if info.get("note") else note)
+            for p in positions:
+                if (p["verdict"] is not None and p["verdict"]["verdict"]
+                        == effective["verdict"]):
+                    report[p["model"]]["agreed_with_final"] += 1
+            if info["needs_human_review"]:
+                needs_review += 1
+
+            results.append({
+                "candidate_id": cand["candidate_id"],
+                "kind": cand["kind"],
+                "verdict": effective,
+                "guardrail": guardrail_info,
+                "panel": {
+                    "judges": [{k: p[k] for k in
+                                ("model", "stance", "rebuttal", "revised",
+                                 "failed", "cached", "latency_ms", "error")}
+                               | {"verdict": _slim_verdict(p["verdict"])}
+                               for p in positions],
+                    "debate": did_debate,
+                    **info,
+                },
+                "priority": priority_score(cand, effective, iso_min,
+                                           iso_max),
+                "cached": all(p["cached"] for p in positions),
+                "latency_ms": sum(p["latency_ms"] for p in positions),
+            })
+            if verbose:
+                flag = " ⚖ REVIEW" if info["needs_human_review"] else ""
+                votes = " ".join(
+                    f"{p['model'].split('/')[-1][:18]}="
+                    f"{p['verdict']['verdict'] if p['verdict'] else 'X'}"
+                    for p in positions)
+                print(f"[panel] {i}/{len(candidates)} "
+                      f"{cand['candidate_id']:<24} "
+                      f"{effective['verdict']:<10} {votes}"
+                      f"{' (debated)' if did_debate else ''}{flag}")
+    finally:
+        cache.close()
+
+    for model_id, r in report.items():
+        calls = r["valid_verdicts"] + r["failures"]
+        r["mean_latency_ms"] = (int(r["latency_ms_total"] / calls)
+                                if calls else None)
+        del r["latency_ms_total"]
+
+    results.sort(key=lambda r: -r["priority"])
+    return {"results": results, "dropped": dropped,
+            "stats": {"total": len(candidates), "judged": len(results),
+                      "cache_hits": cache_hits, "dropped": len(dropped),
+                      "needs_review": needs_review,
+                      "debated_candidates": debated_candidates,
+                      "debate_enabled": bool(debate),
+                      "panel": True,
+                      "models": ids,
+                      "model": ids[0],
+                      "panel_report": report,
+                      "prompt_version": prompt_version}}
 
 
 def save_verdicts(out, pcap_name, output_dir=None):

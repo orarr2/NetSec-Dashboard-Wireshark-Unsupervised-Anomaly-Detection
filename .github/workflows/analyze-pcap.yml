@@ -24,6 +24,13 @@ on:
         description: "Ollama model to use"
         required: false
         default: "llama3.2"
+      llm_panel:
+        description: >
+          Optional expert panel: comma-separated Ollama models, e.g.
+          "llama3.2,gemma3:4b" (each is pulled, so the run takes longer).
+          Blank = single-model judge.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -41,6 +48,7 @@ jobs:
     env:
       LLM_JUDGE_PROVIDER: ollama
       OLLAMA_MODEL: ${{ github.event.inputs.llm_model || 'llama3.2' }}
+      LLM_JUDGE_PANEL: ${{ github.event.inputs.llm_panel || '' }}
       OLLAMA_HOST: http://localhost:11434
       LLM_JUDGE_RULE_GUARDRAIL: "1"
       # runners can be slow on first model load
@@ -74,7 +82,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ollama/models
-          key: ollama-${{ env.OLLAMA_MODEL }}-v1
+          key: ollama-${{ env.OLLAMA_MODEL }}-${{ env.LLM_JUDGE_PANEL }}-v1
 
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
@@ -92,6 +100,16 @@ jobs:
 
       - name: Pull ${{ env.OLLAMA_MODEL }}
         run: ollama pull "$OLLAMA_MODEL"
+
+      - name: Pull panel models
+        if: env.LLM_JUDGE_PANEL != ''
+        run: |
+          IFS=',' read -ra MODELS <<< "$LLM_JUDGE_PANEL"
+          for m in "${MODELS[@]}"; do
+            m="$(echo "$m" | xargs)"
+            m="${m#ollama:}"
+            [ -n "$m" ] && ollama pull "$m"
+          done
 
       - name: Determine PCAP path
         id: pcap

@@ -309,6 +309,27 @@ class OpenAICompatClient:
         return text
 
 
+def make_panel_clients(entries, verdict_schema=None):
+    """Build one client per (provider, model) panel entry.
+
+    Construction failures (e.g. the anthropic package missing for a claude
+    entry) do not abort the whole panel: the failed entry is recorded and
+    the remaining judges carry on - the panel's whole point is surviving
+    the loss of one expert. Returns (clients, init_failures) where
+    init_failures is [{"entry", "error"}].
+    """
+    clients, init_failures = [], []
+    for provider, model in entries:
+        try:
+            clients.append(make_client(provider=provider,
+                                       verdict_schema=verdict_schema,
+                                       model=model))
+        except Exception as e:
+            init_failures.append({"entry": f"{provider}:{model}",
+                                  "error": str(e)})
+    return clients, init_failures
+
+
 def make_client(provider=None, verdict_schema=None, model=None):
     """Build the configured provider client.
 
