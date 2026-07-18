@@ -133,8 +133,12 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         f"| **Prompt version** | `{judge_config.PROMPT_VERSION}` |",
         f"| **Rule guardrail** | {'on' if judge_config.RULE_GUARDRAIL else 'off'} |",
         f"| **Candidates judged** | {stats['judged']} · dropped: {stats['dropped']} · capped: {len(assembled['capped'])} |",
-        "",
     ]
+    if stats.get("committee"):
+        lines.append(
+            f"| **Committee** | `{stats['model']}` + `{stats.get('model_b')}` "
+            f"· {stats.get('needs_review', 0)} need human review |")
+    lines.append("")
 
     # ----- 0. Analyst commentary (top of report - the human read) --------
     if commentary:
@@ -210,12 +214,14 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         ]
         for i, r in enumerate(out["results"], 1):
             v = r["verdict"]
-            gr = "⚑" if r.get("guardrail") else ""
+            flags = ("⚑" if r.get("guardrail") else "") \
+                + ("⚖" if (r.get("committee") or {}).get("needs_human_review")
+                   else "")
             reasoning = v["reasoning"].replace("|", "\\|")
             lines.append(
                 f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
                 f"{v['category']} | {v['confidence']:.2f} | {r['priority']:.3f} | "
-                f"{gr} | {v['recommended_action']} | {reasoning} |"
+                f"{flags} | {v['recommended_action']} | {reasoning} |"
             )
         lines.append("")
         if any(r.get("guardrail") for r in out["results"]):
@@ -225,6 +231,32 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                 "verdict is preserved in `verdicts.json`.",
                 "",
             ]
+        review = [r for r in out["results"]
+                  if (r.get("committee") or {}).get("needs_human_review")]
+        if review:
+            lines += [
+                "> ⚖ = the two committee judges disagreed (or one failed); "
+                "the more-severe verdict is shown and the candidate is "
+                "flagged for human review. Both raw verdicts are in "
+                "`verdicts.json` under `committee`.",
+                "",
+                "### Committee disputes",
+                "",
+                "| Candidate | Judge A | Judge B | Effective |",
+                "|---|---|---|---|",
+            ]
+            for r in review:
+                c = r["committee"]
+                ja = c.get("judge_a") or {}
+                jb = c.get("judge_b") or {}
+                a_txt = (f"{ja.get('verdict')} ({ja.get('confidence')})"
+                         if not ja.get("failed") else "_failed_")
+                b_txt = (f"{jb.get('verdict')} ({jb.get('confidence')})"
+                         if not jb.get("failed") else "_failed_")
+                lines.append(
+                    f"| `{r['candidate_id']}` | {a_txt} | {b_txt} | "
+                    f"**{r['verdict']['verdict']}** |")
+            lines.append("")
     else:
         lines += [
             "## No verdicts",
@@ -311,8 +343,27 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
 # --------------------------------------------------------------------------
 # Pipeline + judge orchestration
 # --------------------------------------------------------------------------
+def _validate_committee_config():
+    """Fail fast on a committee misconfiguration BEFORE the (expensive)
+    pipeline run. The default committee model B is a Groq model; on any
+    other provider it would silently fail every Judge B call, flooding
+    needs_human_review on 100% of candidates with no visible error."""
+    if not judge_config.LLM_JUDGE_COMMITTEE:
+        return
+    provider = judge_config.LLM_JUDGE_PROVIDER.lower()
+    explicitly_set = "LLM_JUDGE_COMMITTEE_MODEL_B" in os.environ
+    if provider != "openai_compat" and not explicitly_set:
+        raise ValueError(
+            f"LLM_JUDGE_COMMITTEE=1 with provider '{provider}': the default "
+            f"committee model B ({judge_config.COMMITTEE_MODEL_B!r}) is a "
+            f"Groq/openai_compat model and every Judge B call would fail on "
+            f"this provider. Set LLM_JUDGE_COMMITTEE_MODEL_B to a model that "
+            f"exists on '{provider}'.")
+
+
 def analyze_and_judge(pcap_path, label="S1", verbose=True):
     """Run the pipeline + judge; returns (out, assembled, client, context)."""
+    _validate_committee_config()
     import run_pipeline as rp  # imports tshark - keep lazy for tests
 
     if verbose:
@@ -334,10 +385,20 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
               f"{len(context['not_flagged_ips'])} not-flagged)", flush=True)
 
     client = make_client(verdict_schema=judge_core.VERDICT_SCHEMA)
-    if verbose:
-        print(f"[cli] model={client.model_id} - judging...", flush=True)
-    out = judge_core.judge_candidates(assembled["candidates"], client=client,
-                                      verbose=verbose)
+    if judge_config.LLM_JUDGE_COMMITTEE:
+        client_b = make_client(verdict_schema=judge_core.VERDICT_SCHEMA,
+                               model=judge_config.COMMITTEE_MODEL_B)
+        if verbose:
+            print(f"[cli] committee: A={client.model_id} "
+                  f"B={client_b.model_id} - judging...", flush=True)
+        out = judge_core.judge_candidates_committee(
+            assembled["candidates"], clients=[client, client_b],
+            verbose=verbose)
+    else:
+        if verbose:
+            print(f"[cli] model={client.model_id} - judging...", flush=True)
+        out = judge_core.judge_candidates(assembled["candidates"],
+                                          client=client, verbose=verbose)
     if verbose:
         print("[cli] generating analyst commentary...", flush=True)
     out["analyst_commentary"] = judge_core.analyst_commentary(

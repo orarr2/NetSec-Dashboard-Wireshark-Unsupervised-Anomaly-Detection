@@ -309,3 +309,166 @@ def test_align_to_truth_flood_pcap_scores_session_only():
     ]
     y_tc, y_pc, _, _ = calibration.align_to_truth(results, gt_entry)
     assert y_tc == ["syn_flood"] and y_pc == ["syn_flood"]
+
+
+# --------------------------------------------------------------------------
+# Committee mode (opt-in): two judges vote, disputes -> needs_human_review.
+# --------------------------------------------------------------------------
+def _two_clients(a_resp, b_resp):
+    """Two FakeClients with DISTINCT model ids so their cache fingerprints
+    (which include model_id) don't collide and mask the combination logic."""
+    a = FakeClient(responses=a_resp)
+    a.model_id = "model-a"
+    b = FakeClient(responses=b_resp)
+    b.model_id = "model-b"
+    return a, b
+
+
+def test_combine_committee_policy():
+    va = good_verdict(verdict="malicious", confidence=0.8)
+    vb = good_verdict(verdict="benign", category="benign_anomaly",
+                      confidence=0.9, recommended_action="monitor")
+    # disagree -> more severe wins, flagged for review
+    eff, info = judge_core.combine_committee(va, vb, "a", "b")
+    assert eff["verdict"] == "malicious"
+    assert info["needs_human_review"] is True and info["agreement"] is False
+    # agree -> higher confidence wins, no review
+    eff2, info2 = judge_core.combine_committee(
+        good_verdict(verdict="malicious", confidence=0.6),
+        good_verdict(verdict="malicious", confidence=0.91), "a", "b")
+    assert eff2["confidence"] == 0.91
+    assert info2["agreement"] is True and info2["needs_human_review"] is False
+    # both failed -> no effective verdict, review flagged
+    eff3, info3 = judge_core.combine_committee(None, None, "a", "b")
+    assert eff3 is None and info3["needs_human_review"] is True
+
+
+def test_committee_flags_disagreement(tmp_path):
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]  # the port_scan attacker (not benign; guardrail idle)
+    a, b = _two_clients(
+        [json.dumps(good_verdict(verdict="malicious", confidence=0.9))],
+        [json.dumps(good_verdict(verdict="suspicious", confidence=0.7))])
+    out = judge_core.judge_candidates_committee(
+        cand, clients=[a, b], cache_db=db, verbose=False)
+    assert out["stats"]["committee"] is True
+    assert out["stats"]["needs_review"] == 1
+    r = out["results"][0]
+    assert r["verdict"]["verdict"] == "malicious"        # more severe wins
+    assert r["committee"]["needs_human_review"] is True
+    assert r["committee"]["agreement"] is False
+    assert r["committee"]["judge_a"]["model"] == "model-a"
+    assert r["committee"]["judge_b"]["verdict"] == "suspicious"
+
+
+def test_committee_agreement_takes_higher_confidence(tmp_path):
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]
+    a, b = _two_clients(
+        [json.dumps(good_verdict(verdict="malicious", confidence=0.8))],
+        [json.dumps(good_verdict(verdict="malicious", confidence=0.95))])
+    out = judge_core.judge_candidates_committee(
+        cand, clients=[a, b], cache_db=db, verbose=False)
+    r = out["results"][0]
+    assert r["committee"]["agreement"] is True
+    assert r["committee"]["needs_human_review"] is False
+    assert r["verdict"]["confidence"] == 0.95
+    assert out["stats"]["needs_review"] == 0
+
+
+def test_committee_surviving_judge_used_when_one_fails(tmp_path):
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]
+    a, b = _two_clients(
+        [json.dumps(good_verdict(verdict="malicious"))],
+        ["not json", "also bad"])                       # both attempts fail
+    out = judge_core.judge_candidates_committee(
+        cand, clients=[a, b], cache_db=db, verbose=False)
+    r = out["results"][0]
+    assert r["verdict"]["verdict"] == "malicious"        # surviving judge
+    assert r["committee"]["needs_human_review"] is True
+    assert r["committee"]["judge_b"].get("failed") is True
+    assert out["dropped"] == []
+
+
+def test_committee_both_fail_drops_candidate(tmp_path):
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]
+    a, b = _two_clients(["bad", "bad"], ["bad", "bad"])
+    out = judge_core.judge_candidates_committee(
+        cand, clients=[a, b], cache_db=db, verbose=False)
+    assert out["results"] == []
+    assert out["dropped"][0]["candidate_id"] == cand[0]["candidate_id"]
+
+
+def test_committee_requires_two_clients(tmp_path):
+    with pytest.raises(ValueError):
+        judge_core.judge_candidates_committee(
+            _candidates()[:1], clients=[FakeClient()],
+            cache_db=str(tmp_path / "c.sqlite"), verbose=False)
+    # 3+ clients is also rejected (exactly two required).
+    a, b = _two_clients([json.dumps(good_verdict())], [json.dumps(good_verdict())])
+    c = FakeClient([json.dumps(good_verdict())]); c.model_id = "model-c"
+    with pytest.raises(ValueError):
+        judge_core.judge_candidates_committee(
+            _candidates()[:1], clients=[a, b, c],
+            cache_db=str(tmp_path / "c.sqlite"), verbose=False)
+
+
+def test_committee_rejects_identical_model_ids(tmp_path):
+    # Two clients sharing a model_id would make judge B a cache hit of judge A
+    # (fingerprint keys on model_id) -> false self-agreement. Refuse loudly.
+    a = FakeClient([json.dumps(good_verdict())]); a.model_id = "same-model"
+    b = FakeClient([json.dumps(good_verdict())]); b.model_id = "same-model"
+    with pytest.raises(ValueError, match="different models"):
+        judge_core.judge_candidates_committee(
+            _candidates()[:1], clients=[a, b],
+            cache_db=str(tmp_path / "c.sqlite"), verbose=False)
+
+
+def test_committee_guardrail_forces_human_review(tmp_path):
+    # Both judges say benign on a candidate whose scan rule fired -> they
+    # "agree", but the guardrail escalates to suspicious. That both-models-wrong
+    # case is exactly what committee mode must surface, so needs_review must be 1.
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]  # attacker with a fired scan_alert
+    benign = json.dumps(good_verdict(verdict="benign", category="benign_anomaly",
+                                     confidence=0.5,
+                                     recommended_action="monitor",
+                                     reasoning="Looks like normal traffic."))
+    a, b = _two_clients([benign], [benign])
+    out = judge_core.judge_candidates_committee(
+        cand, clients=[a, b], cache_db=db, verbose=False)
+    r = out["results"][0]
+    assert r["guardrail"] is not None                    # guardrail fired
+    assert r["verdict"]["verdict"] == "suspicious"       # escalated
+    assert r["committee"]["needs_human_review"] is True  # forced by guardrail
+    assert out["stats"]["needs_review"] == 1
+
+
+def test_committee_warm_cache_accounting(tmp_path):
+    # Second run against a warm cache: both judges are cache hits, so
+    # cache_hits counts both and each result is marked cached.
+    db = str(tmp_path / "cache.sqlite")
+    cand = _candidates()[:1]
+    mk = lambda: _two_clients(
+        [json.dumps(good_verdict(verdict="malicious", confidence=0.9))],
+        [json.dumps(good_verdict(verdict="malicious", confidence=0.8))])
+    a1, b1 = mk()
+    judge_core.judge_candidates_committee(cand, clients=[a1, b1], cache_db=db, verbose=False)
+    a2, b2 = mk()
+    out2 = judge_core.judge_candidates_committee(cand, clients=[a2, b2], cache_db=db, verbose=False)
+    assert a2.calls == 0 and b2.calls == 0               # served from cache
+    assert out2["stats"]["cache_hits"] == 2              # both judges, one candidate
+    assert out2["results"][0]["cached"] is True
+
+
+def test_single_judge_result_has_no_committee_key(tmp_path):
+    # Downstream code does r.get("committee") - the single-judge path must
+    # simply omit it (not set it to something truthy).
+    db = str(tmp_path / "cache.sqlite")
+    out = judge_core.judge_candidates(_candidates()[:1], client=FakeClient(),
+                                      cache_db=db, verbose=False)
+    assert "committee" not in out["results"][0]
+    assert "committee" not in out["stats"]
+    assert "needs_review" not in out["stats"]

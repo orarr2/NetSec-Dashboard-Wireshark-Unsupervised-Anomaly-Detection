@@ -499,6 +499,8 @@ def analyst_commentary(client, context, verdicts, session_label="S1"):
                     "confidence": r["verdict"]["confidence"],
                     "priority": r["priority"],
                     "guardrail_applied": bool(r.get("guardrail")),
+                    "needs_human_review": bool(
+                        (r.get("committee") or {}).get("needs_human_review")),
                     "reasoning": r["verdict"]["reasoning"],
                 }
                 for r in verdicts.get("results", [])
@@ -546,6 +548,38 @@ def apply_rule_guardrail(candidate, verdict):
 # The judge loop (spec section 5): cache -> LLM -> validate -> retry once ->
 # drop-and-log. A single bad response never poisons the batch.
 # --------------------------------------------------------------------------
+def _verdict_from_client(cand, client, cache, prompt_version):
+    """One candidate through one client: cache -> LLM -> validate -> retry
+    once. Returns (verdict|None, latency_ms, was_cached, error|None). Never
+    raises - a failure comes back as (None, latency, False, exception)."""
+    fp = fingerprint(cand, prompt_version, client.model_id)
+    cached = cache.get(fp)
+    if cached is not None:
+        return cached, 0, True, None
+    last_err, latency_ms, verdict = None, 0, None
+    for _attempt in (1, 2):  # retry once on any failure
+        try:
+            t0 = time.perf_counter()
+            raw = client.judge(SYSTEM_PROMPT, json.dumps(cand, indent=2))
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            verdict = validate_verdict(json.loads(raw))
+            break
+        except Exception as e:
+            last_err, verdict = e, None
+    if verdict is None:
+        return None, latency_ms, False, last_err
+    # The cache write stays OUTSIDE the retry loop and is best-effort: a
+    # locked/broken cache DB (e.g. sqlite "database is locked" when the
+    # judge_api container and a notebook share the file) must not trigger
+    # a duplicate LLM call or discard a validly-judged verdict.
+    try:
+        cache.put(fp, prompt_version, verdict, client.model_id, latency_ms)
+    except Exception as e:
+        print(f"[judge] WARNING: cache write failed ({e}) - "
+              f"continuing with the uncached verdict", flush=True)
+    return verdict, latency_ms, False, None
+
+
 def judge_candidates(candidates, client=None, cache_db=None,
                      prompt_version=None, verbose=True):
     """Judge a candidate batch. Returns
@@ -565,32 +599,17 @@ def judge_candidates(candidates, client=None, cache_db=None,
     results, dropped, cache_hits = [], [], 0
     try:
         for i, cand in enumerate(candidates, 1):
-            fp = fingerprint(cand, prompt_version, client.model_id)
-            verdict = cache.get(fp)
-            latency_ms, was_cached = 0, verdict is not None
+            verdict, latency_ms, was_cached, err = _verdict_from_client(
+                cand, client, cache, prompt_version)
+            if verdict is None:
+                dropped.append({"candidate_id": cand["candidate_id"],
+                                "error": str(err)})
+                if verbose:
+                    print(f"[judge] {i}/{len(candidates)} "
+                          f"{cand['candidate_id']}: DROPPED ({err})")
+                continue
             if was_cached:
                 cache_hits += 1
-            else:
-                last_err = None
-                for attempt in (1, 2):  # retry once on any failure
-                    try:
-                        t0 = time.perf_counter()
-                        raw = client.judge(SYSTEM_PROMPT,
-                                           json.dumps(cand, indent=2))
-                        latency_ms = int((time.perf_counter() - t0) * 1000)
-                        verdict = validate_verdict(json.loads(raw))
-                        break
-                    except Exception as e:
-                        last_err, verdict = e, None
-                if verdict is None:
-                    dropped.append({"candidate_id": cand["candidate_id"],
-                                    "error": str(last_err)})
-                    if verbose:
-                        print(f"[judge] {i}/{len(candidates)} "
-                              f"{cand['candidate_id']}: DROPPED ({last_err})")
-                    continue
-                cache.put(fp, prompt_version, verdict, client.model_id,
-                          latency_ms)
             guardrail_info = None
             if judge_config.RULE_GUARDRAIL:
                 verdict, guardrail_info = apply_rule_guardrail(cand, verdict)
@@ -620,6 +639,155 @@ def judge_candidates(candidates, client=None, cache_db=None,
                       "cache_hits": cache_hits, "dropped": len(dropped),
                       "prompt_version": prompt_version,
                       "model": client.model_id}}
+
+
+# --------------------------------------------------------------------------
+# Committee mode (opt-in): two models judge every candidate; verdicts are
+# combined. On agreement the higher-confidence verdict wins; on disagreement
+# the more-severe verdict is used (fail-safe) and needs_human_review is set.
+# --------------------------------------------------------------------------
+SEVERITY = {"benign": 0, "suspicious": 1, "malicious": 2}
+
+
+def _slim_verdict(v):
+    """The subset of a verdict shown per-judge in committee metadata."""
+    if v is None:
+        return None
+    return {"verdict": v["verdict"], "category": v["category"],
+            "confidence": v["confidence"]}
+
+
+def combine_committee(verdict_a, verdict_b, model_a, model_b):
+    """Combine two judges' verdicts into (effective_verdict, committee_info).
+
+    Either verdict may be None if that judge failed. Returns
+    (None, info) only when BOTH failed. Policy:
+      - both valid & same verdict label -> higher-confidence wins, no review
+      - both valid & different label    -> more-severe wins, needs review
+      - only one valid                  -> use it, needs review (uncorroborated)
+    """
+    a_ok, b_ok = verdict_a is not None, verdict_b is not None
+    info = {"judge_a": {"model": model_a, **(_slim_verdict(verdict_a) or {})}
+            if a_ok else {"model": model_a, "failed": True},
+            "judge_b": {"model": model_b, **(_slim_verdict(verdict_b) or {})}
+            if b_ok else {"model": model_b, "failed": True}}
+    if not a_ok and not b_ok:
+        info.update(agreement=False, needs_human_review=True,
+                    note="both judges failed")
+        return None, info
+    if a_ok and not b_ok:
+        info.update(agreement=False, needs_human_review=True,
+                    note="only judge A returned a valid verdict")
+        return dict(verdict_a), info
+    if b_ok and not a_ok:
+        info.update(agreement=False, needs_human_review=True,
+                    note="only judge B returned a valid verdict")
+        return dict(verdict_b), info
+    # Both valid.
+    if verdict_a["verdict"] == verdict_b["verdict"]:
+        eff = (verdict_a if verdict_a["confidence"] >= verdict_b["confidence"]
+               else verdict_b)
+        info.update(agreement=True, needs_human_review=False)
+        return dict(eff), info
+    eff = (verdict_a if SEVERITY[verdict_a["verdict"]]
+           >= SEVERITY[verdict_b["verdict"]] else verdict_b)
+    info.update(agreement=False, needs_human_review=True,
+                note="judges disagree; using the more severe verdict")
+    return dict(eff), info
+
+
+def judge_candidates_committee(candidates, clients, cache_db=None,
+                               prompt_version=None, verbose=True):
+    """Committee variant of judge_candidates: judge every candidate with each
+    client in `clients` (expects exactly two), combine, and flag disputes.
+
+    Same return shape as judge_candidates, with each result carrying a
+    `committee` block and stats carrying `needs_review` + both model ids."""
+    prompt_version = prompt_version or judge_config.PROMPT_VERSION
+    if not judge_config.LLM_JUDGE_ENABLED:
+        if verbose:
+            print("[committee] LLM_JUDGE_ENABLED=0 - skipping all candidates")
+        return {"results": [], "dropped": [],
+                "stats": {"total": len(candidates), "judged": 0,
+                          "cache_hits": 0, "dropped": 0, "disabled": True}}
+    if not clients or len(clients) != 2:
+        raise ValueError("committee needs exactly two clients")
+    client_a, client_b = clients[0], clients[1]
+    if client_a.model_id == client_b.model_id:
+        # The verdict cache keys on model_id: with identical ids, judge B
+        # would be served judge A's freshly-cached verdict instead of an
+        # independent call, so every candidate would falsely "agree" and
+        # disagreement flagging could never fire. Refuse loudly.
+        raise ValueError(
+            f"committee clients must use two different models - both are "
+            f"'{client_a.model_id}'. Set LLM_JUDGE_COMMITTEE_MODEL_B to a "
+            f"model different from the primary judge's.")
+    cache = JudgeCache(cache_db or judge_config.CACHE_DB)
+
+    iso_min, iso_max = _iso_bounds(candidates)
+    results, dropped, cache_hits, needs_review = [], [], 0, 0
+    try:
+        for i, cand in enumerate(candidates, 1):
+            va, la, ca, ea = _verdict_from_client(
+                cand, client_a, cache, prompt_version)
+            vb, lb, cb, eb = _verdict_from_client(
+                cand, client_b, cache, prompt_version)
+            eff, committee = combine_committee(
+                va, vb, client_a.model_id, client_b.model_id)
+            if eff is None:
+                dropped.append({"candidate_id": cand["candidate_id"],
+                                "error": f"A: {ea}; B: {eb}"})
+                if verbose:
+                    print(f"[committee] {i}/{len(candidates)} "
+                          f"{cand['candidate_id']}: DROPPED (both failed)")
+                continue
+            cache_hits += int(ca) + int(cb)
+            guardrail_info = None
+            if judge_config.RULE_GUARDRAIL:
+                eff, guardrail_info = apply_rule_guardrail(cand, eff)
+                if guardrail_info:
+                    # The guardrail only fires when the committee's effective
+                    # verdict was "benign" on a fired-rule candidate - i.e.
+                    # BOTH judges (or the lone survivor) missed a
+                    # high-precision deterministic signal. That is exactly
+                    # the failure mode committee mode exists to surface, so
+                    # it always escalates to human review, even though the
+                    # judges nominally "agreed".
+                    committee["needs_human_review"] = True
+                    note = "rule guardrail overrode a benign committee verdict"
+                    committee["note"] = (committee["note"] + "; " + note
+                                         if committee.get("note") else note)
+            if committee["needs_human_review"]:
+                needs_review += 1
+            results.append({
+                "candidate_id": cand["candidate_id"],
+                "kind": cand["kind"],
+                "verdict": eff,
+                "guardrail": guardrail_info,
+                "committee": committee,
+                "priority": priority_score(cand, eff, iso_min, iso_max),
+                "cached": bool(ca and cb),
+                "latency_ms": la + lb,
+            })
+            if verbose:
+                flag = " ⚖ REVIEW" if committee["needs_human_review"] else ""
+                print(f"[committee] {i}/{len(candidates)} "
+                      f"{cand['candidate_id']:<24} {eff['verdict']:<10} "
+                      f"A={_slim_verdict(va)['verdict'] if va else 'X':<10} "
+                      f"B={_slim_verdict(vb)['verdict'] if vb else 'X':<10}"
+                      f"{flag}")
+    finally:
+        cache.close()
+
+    results.sort(key=lambda r: -r["priority"])
+    return {"results": results, "dropped": dropped,
+            "stats": {"total": len(candidates), "judged": len(results),
+                      "cache_hits": cache_hits, "dropped": len(dropped),
+                      "needs_review": needs_review,
+                      "prompt_version": prompt_version,
+                      "committee": True,
+                      "model": client_a.model_id,
+                      "model_b": client_b.model_id}}
 
 
 def save_verdicts(out, pcap_name, output_dir=None):

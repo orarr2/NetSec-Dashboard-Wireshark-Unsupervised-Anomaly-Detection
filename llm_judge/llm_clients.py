@@ -20,6 +20,8 @@ Imports are lazy so that unit tests with a mocked client run without the
 anthropic package or a local Ollama installed.
 """
 import json
+import re
+import time
 import urllib.error
 import urllib.request
 
@@ -180,15 +182,58 @@ class OpenAICompatClient:
         # json_schema got a 400 - later calls then skip json_schema.
         self._schema_unsupported = False
 
+    # Free tiers (Groq: 12k tokens/min) return HTTP 429 when a batch is
+    # bursty. Retry a bounded number of times, honoring the server's stated
+    # wait, so a single hot minute doesn't silently drop candidates.
+    _MAX_RETRIES = 3
+    _MAX_WAIT_S = 30.0
+
+    @staticmethod
+    def _retry_after_seconds(e):
+        """Seconds to wait before retrying a 429, from the Retry-After header
+        or the 'try again in Xs' hint Groq embeds in the JSON body. Falls
+        back to 5s. Reads the body (safe: this HTTPError is being retried,
+        not re-raised, so consuming it here is harmless)."""
+        ra = e.headers.get("Retry-After") if e.headers else None
+        if ra:
+            try:
+                return float(ra)
+            except (TypeError, ValueError):
+                pass
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+            m = re.search(r"try again in ([\d.]+)\s*s", body)
+            if m:
+                return float(m.group(1)) + 0.5  # small cushion
+        except Exception:
+            pass
+        return 5.0
+
     def _post(self, payload):
-        headers = {"Content-Type": "application/json"}
+        # User-Agent is mandatory - Groq / Cloudflare-protected endpoints
+        # return HTTP 403 (error 1010) for the default Python-urllib UA.
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "netsec-llm-judge/0.1 (+llm_judge)",
+        }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        req = urllib.request.Request(
-            self.base_url + "/chat/completions",
-            data=json.dumps(payload).encode("utf-8"), headers=headers)
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
-            return json.loads(r.read().decode("utf-8"))
+        data = json.dumps(payload).encode("utf-8")
+        for attempt in range(self._MAX_RETRIES + 1):
+            req = urllib.request.Request(
+                self.base_url + "/chat/completions",
+                data=data, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                # Only 429 is retryable here; 400/401/etc. propagate so the
+                # json_schema-fallback logic in judge() still sees them.
+                if e.code != 429 or attempt == self._MAX_RETRIES:
+                    raise
+                wait = min(max(self._retry_after_seconds(e), 1.0),
+                           self._MAX_WAIT_S)
+                time.sleep(wait)
 
     def _payload(self, system_prompt, user_content, response_format):
         payload = {
@@ -264,15 +309,20 @@ class OpenAICompatClient:
         return text
 
 
-def make_client(provider=None, verdict_schema=None):
-    """Build the configured provider client."""
+def make_client(provider=None, verdict_schema=None, model=None):
+    """Build the configured provider client.
+
+    `model` overrides the provider's default model - used by committee mode
+    to build a second judge (Judge B) on the same provider/key with a
+    different model. None keeps each provider's configured default.
+    """
     provider = (provider or judge_config.LLM_JUDGE_PROVIDER).lower()
     if provider == "claude":
-        return ClaudeClient(verdict_schema=verdict_schema)
+        return ClaudeClient(verdict_schema=verdict_schema, model=model)
     if provider == "ollama":
-        return OllamaClient(verdict_schema=verdict_schema)
+        return OllamaClient(verdict_schema=verdict_schema, model=model)
     if provider == "openai_compat":
-        return OpenAICompatClient(verdict_schema=verdict_schema)
+        return OpenAICompatClient(verdict_schema=verdict_schema, model=model)
     raise JudgeClientError(
         f"unknown LLM_JUDGE_PROVIDER '{provider}' "
         "(expected claude | ollama | openai_compat)")

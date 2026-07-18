@@ -203,7 +203,51 @@ print(f"Upload limit (drag-and-drop): {MAX_UPLOAD_HUMAN}. "
 
 # ==== notebook cell 8 ====
 
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# Local UTC offset at the epoch, in seconds, computed once without touching
+# the platform mktime (which is exactly what crashes near 1970 on Windows).
+# datetime.fromtimestamp(0) succeeds - it is .timestamp() on the RESULT that
+# raises - so this reference is safe to build. Used by the _safe_* helpers to
+# convert between naive-local datetimes and TRUE epoch seconds so the value
+# stays on the same time base as the raw-epoch event timestamps it is
+# compared against. Falls back to 0 (old behaviour) if even this crashes.
+_EPOCH_NAIVE = datetime(1970, 1, 1)
+try:
+    _LOCAL_EPOCH_OFFSET_S = (datetime.fromtimestamp(0) - _EPOCH_NAIVE).total_seconds()
+except (OSError, OverflowError, ValueError):
+    _LOCAL_EPOCH_OFFSET_S = 0.0
+
+
+def _safe_epoch(dt):
+    """TRUE epoch seconds for a naive-local datetime, without crashing.
+
+    `datetime.timestamp()` raises OSError [Errno 22] on Windows for naive
+    datetimes at or just after 1970-01-01 (the C runtime's mktime can't
+    represent them once the local UTC offset is applied). PCAPs with
+    synthetic capture times (e.g. attack fixtures starting at epoch 0) hit
+    this. The fallback recovers the true epoch by subtracting the local UTC
+    offset instead of calling mktime, so the result stays on the SAME time
+    base as the raw-epoch packet timestamps it is bucketed against (an
+    earlier version treated the local tuple as UTC, shifting every bin by
+    the offset and silently emptying the browsing-hour chart).
+    """
+    try:
+        return dt.timestamp()
+    except (OSError, OverflowError, ValueError):
+        return (dt - _EPOCH_NAIVE).total_seconds() - _LOCAL_EPOCH_OFFSET_S
+
+
+def _safe_fromtimestamp(ts):
+    """`datetime.fromtimestamp()` that degrades instead of crashing near the
+    epoch on Windows. Returns a naive-LOCAL datetime consistent with the
+    try-branch (adds the local offset back), so HH:MM labels match what
+    datetime.fromtimestamp would have produced."""
+    try:
+        return datetime.fromtimestamp(ts)
+    except (OSError, OverflowError, ValueError):
+        return _EPOCH_NAIVE + timedelta(seconds=float(ts) + _LOCAL_EPOCH_OFFSET_S)
+
 
 def _find_tshark():
     """Locate tshark on the host."""
@@ -295,8 +339,8 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     df["len"] = pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
     df = df.dropna(subset=["ts"])
 
-    t0 = datetime.fromtimestamp(df["ts"].min())
-    t1 = datetime.fromtimestamp(df["ts"].max())
+    t0 = _safe_fromtimestamp(df["ts"].min())
+    t1 = _safe_fromtimestamp(df["ts"].max())
 
     ips_src   = collections.Counter(df[df["ip_src"]!=""]["ip_src"].tolist())
     macs      = collections.Counter(df[df["eth_src"]!=""]["eth_src"].tolist())
@@ -568,8 +612,8 @@ def _analyze_pcap_scapy(path, label="Session"):
     Does not attempt SSID/BSSID extraction - returns None for both fields."""
     pkts = rdpcap(str(path))
     times = [float(p.time) for p in pkts]
-    t0 = datetime.fromtimestamp(min(times))
-    t1 = datetime.fromtimestamp(max(times))
+    t0 = _safe_fromtimestamp(min(times))
+    t1 = _safe_fromtimestamp(max(times))
 
     ips_src   = collections.Counter()
     bytes_src = collections.Counter()
@@ -2396,8 +2440,8 @@ class LiveCaptureWorker:
             else:
                 ip_agg = _pd.DataFrame()
 
-            t0 = datetime.fromtimestamp(d["first_ts"]) if d["first_ts"] else datetime.now()
-            t1 = datetime.fromtimestamp(d["last_ts"])  if d["last_ts"]  else datetime.now()
+            t0 = _safe_fromtimestamp(d["first_ts"]) if d["first_ts"] else datetime.now()
+            t1 = _safe_fromtimestamp(d["last_ts"])  if d["last_ts"]  else datetime.now()
 
             return {
                 "label": self.label, "pkts": [],
@@ -2712,14 +2756,14 @@ def make_browsing_hour_fig(s):
 
     BUCKET_SEC = 5 * 60
 
-    t0_ts = s["t0"].timestamp()
-    t1_ts = s["t1"].timestamp()
+    t0_ts = _safe_epoch(s["t0"])
+    t1_ts = _safe_epoch(s["t1"])
 
     bin_start = int(t0_ts // BUCKET_SEC) * BUCKET_SEC
     bin_end   = (int(t1_ts // BUCKET_SEC) + 1) * BUCKET_SEC
     n_bins    = max(1, (bin_end - bin_start) // BUCKET_SEC)
 
-    bin_labels = [_dt.datetime.fromtimestamp(bin_start + i * BUCKET_SEC).strftime("%H:%M")
+    bin_labels = [_safe_fromtimestamp(bin_start + i * BUCKET_SEC).strftime("%H:%M")
                   for i in range(n_bins)]
 
     rows = []
@@ -6763,14 +6807,14 @@ def _build_ip_history_session_fig(session, ip_addr):
     t1 = session.get("t1")
     if t0 is None or t1 is None:
         return None, 0
-    t0_ts = t0.timestamp()
-    t1_ts = t1.timestamp()
+    t0_ts = _safe_epoch(t0)
+    t1_ts = _safe_epoch(t1)
     n_bins = 30
     span = max(1.0, t1_ts - t0_ts)
     bucket = span / n_bins
 
     def _bin_label(i):
-        return _dt_local.datetime.fromtimestamp(t0_ts + i * bucket).strftime("%H:%M")
+        return _safe_fromtimestamp(t0_ts + i * bucket).strftime("%H:%M")
 
     bin_labels = [_bin_label(i) for i in range(n_bins)]
 
@@ -6999,6 +7043,58 @@ def _render_ai_judge_link(session, session_key):
     ], style={"marginTop":"8px"})
 
 
+def _render_n8n_send_button(session, session_key):
+    """Render the '📧 Send to n8n Alert' button for one session card.
+
+    Clicking copies the session's source PCAP into the local incoming/
+    folder that the automation/ n8n workflow polls every 60s. The judge
+    then runs against Groq (or whatever provider is configured in
+    automation/.env), and an HTML alert lands in the user's inbox if any
+    verdict comes back malicious/suspicious.
+
+    Silent no-op if the session is not loaded, so S2 shows nothing until
+    a second capture exists.
+    """
+    import os as _os
+    if session is None:
+        return html.Div()
+    src_pcap = session.get("_source_pcap") or ""
+    src_name = _os.path.basename(src_pcap) if src_pcap else ""
+    caption = (f"Copy `{src_name}` to the local incoming/ folder. The n8n "
+               f"workflow will pick it up within 60 seconds, run the judge "
+               f"against Groq, and email an HTML alert if any verdict is "
+               f"malicious or suspicious.")
+    return html.Div([
+        html.Button(
+            [html.Span("\U0001F4E7", style={"marginRight":"8px",
+                                             "fontSize":"1.05rem"}),
+             html.Span(f"Send {session_key.upper()} to n8n Alert",
+                       style={"fontWeight":"600"})],
+            id={"type":"n8n-send-btn","session":session_key},
+            n_clicks=0,
+            style={
+                "display":"flex","alignItems":"center","width":"100%",
+                "padding":"8px 10px","borderRadius":"10px",
+                "background":"rgba(34,197,94,0.10)",
+                "border":"1px solid rgba(34,197,94,0.30)",
+                "color":"#22c55e",
+                "fontSize":"11.5px",
+                "fontFamily":"'Inter Tight', sans-serif",
+                "cursor":"pointer",
+                "marginTop":"6px",
+                "textAlign":"left",
+            }),
+        html.Div(caption,
+            style={"fontSize":"10px","color":INK_MUTE,"marginTop":"6px",
+                   "padding":"0 4px","lineHeight":"1.5",
+                   "fontFamily":"'Inter Tight', sans-serif"}),
+        html.Div(id={"type":"n8n-send-status","session":session_key},
+                 style={"fontSize":"10.5px","marginTop":"6px",
+                        "padding":"0 4px","lineHeight":"1.5",
+                        "fontFamily":"'Inter Tight', sans-serif"}),
+    ], style={"marginTop":"8px"})
+
+
 def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
     """Sidebar with grouped nav items, filtered by the active top-level tab
     AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
@@ -7072,6 +7168,7 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
         ], style={"marginBottom":"16px","paddingBottom":"12px",
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
         children.append(_render_ai_judge_link(S1, "s1"))
+        children.append(_render_n8n_send_button(S1, "s1"))
 
         # Header + button labels swap based on whether S2 is already loaded;
         # this gives the user a path to replace S2 with a fresh PCAP/recording.
@@ -7132,6 +7229,7 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
         if has_s2:
             children.append(_render_ai_judge_link(S2, "s2"))
+            children.append(_render_n8n_send_button(S2, "s2"))
 
     # Chart navigation moved to build_chart_picker_strip (the horizontal
     # chip row right under the Analyze / Security pills). The sidebar now
@@ -9254,6 +9352,147 @@ def update_sidebar(active_chart, active_tab, active_session, _rebuild, _tick):
     # every 3s while on the live page, so the sidebar guard state
     # stays fresh and buttons enable/disable in real time.
     return _build_sidebar(active_chart, active_tab or "analyze", active_session or "s1")
+
+
+def _n8n_stack_status():
+    """Best-effort probe of the local n8n + judge_api stack. Returns a dict
+    {judge_api: bool, n8n: bool, detail: str}. Never raises.
+    """
+    import socket as _socket
+    import urllib.request as _urlreq
+    out = {"judge_api": False, "n8n": False, "detail": ""}
+    try:
+        with _urlreq.urlopen("http://localhost:8765/health", timeout=2) as r:
+            out["judge_api"] = (r.status == 200)
+    except Exception as exc:
+        out["detail"] = f"judge_api /health: {exc}"
+    try:
+        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        s.settimeout(1.5)
+        s.connect(("localhost", 5678))
+        s.close()
+        out["n8n"] = True
+    except Exception as exc:
+        out["detail"] = (out["detail"] + " | " if out["detail"] else "") \
+            + f"n8n :5678: {exc}"
+    return out
+
+
+def _n8n_stack_down_message(status):
+    """Render the ⚠️ block shown when the button is clicked but the local
+    n8n stack isn't reachable. Explains what to run instead of pretending
+    the copy succeeded.
+    """
+    missing = []
+    if not status["judge_api"]:
+        missing.append("judge_api (:8765)")
+    if not status["n8n"]:
+        missing.append("n8n (:5678)")
+    return html.Div([
+        html.Div([
+            html.Span("⚠️", style={"marginRight":"6px"}),
+            html.Span("n8n automation stack is not running",
+                      style={"color":"#f59e0b","fontWeight":"600"}),
+        ]),
+        html.Div(
+            f"Missing: {', '.join(missing)}. Not copying the file - you "
+            "would not get an email. Start the stack, then click again:",
+            style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
+        html.Pre(
+            "cd automation\n"
+            ".\\setup.ps1              # one-command bring-up\n"
+            "# OR manually:\n"
+            "docker compose up -d\n"
+            ".\\judge_api\\start.ps1",
+            style={"marginTop":"6px","padding":"6px 8px",
+                   "background":"#1e1e2e","color":"#e5e7eb",
+                   "fontSize":"10px","borderRadius":"6px",
+                   "fontFamily":"'JetBrains Mono', monospace",
+                   "whiteSpace":"pre","overflow":"auto",
+                   "border":"1px solid rgba(245,158,11,0.30)"}),
+    ])
+
+
+@app.callback(
+    Output({"type":"n8n-send-status","session":MATCH}, "children"),
+    Input({"type":"n8n-send-btn","session":MATCH}, "n_clicks"),
+    State({"type":"n8n-send-btn","session":MATCH}, "id"),
+    prevent_initial_call=True,
+)
+def send_session_to_n8n(n_clicks, btn_id):
+    """Copy the session's source PCAP into incoming/ so the local n8n
+    workflow picks it up on its next 60s poll. Prefixed with session key
+    and a timestamp so each click is treated as a fresh capture even
+    when the same session is re-sent.
+
+    Probes the stack via /health first so a click on a machine where the
+    automation isn't running gives an actionable warning instead of a
+    misleading "Copied" that goes nowhere.
+    """
+    import os as _os
+    import shutil as _shutil
+    if not n_clicks:
+        return dash.no_update
+    session_key = (btn_id or {}).get("session")
+    S_obj = S1 if session_key == "s1" else (S2 if session_key == "s2" else None)
+    if S_obj is None:
+        return html.Div([
+            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span(f"No {(session_key or '').upper()} session loaded",
+                      style={"color":"#ef4444"})
+        ])
+    src_pcap = S_obj.get("_source_pcap") or ""
+    if not src_pcap or not _os.path.isfile(src_pcap):
+        return html.Div([
+            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span(
+                f"Source PCAP not on disk anymore ({src_pcap or 'unknown'})",
+                style={"color":"#ef4444"})
+        ])
+
+    # Gate: don't copy if nothing is going to consume the file.
+    stack = _n8n_stack_status()
+    if not (stack["judge_api"] and stack["n8n"]):
+        return _n8n_stack_down_message(stack)
+
+    try:
+        _here = _os.path.dirname(_os.path.abspath(
+            _os.environ.get("NETSEC_APP_DIR") or __file__))
+    except Exception:
+        _here = _os.getcwd()
+    project_root = _os.path.dirname(_here) \
+        if _os.path.basename(_here) == "app" else _here
+    incoming_dir = _os.path.join(project_root, "incoming")
+    try:
+        _os.makedirs(incoming_dir, exist_ok=True)
+    except OSError as exc:
+        return html.Div([
+            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span(f"Could not create incoming/: {exc}",
+                      style={"color":"#ef4444"})
+        ])
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst_name = f"{session_key.upper()}_{ts}_{_os.path.basename(src_pcap)}"
+    dst_path = _os.path.join(incoming_dir, dst_name)
+    try:
+        _shutil.copy2(src_pcap, dst_path)
+    except OSError as exc:
+        return html.Div([
+            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span(f"Copy failed: {exc}", style={"color":"#ef4444"})
+        ])
+    return html.Div([
+        html.Div([
+            html.Span("✅", style={"marginRight":"6px"}),
+            html.Span(f"Copied to incoming/{dst_name}",
+                      style={"color":"#22c55e","fontWeight":"600"}),
+        ]),
+        html.Div(
+            "Stack reachable (judge_api + n8n up). If the workflow is "
+            "Active, an HTML alert lands in your inbox within ~90 seconds "
+            "when verdicts are malicious/suspicious. Silent otherwise.",
+            style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"})
+    ])
 
 
 @app.callback(Output("chart-picker-strip","children"),

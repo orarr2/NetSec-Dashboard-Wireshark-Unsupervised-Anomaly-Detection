@@ -34,3 +34,13 @@ anaconda_projects/
 # LLM judge runtime artifacts (optional add-on; see llm_judge/README.md)
 llm_judge/cache/
 llm_judge/output/
+
+# Local Docker automation stack (n8n + judge_api FastAPI) - contains secrets,
+# runtime volumes, DBs and workflow templates. Never committed.
+automation/
+
+# PCAPs moved out of incoming/ after successful triage. Local-only.
+processed/
+
+# Runtime stdout/stderr logs from launching the dashboard / judge_api locally.
+*.log

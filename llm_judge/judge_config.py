@@ -58,6 +58,17 @@ RULE_GUARDRAIL = os.environ.get("LLM_JUDGE_RULE_GUARDRAIL",
 # iso_score and the overflow is reported as dropped.
 MAX_CANDIDATES_PER_BATCH = int(os.environ.get("LLM_JUDGE_MAX_CANDIDATES", "40"))
 
+# Committee mode (opt-in). When on, every candidate is judged by TWO models
+# and the verdicts are combined: on agreement the higher-confidence verdict
+# wins; on disagreement the more-severe verdict is used and the candidate is
+# flagged needs_human_review. Doubles LLM calls, so it stays off by default.
+# Judge A is the configured provider/model; Judge B is COMMITTEE_MODEL_B on
+# the SAME provider (so a single Groq key drives both).
+LLM_JUDGE_COMMITTEE = os.environ.get("LLM_JUDGE_COMMITTEE",
+                                     "0").lower() not in ("0", "false")
+COMMITTEE_MODEL_B = os.environ.get("LLM_JUDGE_COMMITTEE_MODEL_B",
+                                   "llama-3.1-8b-instant")
+
 # Prompt versioning (spec section 10). Bump on every prompt change, re-run
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a
