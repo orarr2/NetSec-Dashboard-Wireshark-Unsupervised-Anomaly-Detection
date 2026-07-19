@@ -1,0 +1,220 @@
+{
+  "prompt_version": "v0.3.0",
+  "provider": "openai_compat",
+  "model": "openai/gpt-oss-120b",
+  "generated_at": "2026-07-19T04:19:02+00:00",
+  "overall": {
+    "category_kappa_linear": 0.7911,
+    "category_kappa_unweighted": 0.7925,
+    "verdict_kappa": 0.7556,
+    "candidates_scored": 33,
+    "llm_dropped": 0,
+    "per_category": {
+      "benign_anomaly": {
+        "precision": 1.0,
+        "recall": 0.81,
+        "f1": 0.895,
+        "support": 21
+      },
+      "port_scan": {
+        "precision": 0.667,
+        "recall": 1.0,
+        "f1": 0.8,
+        "support": 2
+      },
+      "syn_flood": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 1
+      },
+      "dns_amp": {
+        "precision": 0.727,
+        "recall": 1.0,
+        "f1": 0.842,
+        "support": 8
+      },
+      "arp_mitm": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 1
+      }
+    },
+    "confusion": {
+      "labels": [
+        "benign_anomaly",
+        "port_scan",
+        "syn_flood",
+        "dns_amp",
+        "arp_mitm",
+        "dns_tunnel",
+        "beaconing_c2"
+      ],
+      "matrix": [
+        [
+          17,
+          1,
+          0,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          8,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "per_pcap": {
+    "tcp_syn_scan.pcap": {
+      "attack": "tcp_syn_scan",
+      "candidates_judged": 1,
+      "candidates_capped": 0,
+      "llm_dropped": 0,
+      "category_kappa_linear": 1.0,
+      "category_kappa_unweighted": 1.0,
+      "verdict_kappa": 1.0,
+      "per_category": {
+        "port_scan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      }
+    },
+    "xmas_scan.pcap": {
+      "attack": "tcp_xmas_scan",
+      "candidates_judged": 1,
+      "candidates_capped": 0,
+      "llm_dropped": 0,
+      "category_kappa_linear": 1.0,
+      "category_kappa_unweighted": 1.0,
+      "verdict_kappa": 1.0,
+      "per_category": {
+        "port_scan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      }
+    },
+    "arpspoof.pcap": {
+      "attack": "arp_spoofing",
+      "candidates_judged": 12,
+      "candidates_capped": 0,
+      "llm_dropped": 0,
+      "category_kappa_linear": 0.8776,
+      "category_kappa_unweighted": 0.6364,
+      "verdict_kappa": 0.625,
+      "per_category": {
+        "benign_anomaly": {
+          "precision": 1.0,
+          "recall": 0.909,
+          "f1": 0.952,
+          "support": 11
+        },
+        "arp_mitm": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      }
+    },
+    "synflood.pcap": {
+      "attack": "spoofed_syn_flood",
+      "candidates_judged": 1,
+      "candidates_capped": 215,
+      "llm_dropped": 0,
+      "category_kappa_linear": 1.0,
+      "category_kappa_unweighted": 1.0,
+      "verdict_kappa": 1.0,
+      "per_category": {
+        "syn_flood": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      }
+    },
+    "dns_amp.pcap": {
+      "attack": "dns_amplification",
+      "candidates_judged": 18,
+      "candidates_capped": 0,
+      "llm_dropped": 0,
+      "category_kappa_linear": 0.6747,
+      "category_kappa_unweighted": 0.6747,
+      "verdict_kappa": 0.6747,
+      "per_category": {
+        "benign_anomaly": {
+          "precision": 1.0,
+          "recall": 0.7,
+          "f1": 0.824,
+          "support": 10
+        },
+        "dns_amp": {
+          "precision": 0.727,
+          "recall": 1.0,
+          "f1": 0.842,
+          "support": 8
+        }
+      }
+    }
+  }
+}

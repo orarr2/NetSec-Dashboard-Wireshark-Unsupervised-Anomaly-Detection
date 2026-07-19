@@ -46,6 +46,12 @@ KAPPA_LABELS = ["benign_anomaly", "port_scan", "syn_flood", "dns_amp",
                 "arp_mitm", "dns_tunnel", "beaconing_c2"]
 VERDICT_LABELS = ["benign", "suspicious", "malicious"]
 
+# Per-IP candidate cap applied ONLY to aggregate-flood PCAPs during
+# calibration: those score only their session candidate, so judging more
+# spoofed per-IP outliers just burns tokens (a full free-tier daily budget,
+# on the 37k-source synflood capture) without moving kappa.
+FLOOD_CALIBRATION_CAP = 3
+
 
 def load_ground_truth():
     with open(GROUND_TRUTH_PATH, encoding="utf-8") as f:
@@ -143,8 +149,17 @@ def run_calibration(client=None, pcaps_dir=None, results_path=None,
         S = rp.analyze_pcap(os.path.join(pcaps_dir, pcap_name), "S1")
         rp.run_ml_on_session(S)
         findings = rp.run_security_scans(S)
+        # Aggregate-flood PCAPs score ONLY the session candidate (spoofed
+        # per-IP sources have no truth label - see align_to_truth), so
+        # judging the batch cap's worth of statistical-only outliers is
+        # pure LLM cost with zero effect on kappa. Cap them hard for the
+        # calibration run; assemble_candidates always appends the
+        # session-level candidate after the per-IP cap, so it survives.
+        flood_pcap = bool(entry.get("expect", {}).get("aggregate_flood"))
+        max_cand = FLOOD_CALIBRATION_CAP if flood_pcap else None
         assembled = judge_core.assemble_candidates(S, findings,
-                                                   lstm_flags=lstm_flags)
+                                                   lstm_flags=lstm_flags,
+                                                   max_candidates=max_cand)
         out = judge_core.judge_candidates(assembled["candidates"],
                                           client=client, verbose=verbose)
         total_dropped += out["stats"]["dropped"]
