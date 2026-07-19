@@ -77,12 +77,20 @@ jobs:
           pip install --index-url https://download.pytorch.org/whl/cpu torch
           pip install -r requirements.txt
 
+      - name: Compute Ollama cache key
+        id: ollama_key
+        run: |
+          # actions/cache keys may not contain commas/colons; the panel
+          # spec has both ("llama3.2,gemma3:4b"), so sanitize to dashes.
+          SAN="$(printf '%s' "${OLLAMA_MODEL}-${LLM_JUDGE_PANEL}" | tr ',:/ ' '-')"
+          echo "key=ollama-${SAN}-v1" >> "$GITHUB_OUTPUT"
+
       - name: Cache Ollama models
         id: cache-ollama
         uses: actions/cache@v4
         with:
           path: ~/.ollama/models
-          key: ollama-${{ env.OLLAMA_MODEL }}-${{ env.LLM_JUDGE_PANEL }}-v1
+          key: ${{ steps.ollama_key.outputs.key }}
 
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
