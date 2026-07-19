@@ -5821,13 +5821,24 @@ def build_intro_view():
                     "to S2 surface as their own panel."]),
 
                 _h3("What you're agreeing to below"),
-                _p("This is a research / educational tool. It runs entirely on your machine, "
-                   "uploads nothing, and is intended for analysing captures you are authorised "
-                   "to inspect. By ticking the box below you confirm you have read this notice "
-                   "and that you will use the tool only on traffic you have permission to analyse. "
-                   "The deeper protocol background, ML-algorithm reference, device-classification "
-                   "engine, and threat-scoring tables live on the next screen - you can read "
-                   "them while your capture is loading."),
+                _p("This is a research / educational tool. Analysis "
+                   "runs entirely on your machine and no capture data "
+                   "leaves it during the analysis itself. Two optional "
+                   "buttons that appear after a session loads DO send "
+                   "data outward when you click them: \"Send to AI "
+                   "Judge\" opens the GitHub upload page for this "
+                   "repo's incoming/ folder, and \"Send to n8n "
+                   "Alert\" copies the PCAP to a locally-running "
+                   "Docker stack you started yourself. Neither is "
+                   "automatic. This tool is intended for captures you "
+                   "are authorised to inspect. By ticking the box "
+                   "below you confirm you have read this notice and "
+                   "that you will use the tool only on traffic you "
+                   "have permission to analyse. The deeper protocol "
+                   "background, ML-algorithm reference, device-"
+                   "classification engine, and threat-scoring tables "
+                   "live on the next screen - you can read them "
+                   "while your capture is loading."),
 
                 _section_divider("Acknowledgement"),
 
