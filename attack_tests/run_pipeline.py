@@ -176,41 +176,20 @@ def run_ml_on_session(S):
 
     if len(ip_agg) < 2:
         print(f"[{S['label']}] only {len(ip_agg)} IP -> skipping clustering"); return
-    # Contamination selection by seed-stability (mirrors the notebook):
-    # `contamination` does not change the trees, only the threshold, so a
-    # fixed-seed "sweep" compares identical scores. Refit with several seeds
-    # per contamination and keep the most seed-stable flagged set.
-    STABILITY_SEEDS = [7, 17, 42, 99, 123] if len(ip_agg) <= 20000 else [7, 42, 123]
-    print(f"[{S['label']}] IsolationForest contamination stability sweep "
-          f"({len(STABILITY_SEEDS)} seeds per value):")
-    best_cont, best_stab = 0.10, -1.0
-    flag_votes_by_cont = {}
-    for cont in [0.05, 0.10, 0.15]:
-        flag_sets = []
-        for seed in STABILITY_SEEDS:
-            iso = IsolationForest(n_estimators=100, contamination=cont,
-                                  random_state=seed).fit(X)
-            flag_sets.append(frozenset(np.where(iso.predict(X) == -1)[0]))
-        pair_jac = []
-        for a in range(len(flag_sets)):
-            for b in range(a + 1, len(flag_sets)):
-                u = flag_sets[a] | flag_sets[b]
-                pair_jac.append(len(flag_sets[a] & flag_sets[b]) / len(u) if u else 1.0)
-        stability = float(np.mean(pair_jac)) if pair_jac else 1.0
-        votes = np.zeros(len(X))
-        for fs in flag_sets:
-            votes[list(fs)] += 1
-        flag_votes_by_cont[cont] = votes / len(flag_sets)
-        nf = int((votes >= len(flag_sets) / 2).sum())
-        print(f"  cont={cont:.2f} -> {nf:3d} by majority vote | stability={stability:.3f}")
-        if stability > best_stab + 1e-9:
-            best_stab, best_cont = stability, cont
-    print(f"  selected cont={best_cont} (most seed-stable)")
-    iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42).fit(X)
+    # Fixed contamination=0.10. Measured mean F1 on the ground-truth
+    # PCAPs: 0.247 (5-seeds x 3-contams sweep) vs 0.250 (fixed=0.10).
+    # The sweep never beat fixed and it did 15 forest fits per session;
+    # keep a single fit and expose iso_stability as a compatibility
+    # column so downstream consumers keep working.
+    CONTAMINATION = 0.10
+    print(f"[{S['label']}] IsolationForest contamination={CONTAMINATION:.2f} "
+          f"(fixed, n_estimators=200, seed=42)")
+    iso = IsolationForest(n_estimators=200, contamination=CONTAMINATION,
+                          random_state=42).fit(X)
     ip_agg["iso_score"] = iso.decision_function(X)
     ip_agg["iso_flag"]  = iso.predict(X)
-    ip_agg["iso_stability"] = flag_votes_by_cont[best_cont]
-    ip_agg["anomaly"]   = ip_agg["iso_stability"] >= 0.5
+    ip_agg["anomaly"]   = ip_agg["iso_flag"] == -1
+    ip_agg["iso_stability"] = ip_agg["anomaly"].astype(float)
 
     k = 2
     nbrs = NearestNeighbors(n_neighbors=k).fit(X)

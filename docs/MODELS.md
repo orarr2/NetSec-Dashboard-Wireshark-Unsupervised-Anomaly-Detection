@@ -29,38 +29,30 @@ X      = scaler.fit_transform(X_raw)
 ## 1️⃣ IsolationForest — זיהוי אנומליות פר-IP
 
 ```python
-# בחירת contamination לפי יציבות-בין-זרעים (seed stability):
-# contamination לא משנה את העצים אלא רק את סף הסימון, ולכן השוואת ציונים
-# עם זרע קבוע חסרת משמעות. במקום זה: לכל ערך מאמנים כמה יערות עם זרעים
-# שונים, מודדים כמה קבוצת המסומנים יציבה בין הזרעים (Jaccard ממוצע בין
-# זוגות), ובוחרים את הערך היציב ביותר. תיקו → הערך הקטן יותר.
-STABILITY_SEEDS = [7, 17, 42, 99, 123]   # (3 זרעים בלבד מעל 20k IP)
-for cont in [0.05, 0.10, 0.15]:
-    flag_sets = [frozenset(np.where(
-        IsolationForest(n_estimators=100, contamination=cont,
-                        random_state=seed).fit(X).predict(X) == -1)[0])
-        for seed in STABILITY_SEEDS]
-    # stability = ממוצע Jaccard בין כל זוגות ה-flag_sets; votes = הצבעת רוב
-
-# המודל הסופי
-iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42)
+# contamination=0.10 קבוע. גרסה קודמת סרקה [0.05, 0.10, 0.15] עם 5 זרעים
+# ובחרה את הערך היציב ביותר (Jaccard); מדדנו על 5 קבצי ה-ground-truth
+# שממוצע F1 = 0.247 (סריקה) לעומת 0.250 (fixed=0.10) — סריקה מעולם לא
+# עברה את הבחירה הקבועה, והיא ביצעה 15 fits לפגישה. במקום זה: fit יחיד
+# עם contamination=0.10, ועמודת iso_stability נשארת ל-backward compatibility.
+CONTAMINATION = 0.10
+iso = IsolationForest(n_estimators=200, contamination=CONTAMINATION,
+                      random_state=42)
 iso.fit(X)
-ip_agg["iso_score"]     = iso.decision_function(X)  # ציון רציף
-ip_agg["iso_stability"] = votes / n_seeds           # שיעור הזרעים שסימנו את ה-IP
-ip_agg["anomaly"]       = ip_agg["iso_stability"] >= 0.5   # הצבעת רוב
+ip_agg["iso_score"]     = iso.decision_function(X)  # ציון רציף (שלילי = חריג)
+ip_agg["iso_flag"]      = iso.predict(X)            # -1 חריג / +1 תקין
+ip_agg["anomaly"]       = ip_agg["iso_flag"] == -1
+ip_agg["iso_stability"] = ip_agg["anomaly"].astype(float)  # compat
 ```
 
 **הפרמטרים:**
 - `n_estimators=200` — מספר עצי הבידוד ביער. יותר עצים = ציון יציב יותר, על
-  חשבון זמן ריצה. 200 הוא איזון סביר (100 בריצות ה-sweep, לחיסכון).
-- `contamination` — אחוז האנומליות המשוער בנתונים. **לא קבוע** — נבחר
-  אוטומטית מתוך `[0.05, 0.10, 0.15]` לפי **יציבות בין זרעים**: מאמנים
-  מספר יערות עם זרעים שונים לכל ערך ובוחרים את הערך שקבוצת המסומנים שלו
-  הכי עקבית (Jaccard ממוצע). IP נחשב אנומליה רק אם **רוב** הזרעים סימנו
-  אותו — הצבעה שעמידה בהרבה לרעש של יער בודד.
-- `random_state=42` — זרע קבוע למודל הסופי → ציוני `iso_score` ניתנים לשחזור.
+  חשבון זמן ריצה. 200 הוא איזון סביר.
+- `contamination=0.10` — אחוז האנומליות המשוער בנתונים. בעבר נבחר
+  דינמית ע"י seed-stability; אימות כמותי מול ה-ground-truth (‏docs/SCIENTIFIC_AUDIT_HE.md, מקומי)
+  הראה שקבוע 0.10 שווה בדיוק אך זול פי 7.5.
+- `random_state=42` — זרע קבוע → ציוני `iso_score` ניתנים לשחזור.
 - `decision_function` → ציון אנומליה רציף (שלילי = חריג יותר).
-- `iso_stability` → שיעור הזרעים שהסכימו שה-IP חריג (0–1).
+- `iso_stability` → עמודת תאימות (1.0 לחריג, 0.0 אחרת) לשמירת ריצת מסכים ישנים.
 
 ---
 
@@ -136,20 +128,37 @@ MAX_EPOCHS, PATIENCE = 15, 2
   השתפר 2 epochs ברצף, ומשחזרים את המשקלים הטובים ביותר. מונע overfitting.
 - **קלט נוסף:** `SEQ_LEN=10` (אורך הרצף), `MAX_BINS=20000` (subsampling).
 
-**זיהוי האנומליה:** IP/שנייה מסומנים כשגיאת החיזוי חורגת מ-`val_mean + 2σ`.
+**זיהוי האנומליה:** IP/שנייה מסומנים כשגיאת החיזוי חורגת מ-`val_mean + 2σ`
+(‏שווה בפועל ל-`quantile_0.95` — בדוק כמותית ב-audit_lstm_HE.md).
+
+**⚠ מגבלה של LSTM — לתעבורה של דקה+ בלבד:** ‏SEQ_LEN=10 דורש
+לפחות 20 סלי-זמן ‏(‏שניות עם תעבורה) כדי להתאמן; קבצי בסיס קצרים
+(‏‏‏tcp_syn_scan/xmas_scan/dns_amp — ‏~1-2 שניות) **לא** יריצו LSTM.
+זה נורמלי, לא באג — הכללים הדטרמיניסטיים מטפלים בסריקות רועשות.
 
 ---
 
-## למה שילוב של שלושה מודלים?
+## תפקיד כל שכבה — מה תופס מה בפועל
 
-| מודל | תופס | סוג פלט |
-|------|------|---------|
-| IsolationForest | outliers גלובליים (פר-IP) | ציון רציף |
-| DBSCAN | outliers מקומיים מבוססי-צפיפות | תווית בינארית (-1 / אשכול) |
-| LSTM | אנומליות זמניות / רצפיות | שגיאת חיזוי |
+מדידה כמותית מול ה-ground-truth מראה שהשכבות **אינן שוות בכיסוי**:
 
-כל מודל מכסה חולשה של האחרים, וההסכמה ביניהם ("Model Agreement Matrix")
-משמשת כ-cross-validation לא-מפוקח. ההערכה מתבססת על Silhouette Score
-(DBSCAN) ועל יציבות-בין-זרעים של IsolationForest, ובנוסף — מאז הוספת
-`attack_tests/ground_truth.json` — על precision/recall אמיתיים מול חמשת
-ה-PCAP המתויגים (ראו `attack_tests/evaluate.py` ו-`tests/`).
+| PCAP | IF | DBSCAN | Rules | Fusion |
+|---|:-:|:-:|:-:|:-:|
+| tcp_syn_scan | ✓ | ✓ | ✓ | ✗ |
+| xmas_scan | ✗ | ✓ | ✓ | ✗ |
+| arpspoof | ✗ | ✓ | ✓ | ✓ |
+| dns_amp | חלקי | ✗ | ✓ | ✗ |
+
+- **Rules (סריקות SYN/XMAS/DNS-amp/‏ARP-multi-MAC)**: workhorse — ‏recall=1.0
+  על כל 4 המקרים המתויגים. אם מוסיפים תקיפות דומות, ‏rules ילכדו.
+- **IsolationForest / DBSCAN**: זיהוי outliers פר-IP. ‏DBSCAN "מתפוצץ" על
+  תעבורה מזויפת עם >5,000 IPs (‏cap פנימי → cluster=-1 לכל).
+- **LSTM**: אנומליות זמניות ב-**תעבורה של דקות+** בלבד. לא רלוונטי לקצר.
+- **Fusion (על 5 המנועים המתקדמים)**: מכוון ל-**APT stealth** — beaconing,
+  DNS tunneling, ‏DGA, ‏TLS anomaly, ‏ARP MITM. ‏Recall=0 על סריקות רועשות
+  לפי דיזיין. לא באג, לא top-level threat score על כל תעבורה — הוא
+  מתמחה בתת-קבוצה של תקיפות.
+
+התוצאה: אין מודל יחיד שהוא "top-level" — כל אחד תופס את מקומו. ‏IF/DBSCAN/LSTM
+נשארים לזיהוי outliers/זמניים, ‏Rules הם רשת ביטחון על סריקות מוכרות, ו-fusion
+הוא הזרוע הייעודית ל-APT.

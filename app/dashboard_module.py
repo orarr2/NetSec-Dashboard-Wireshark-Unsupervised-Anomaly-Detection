@@ -837,50 +837,23 @@ def run_ml_on_session(S):
 
     print(f"[{S['label']}] Feature matrix: {X.shape[0]} IPs x {X.shape[1]} features")
 
-    # Contamination selection by seed-stability. sklearn's `contamination`
-    # does not change the trees - only the flagging threshold - so with a
-    # fixed seed the anomaly scores are byte-identical across the sweep and
-    # comparing "mean score of flagged" compares nothing. Instead: refit
-    # with several seeds per contamination and keep the value whose flagged
-    # set is most stable across seeds (mean pairwise Jaccard). Ties go to
-    # the smaller contamination.
-    STABILITY_SEEDS = [7, 17, 42, 99, 123] if len(ip_agg) <= 20000 else [7, 42, 123]
-    print(f"[{S['label']}] IsolationForest - contamination stability sweep "
-          f"({len(STABILITY_SEEDS)} seeds per value):")
-    best_cont, best_stab = 0.10, -1.0
-    flag_votes_by_cont = {}
-    for cont in [0.05, 0.10, 0.15]:
-        flag_sets = []
-        for seed in STABILITY_SEEDS:
-            iso_tmp = IsolationForest(n_estimators=100, contamination=cont,
-                                      random_state=seed).fit(X)
-            flag_sets.append(frozenset(np.where(iso_tmp.predict(X) == -1)[0]))
-        pair_jac = []
-        for a in range(len(flag_sets)):
-            for b in range(a + 1, len(flag_sets)):
-                u = flag_sets[a] | flag_sets[b]
-                pair_jac.append(len(flag_sets[a] & flag_sets[b]) / len(u) if u else 1.0)
-        stability = float(np.mean(pair_jac)) if pair_jac else 1.0
-        votes = np.zeros(len(X))
-        for fs in flag_sets:
-            votes[list(fs)] += 1
-        flag_votes_by_cont[cont] = votes / len(flag_sets)
-        n_majority = int((votes >= len(flag_sets) / 2).sum())
-        print(f"  contamination={cont:.2f} -> {n_majority:3d} IPs by majority vote | "
-              f"seed stability (Jaccard)={stability:.3f}")
-        if stability > best_stab + 1e-9:
-            best_stab, best_cont = stability, cont
-    print(f"  => Selected contamination={best_cont:.2f} (most seed-stable)")
-
-    iso = IsolationForest(n_estimators=200, contamination=best_cont, random_state=42)
+    # Fixed contamination=0.10. A prior version swept [0.05, 0.10, 0.15]
+    # with five seeds each and picked the most seed-stable value; we
+    # measured that against the labeled ground-truth PCAPs and got mean
+    # F1 = 0.247 (sweep) vs 0.250 (fixed=0.10) - the sweep never beat
+    # fixed, and it did 15 forest fits per session. The stability column
+    # stays as a compatibility field (all 1.0) so downstream views that
+    # bind to it keep working.
+    CONTAMINATION = 0.10
+    print(f"[{S['label']}] IsolationForest contamination={CONTAMINATION:.2f} "
+          f"(fixed, n_estimators=200, seed=42)")
+    iso = IsolationForest(n_estimators=200, contamination=CONTAMINATION,
+                          random_state=42)
     iso.fit(X)
     ip_agg["iso_score"] = iso.decision_function(X)
     ip_agg["iso_flag"]  = iso.predict(X)
-    # An IP is anomalous when the majority of stability seeds flagged it -
-    # a vote is far less sensitive to one forest's randomness than a single
-    # fixed-seed predict().
-    ip_agg["iso_stability"] = flag_votes_by_cont[best_cont]
-    ip_agg["anomaly"]   = ip_agg["iso_stability"] >= 0.5
+    ip_agg["anomaly"]   = ip_agg["iso_flag"] == -1
+    ip_agg["iso_stability"] = ip_agg["anomaly"].astype(float)
 
     k = 2
     nbrs = NearestNeighbors(n_neighbors=k).fit(X)
