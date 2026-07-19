@@ -85,6 +85,20 @@ jobs:
           SAN="$(printf '%s' "${OLLAMA_MODEL}-${LLM_JUDGE_PANEL}" | tr ',:/ ' '-')"
           echo "key=ollama-${SAN}-v1" >> "$GITHUB_OUTPUT"
 
+      # A multi-model panel pulls several GB of weights (e.g. llama3.2 +
+      # gemma3:4b is ~5 GB) on top of CPU torch; the hosted runner's small
+      # root disk fills up and the job dies with "No space left on device".
+      # Reclaim the pre-installed toolchains we never use. Single-model runs
+      # skip this (they fit comfortably and stay fast).
+      - name: Free disk space (panel runs)
+        if: env.LLM_JUDGE_PANEL != ''
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          echo "after:"; df -h / | tail -1
+
       - name: Cache Ollama models
         id: cache-ollama
         uses: actions/cache@v4
