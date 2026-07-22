@@ -1701,23 +1701,100 @@ _RDNS_REGEXES = [(re.compile(p["pattern"], re.I), p) for p in CLOUD_RANGES["rdns
 _STATIC_IPS   = CLOUD_RANGES["static_ips"]
 
 
+# Reverse-DNS resolution.
+#
+# The naive implementation used socket.setdefaulttimeout(0.6) before
+# gethostbyaddr, but on Windows gethostbyaddr goes through the Windows
+# DNS API which IGNORES the socket default timeout - each miss blocks
+# for the OS retry cycle (~3-4s). Measured on the labeled ground truth:
+# rDNS was 88-94% of ingest wall time on captures with external IPs
+# (see docs/PERFORMANCE_AUDIT_HE.md, local-only). Two fixes together:
+#
+#   1) Hard timeout via a worker thread we cut off on our schedule -
+#      the socket call still hangs in the OS, but nothing we do waits
+#      for it beyond the timeout.
+#   2) A parallel batch resolver (ThreadPoolExecutor) so N lookups
+#      run concurrently. 20 workers x 0.6s = ~1s for the first batch.
+#
+# rDNS is OFF by default from this version. Set NETSEC_ENABLE_RDNS=1
+# in the environment to re-enable it; the CIDR-based provider lookup
+# still runs regardless, so most cloud IPs are still identified.
+import concurrent.futures
+import threading
+
 _RDNS_CACHE = {}
+_RDNS_LOCK  = threading.Lock()
+RDNS_ENABLED = os.environ.get("NETSEC_ENABLE_RDNS", "0").lower() \
+    not in ("0", "false", "")
+
+
+def _rdns_lookup_blocking(ip):
+    """Raw call; runs in a worker thread, may hang for the OS DNS
+    retry cycle. Do not call directly - use _rdns_lookup."""
+    try:
+        return socket.gethostbyaddr(ip)[0].lower()
+    except Exception:
+        return ""
+
 
 def _rdns_lookup(ip, timeout=0.6):
-    if ip in _RDNS_CACHE:
-        return _RDNS_CACHE[ip]
-    old_to = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(timeout)
+    """Bounded rDNS: returns the reverse hostname or "" within
+    `timeout` seconds regardless of what the OS is doing. Reads and
+    writes _RDNS_CACHE under a lock so parallel callers stay coherent."""
+    with _RDNS_LOCK:
+        if ip in _RDNS_CACHE:
+            return _RDNS_CACHE[ip]
     try:
-        host = socket.gethostbyaddr(ip)[0].lower()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            host = ex.submit(_rdns_lookup_blocking, ip).result(
+                timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        host = ""
     except Exception:
         host = ""
-    finally:
-        socket.setdefaulttimeout(old_to)
-    _RDNS_CACHE[ip] = host
+    with _RDNS_LOCK:
+        _RDNS_CACHE[ip] = host
     return host
 
-def classify_external_ip(ip, do_rdns=True):
+
+def _rdns_lookup_batch(ips, timeout=0.6, max_workers=20):
+    """Resolve `ips` concurrently, returning {ip: host}. Each individual
+    lookup is bounded by `timeout`; the whole batch is bounded by
+    len(ips) * timeout / max_workers in the worst case (all miss)."""
+    ips = list(ips)
+    result = {}
+    # Serve cached hits without spawning threads.
+    to_do = []
+    with _RDNS_LOCK:
+        for ip in ips:
+            if ip in _RDNS_CACHE:
+                result[ip] = _RDNS_CACHE[ip]
+            else:
+                to_do.append(ip)
+    if not to_do:
+        return result
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers) as ex:
+        futures = {ex.submit(_rdns_lookup_blocking, ip): ip
+                   for ip in to_do}
+        for fut in concurrent.futures.as_completed(
+                futures, timeout=max(1.0, timeout * len(to_do) / max_workers
+                                     + timeout)):
+            ip = futures[fut]
+            try:
+                host = fut.result(timeout=timeout)
+            except Exception:
+                host = ""
+            result[ip] = host
+    # Anything that never returned in the outer as_completed loop.
+    for ip in to_do:
+        result.setdefault(ip, "")
+    with _RDNS_LOCK:
+        _RDNS_CACHE.update(result)
+    return result
+
+
+def classify_external_ip(ip, do_rdns=None):
     """Identify provider/service for a non-local IP. Returns dict."""
 
     if ip in _STATIC_IPS:
@@ -1732,7 +1809,8 @@ def classify_external_ip(ip, do_rdns=True):
         if ip_obj in net:
             return {**entry, "rule_id":"cidr", "ip":ip, "rdns":""}
 
-    if do_rdns:
+    _do = RDNS_ENABLED if do_rdns is None else bool(do_rdns)
+    if _do:
         host = _rdns_lookup(ip)
         if host:
             for rx, p in _RDNS_REGEXES:
@@ -1905,8 +1983,11 @@ def build_local_inventory(s):
                         ascending=[True, False, False]).drop(columns="__tier_rank")
     return df.reset_index(drop=True)
 
-def build_external_inventory(s, do_rdns=True, max_rdns=200):
-    """Inventory of external IPs. rDNS lookups are limited to top-`max_rdns` by bytes."""
+def build_external_inventory(s, do_rdns=None, max_rdns=200):
+    """Inventory of external IPs. rDNS lookups are limited to top-`max_rdns`
+    by bytes AND are resolved in parallel (concurrent.futures) with a hard
+    timeout - a hanging DNS query cannot stall ingest. do_rdns=None honors
+    RDNS_ENABLED (env-var NETSEC_ENABLE_RDNS)."""
     rows = []
 
     external_bytes = _Counter()
@@ -1918,9 +1999,16 @@ def build_external_inventory(s, do_rdns=True, max_rdns=200):
             external_bytes[ip] += b
 
 
+    _do = RDNS_ENABLED if do_rdns is None else bool(do_rdns)
     top_n = set(ip for ip, _ in external_bytes.most_common(max_rdns))
+    # Warm the rDNS cache in parallel so classify_external_ip below only
+    # hits the cache. Without this, each classify_external_ip call would
+    # sequentially block on socket.gethostbyaddr - measured at 88-94% of
+    # ingest wall time on captures with many external IPs.
+    if _do and top_n:
+        _rdns_lookup_batch(top_n)
     for ip, total_b in external_bytes.most_common():
-        cls = classify_external_ip(ip, do_rdns=(do_rdns and ip in top_n))
+        cls = classify_external_ip(ip, do_rdns=(_do and ip in top_n))
         rows.append({
             "ip":       ip,
             "bytes":    total_b,
