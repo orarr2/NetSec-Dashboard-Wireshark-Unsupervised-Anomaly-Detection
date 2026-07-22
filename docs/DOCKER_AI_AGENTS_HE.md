@@ -1,4 +1,4 @@
-# סוכני AI אוטונומיים כאנליסטים — n8n / Dify על גבי Docker
+# סוכני AI אוטונומיים כאנליסטים - n8n / Dify על גבי Docker
 
 > מסמך אפיון מלא בעברית, מותאם לפרויקט
 > **NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection**.
@@ -11,10 +11,10 @@
 
 1. [רקע: איפה נכנסים הסוכנים בפרויקט](#1-רקע-איפה-נכנסים-הסוכנים-בפרויקט)
 2. [למה Docker דווקא, ולמה n8n או Dify](#2-למה-docker-דווקא-ולמה-n8n-או-dify)
-3. [n8n מול Dify — השוואה מעשית](#3-n8n-מול-dify--השוואה-מעשית)
+3. [n8n מול Dify - השוואה מעשית](#3-n8n-מול-dify--השוואה-מעשית)
 4. [דרישות תשתית ומערכת](#4-דרישות-תשתית-ומערכת)
 5. [ארכיטקטורת יעד: זרימת מידע מקצה-לקצה](#5-ארכיטקטורת-יעד-זרימת-מידע-מקצה-לקצה)
-6. [התקנת Docker Desktop / Engine — מדריך פרקטי](#6-התקנת-docker-desktop--engine--מדריך-פרקטי)
+6. [התקנת Docker Desktop / Engine - מדריך פרקטי](#6-התקנת-docker-desktop--engine--מדריך-פרקטי)
 7. [n8n: פריסה מלאה ב־Docker Compose](#7-n8n-פריסה-מלאה-ב־docker-compose)
 8. [Dify: פריסה מלאה ב־Docker Compose](#8-dify-פריסה-מלאה-ב־docker-compose)
 9. [חיבור LLM חינמי או בתשלום](#9-חיבור-llm-חינמי-או-בתשלום)
@@ -24,7 +24,7 @@
 13. [אבטחת מידע, סודות ו־Hardening](#13-אבטחת-מידע-סודות-ו־hardening)
 14. [ניטור, לוגים ודיאגנוסטיקה](#14-ניטור-לוגים-ודיאגנוסטיקה)
 15. [עלויות ותקציב מעשי](#15-עלויות-ותקציב-מעשי)
-16. [Checklist להשקה — מה חייב להיות מוכן](#16-checklist-להשקה--מה-חייב-להיות-מוכן)
+16. [Checklist להשקה - מה חייב להיות מוכן](#16-checklist-להשקה--מה-חייב-להיות-מוכן)
 17. [שאלות נפוצות ותקלות מוכרות](#17-שאלות-נפוצות-ותקלות-מוכרות)
 18. [מפת דרכים להמשך](#18-מפת-דרכים-להמשך)
 
@@ -34,10 +34,10 @@
 
 הפרויקט כולל שני מסלולי ניתוח קיימים:
 
-1. **Dashboard מקומי** — נוטבוק Jupyter/Dash שמריץ במקביל
+1. **Dashboard מקומי** - נוטבוק Jupyter/Dash שמריץ במקביל
    `IsolationForest`, `DBSCAN`, `LSTM` וגם שכבת חוקים דטרמיניסטיים על
    קובצי PCAPNG (או הקלטה חיה דרך `tshark`), ומפיק כ־9 מסכי ניתוח.
-2. **LLM Judge** — תוסף עצמאי תחת `llm_judge/` שממזג את כלל הסיגנלים
+2. **LLM Judge** - תוסף עצמאי תחת `llm_judge/` שממזג את כלל הסיגנלים
    לכל מועמד (IP / flow / session) ל־JSON אחיד ומחזיר פסיקה מובנית:
    `benign | suspicious | malicious`, קטגוריה, ביטחון, ראיות והסבר.
 
@@ -54,7 +54,7 @@
 - להעשיר מידע (WHOIS, GeoIP, Threat Intel חינמי) לפני קבלת החלטה,
 - לתעד את כל השרשרת ב־Database מובנה.
 
-הכל בלי לגעת בקוד הליבה של הפרויקט — הכל דרך **קבצי הפלט** (`verdicts.json`,
+הכל בלי לגעת בקוד הליבה של הפרויקט - הכל דרך **קבצי הפלט** (`verdicts.json`,
 `verdicts.md`, לוגים) ו/או **HTTP webhooks** שנוסיף.
 
 ---
@@ -64,17 +64,17 @@
 ### למה Docker
 
 - **בידוד מלא**: כלים כמו n8n או Dify דורשים Node, Python, Redis,
-  Postgres, OpenSearch/Weaviate ועוד — התקנה מקומית "טבעית" תשבור לך את
+  Postgres, OpenSearch/Weaviate ועוד - התקנה מקומית "טבעית" תשבור לך את
   סביבת הפרויקט. Container מבודד כל אלה.
 - **שחזוריות**: קובץ `docker-compose.yml` יחיד מגדיר את *כל* הפריסה.
   לעבור למכונה חדשה = `docker compose up -d`.
 - **Volumes**: הסוכן צריך גישה לתיקיות PCAP, `incoming/`, `llm_judge/output/`.
-  ב־Docker זה שורה אחת של `volumes:` — בלי להתקין לו Python.
+  ב־Docker זה שורה אחת של `volumes:` - בלי להתקין לו Python.
 - **רשת פנימית**: כל השירותים מתקשרים דרך רשת Compose סגורה,
   והחוצה חשופה רק פורטת ה־UI (`5678` ל־n8n, `80` ל־Dify).
 - **גיבוי וניקוי**: `docker compose down -v` מנקה הכל; `docker compose
   down` שומר על ה־volumes וההגדרות.
-- **תמיכה ב־Windows / Mac / Linux** דרך Docker Desktop או Docker Engine —
+- **תמיכה ב־Windows / Mac / Linux** דרך Docker Desktop או Docker Engine -
   זהה בכולם.
 
 ### למה n8n או Dify (ולא Zapier / Make / קוד ידני)
@@ -82,8 +82,8 @@
 | נושא | n8n | Dify | קוד ידני |
 |---|---|---|---|
 | Self-hosted חינמי | כן (Community) | כן (Community) | כן |
-| ממשק גרפי לזרימות | Node graph — עוצמתי מאוד | Node graph + Chatflow/Agent | אין |
-| תמיכה מובנית ב־LLM | מספר nodes ל־LLM | ליבת המוצר — LLMs, RAG, Tools, Agents | מה שתכתוב |
+| ממשק גרפי לזרימות | Node graph - עוצמתי מאוד | Node graph + Chatflow/Agent | אין |
+| תמיכה מובנית ב־LLM | מספר nodes ל־LLM | ליבת המוצר - LLMs, RAG, Tools, Agents | מה שתכתוב |
 | ניהול Prompts | קיים אבל בסיסי | מרכזי, עם גרסאות, טסטים ומדדים | מה שתכתוב |
 | RAG / Knowledge base | דרך integrations | מובנה כליבת מוצר | מה שתכתוב |
 | Cron / Webhook / Files | חזק מאוד | דרך API + כלים חיצוניים | מה שתכתוב |
@@ -92,15 +92,15 @@
 
 **המלצה בפרויקט הזה**:
 
-- אם המטרה היא **תזמור** — לצפות ב־`incoming/`, להריץ את ה־CLI של
-  ה־Judge, לפרסר את ה־JSON, לשלוח Slack/Email, לפתוח Issue — **n8n**.
+- אם המטרה היא **תזמור** - לצפות ב־`incoming/`, להריץ את ה־CLI של
+  ה־Judge, לפרסר את ה־JSON, לשלוח Slack/Email, לפתוח Issue - **n8n**.
 - אם המטרה היא **בניית סוכן חכם** עם RAG על המסמכים של הפרויקט,
-  זיכרון שיחה, מספר Tools מובנים ו־UI לצ'אט עם האנליסט־AI — **Dify**.
+  זיכרון שיחה, מספר Tools מובנים ו־UI לצ'אט עם האנליסט־AI - **Dify**.
 - **הכי חזק**: להריץ את שניהם. n8n ידחוף אירועים; Dify יספק את המוח.
 
 ---
 
-## 3. n8n מול Dify — השוואה מעשית
+## 3. n8n מול Dify - השוואה מעשית
 
 ### 3.1 n8n
 
@@ -156,7 +156,7 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 | רכיב | n8n בלבד | Dify בלבד | n8n + Dify + Ollama מקומי |
 |---|---|---|---|
 | CPU | 2 cores | 4 cores | 6+ cores |
-| RAM | 2 GB | 6 GB | 16 GB (מודלים 7B–8B) / 32 GB (13B+) |
+| RAM | 2 GB | 6 GB | 16 GB (מודלים 7B-8B) / 32 GB (13B+) |
 | דיסק | 5 GB | 20 GB | 60+ GB (מודלים) |
 | GPU | לא חובה | לא חובה | מומלץ מאוד למודלים גדולים |
 
@@ -164,16 +164,16 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 
 - **Docker Desktop** ל־Windows/Mac או **Docker Engine + Compose plugin**
   ל־Linux (גרסה 24+).
-- `docker compose` (V2, בפקודה אחת עם רווח — לא `docker-compose`).
+- `docker compose` (V2, בפקודה אחת עם רווח - לא `docker-compose`).
 - Git.
-- **Wireshark / tshark** — כבר קיים בפרויקט; לא נדרש בתוך ה־container
+- **Wireshark / tshark** - כבר קיים בפרויקט; לא נדרש בתוך ה־container
   של ה־AI Platform, רק בסביבה שמייצרת את ה־PCAP.
 
 ### 4.3 תוכנה מומלצת
 
-- **Ollama** — להרצת LLM מקומיים חינם (כבר משמש אצלך ב־GitHub Actions
+- **Ollama** - להרצת LLM מקומיים חינם (כבר משמש אצלך ב־GitHub Actions
   עם `llama3.2`). ניתן להריץ גם כ־container.
-- **ngrok / Cloudflare Tunnel** — אם רוצים לחשוף Webhook החוצה מבלי
+- **ngrok / Cloudflare Tunnel** - אם רוצים לחשוף Webhook החוצה מבלי
   לפתוח פורט בראוטר.
 - **מפתחות API** לפי הבחירה שלך (Gemini, Groq, OpenAI-compatible וכו').
   כפי שנעשה ב־`llm_judge/`: מפתחות **לא נשמרים בגיט**, רק
@@ -215,15 +215,15 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 **נקודות עיקריות**:
 
 - Wireshark ממשיך לפעול כרגיל ב־Host.
-- שירות אחד בלבד קורא מ־`incoming/` — n8n (עם `Local File Trigger`).
+- שירות אחד בלבד קורא מ־`incoming/` - n8n (עם `Local File Trigger`).
 - ה־Judge רץ בקונטיינר משלו כדי לא לזהם את סביבת ה־Dashboard.
-- Dify רץ כ־Stack משלו (מספר containers) — Postgres שלו לא מוגש
+- Dify רץ כ־Stack משלו (מספר containers) - Postgres שלו לא מוגש
   ל־n8n.
-- ה־LLM נבחר לפי משתנה סביבה, לא לפי קוד — בדיוק כמו בפרויקט הנוכחי.
+- ה־LLM נבחר לפי משתנה סביבה, לא לפי קוד - בדיוק כמו בפרויקט הנוכחי.
 
 ---
 
-## 6. התקנת Docker Desktop / Engine — מדריך פרקטי
+## 6. התקנת Docker Desktop / Engine - מדריך פרקטי
 
 ### 6.1 Windows
 
@@ -232,7 +232,7 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 3. אחרי התקנה: `docker --version` ו־`docker compose version`.
 4. מומלץ להגדיר ב־Docker Desktop → Settings → Resources:
    - CPU: 4+
-   - RAM: 8–16 GB
+   - RAM: 8-16 GB
    - Disk: 50+ GB
 5. הפעל **File Sharing** לתיקיית הפרויקט (אחרת ה־volumes יחזירו
    `permission denied`).
@@ -314,7 +314,7 @@ DIFY_API_BASE=http://dify-api/v1
 DIFY_API_KEY=
 ```
 
-### 7.3 `docker-compose.yml` — סטאק בסיסי (n8n + Ollama + judge runner)
+### 7.3 `docker-compose.yml` - סטאק בסיסי (n8n + Ollama + judge runner)
 
 ```yaml
 name: netsec-ai
@@ -454,7 +454,7 @@ docker compose up -d
 מייצר את השירותים: `api`, `worker`, `web`, `db (postgres)`, `redis`,
 `weaviate` (או Qdrant), `sandbox`, `ssrf_proxy`, `nginx`.
 
-**הפעם הראשונה** תיקח 3–10 דקות (משיכת images + מיגרציות DB).
+**הפעם הראשונה** תיקח 3-10 דקות (משיכת images + מיגרציות DB).
 
 - Web UI: <http://localhost/> (או פורט לפי `.env`).
 - API base: `http://localhost/v1` (לשימוש חיצוני), פנימית ל־Compose:
@@ -465,9 +465,9 @@ docker compose up -d
 לאחר login: **Settings → Model Providers**.
 
 הוספת ספק לפי בחירה:
-- **Ollama** — לחיבור ל־Ollama המקומי: base URL `http://host.docker.internal:11434`
+- **Ollama** - לחיבור ל־Ollama המקומי: base URL `http://host.docker.internal:11434`
   ב־Windows/Mac, או שם השירות ב־Docker אם באותה רשת.
-- **OpenAI-compatible** — כל endpoint שנותן פרוטוקול OpenAI (LM Studio /
+- **OpenAI-compatible** - כל endpoint שנותן פרוטוקול OpenAI (LM Studio /
   llamafile / vLLM / TGI / ספק ענן שתומך בכך).
 - ספקים אחרים בעלי SDK רשמי ב־Dify (Gemini, Mistral, DeepSeek וכו').
 
@@ -477,10 +477,10 @@ docker compose up -d
 - הוסף Knowledge (RAG): העלה את `docs/*.md`, `llm_judge/README.md`,
   `PROMPT_CHANGELOG.md`. Dify יבצע chunking + embedding.
 - Tools לדוגמה:
-  - **HTTP** — קריאה ל־`judge_runner` דרך n8n webhook, או ישירות
+  - **HTTP** - קריאה ל־`judge_runner` דרך n8n webhook, או ישירות
     לשירות Python חשוף.
-  - **Function** — כלי מוגדר משתמש שכותב שורה ל־SQLite של audit.
-  - **Web Search** — אם רלוונטי.
+  - **Function** - כלי מוגדר משתמש שכותב שורה ל־SQLite של audit.
+  - **Web Search** - אם רלוונטי.
 - **System Prompt** לדוגמה:
 
 ```
@@ -490,7 +490,7 @@ rule-based pipeline over Wireshark captures, and you must:
 1) explain each malicious/suspicious verdict in plain Hebrew (or English),
 2) cross-reference the evidence against the project's docs,
 3) ask for the raw signal blob when the evidence looks weak,
-4) never issue block/quarantine actions – only recommendations.
+4) never issue block/quarantine actions - only recommendations.
 ```
 
 ### 8.4 שילוב עם n8n
@@ -521,13 +521,13 @@ rule-based pipeline over Wireshark captures, and you must:
 
 - **Ollama** עם `llama3.2`, `qwen2.5`, `gemma3:4b`, `mistral`,
   `phi3:mini`. פועל CPU-only, איטי אך מעולה לפיילוט. עובד ללא רשת.
-- **LM Studio** / **llamafile** / **vLLM** / **Text-Generation-WebUI** —
+- **LM Studio** / **llamafile** / **vLLM** / **Text-Generation-WebUI** -
   כולם חושפים API בפורמט OpenAI-compatible → משתמש באותה
   הגדרת provider.
 
 ### 9.2 חינמי דרך ענן (Free-tier / Freemium)
 
-לפי בחירתך — הצטרפות עצמאית, המפתח נשמר ב־`.env` המקומי בלבד:
+לפי בחירתך - הצטרפות עצמאית, המפתח נשמר ב־`.env` המקומי בלבד:
 
 - ספק Gemini (רבדים חינמיים במגבלות דקה).
 - ספקים דוגמת Groq / Together / OpenRouter (חלקם עם מפתחות דמו וחלקם
@@ -544,7 +544,7 @@ rule-based pipeline over Wireshark captures, and you must:
   עם `BASE_URL` מתאים או SDK רשמי ב־Dify.
 - **טיפ עלות**: הפעל LLM חיצוני **רק ב־Judge/Analyst layer**, אחרי
   שהחוקים/ML כבר סיננו את רוב תעבורת הרעש. במדידה הפנימית של הפרויקט,
-  PCAP טיפוסי מגיע ל־5–40 מועמדים בלבד ל־LLM, לא אלפים.
+  PCAP טיפוסי מגיע ל־5-40 מועמדים בלבד ל־LLM, לא אלפים.
 
 ### 9.4 בחירת מודל לפי משימה
 
@@ -561,11 +561,11 @@ rule-based pipeline over Wireshark captures, and you must:
 
 ### 10.1 גישות מומלצות
 
-1. **Read-only mount** — ה־container של n8n רואה `incoming/` ב־`ro`
+1. **Read-only mount** - ה־container של n8n רואה `incoming/` ב־`ro`
    (קריאה בלבד). כתיבה רק ל־`llm_judge/output/` ול־`db/`.
-2. **API עטיפה** — הרם שירות Flask/FastAPI קטן ("judge_api") שנחשף רק
+2. **API עטיפה** - הרם שירות Flask/FastAPI קטן ("judge_api") שנחשף רק
    בתוך רשת ה־Compose. הסוכן קורא לו במקום להריץ `docker exec`.
-3. **File watcher בתוך container** — אלטרנטיבה ל־n8n Local File
+3. **File watcher בתוך container** - אלטרנטיבה ל־n8n Local File
    Trigger: script שרץ בתוך `judge_runner` וקורא ל־webhook של n8n.
 
 ### 10.2 דוגמת עטיפת API (אופציונלית)
@@ -621,7 +621,7 @@ def analyze(job: Job):
       bash -lc "pip install fastapi uvicorn && \
                 uvicorn automation.judge_api.app:app --host 0.0.0.0 --port 8000"
     networks: [netsec_ai]
-    # לא חושפים ל־host — רק ברשת הפנימית
+    # לא חושפים ל־host - רק ברשת הפנימית
 ```
 
 מכאן, n8n או Dify Tool פונים ל־`http://judge_api:8000/analyze`.
@@ -630,22 +630,22 @@ def analyze(job: Job):
 
 ## 11. תבניות זרימה (Workflows) לדוגמה
 
-### 11.1 Workflow #1 — "Auto-triage of new PCAP"
+### 11.1 Workflow #1 - "Auto-triage of new PCAP"
 
 צעדים ב־n8n:
 
 1. **Local File Trigger** על `/data/incoming` בפילטר `*.pcap*`.
-2. **Function** — מוציא את שם הקובץ ואת המסלול המלא בתוך הקונטיינר.
+2. **Function** - מוציא את שם הקובץ ואת המסלול המלא בתוך הקונטיינר.
 3. **HTTP Request** → `POST http://judge_api:8000/analyze` עם המסלול.
-4. **IF** — אם `stats.malicious + stats.suspicious > 0`:
+4. **IF** - אם `stats.malicious + stats.suspicious > 0`:
    - **HTTP Request** → `POST /v1/chat-messages` של Dify עם ה־JSON
      המלא ובקשה לסיכום מקוצר בעברית.
-   - **Slack / Telegram / Email** — שליחת הסיכום + לינק לקובץ ה־MD.
-   - **GitHub** node — פתיחת Issue אם ה־PCAP הועלה מ־fork ציבורי.
+   - **Slack / Telegram / Email** - שליחת הסיכום + לינק לקובץ ה־MD.
+   - **GitHub** node - פתיחת Issue אם ה־PCAP הועלה מ־fork ציבורי.
 5. תמיד: **SQLite** node שכותב שורת audit
    (`ts, pcap, provider, model, verdict_counts, hash`).
 
-### 11.2 Workflow #2 — "Second opinion" (ועדת שופטים)
+### 11.2 Workflow #2 - "Second opinion" (ועדת שופטים)
 
 1. Trigger: Webhook שמקבל את `verdicts.json` הראשוני.
 2. **פיצול** לכל מועמד `malicious`.
@@ -654,7 +654,7 @@ def analyze(job: Job):
 5. **Merge + Function**: אם השופטים חלוקים, סמן `needs_human_review=true`.
 6. **Notify** רק את הפריטים המסומנים לבדיקת אדם.
 
-### 11.3 Workflow #3 — "Chat with the analyst"
+### 11.3 Workflow #3 - "Chat with the analyst"
 
 בצד Dify:
 - Chatflow עם RAG על מסמכי הפרויקט.
@@ -662,7 +662,7 @@ def analyze(job: Job):
   "רוץ שוב על ה־PCAP האחרון".
 - Memory לשיחה שנשמר ב־Postgres של Dify.
 
-### 11.4 Workflow #4 — "Threat Intel enrichment"
+### 11.4 Workflow #4 - "Threat Intel enrichment"
 
 לפני שהסוכן פוסק:
 - קריאת WHOIS/rDNS ל־IP.
@@ -691,10 +691,10 @@ def analyze(job: Job):
 
 ### 12.3 Multi-Agent (Debate / Committee)
 
-- **Analyst-A**: מודל קטן ומהיר (Ollama) — מספק דעה ראשונה.
-- **Analyst-B**: מודל בינוני/גדול — בודק את דעת A.
+- **Analyst-A**: מודל קטן ומהיר (Ollama) - מספק דעה ראשונה.
+- **Analyst-B**: מודל בינוני/גדול - בודק את דעת A.
 - **Judge**: מודל שלישי או אותו מודל בתפקיד "ראש צוות".
-- כלל החלטה: רוב פשוט; במקרה של תיקו — הפניה לאדם.
+- כלל החלטה: רוב פשוט; במקרה של תיקו - הפניה לאדם.
 
 ### 12.4 Loop-until-quiet
 
@@ -703,11 +703,11 @@ def analyze(job: Job):
 
 ### 12.5 Guardrails (חובה)
 
-- **Rule guardrail** — כבר קיים בפרויקט:
+- **Rule guardrail** - כבר קיים בפרויקט:
   אם חוק דטרמיניסטי נפל, `benign` נחסם. אין לבטל.
-- **Rate limit** — n8n `Wait` + Dify concurrency limit.
-- **Timeouts** — פר קריאה: 60–300 שנ' בהתאם למודל.
-- **Cost cap** — n8n `IF` שסופר קריאות ליום ושובר את השרשרת.
+- **Rate limit** - n8n `Wait` + Dify concurrency limit.
+- **Timeouts** - פר קריאה: 60-300 שנ' בהתאם למודל.
+- **Cost cap** - n8n `IF` שסופר קריאות ליום ושובר את השרשרת.
 
 ---
 
@@ -717,9 +717,9 @@ def analyze(job: Job):
 
 - שום מפתח לא נכתב לקוד או ל־compose.
 - כל המפתחות ב־`.env`; קובץ זה נמצא ב־`.gitignore`.
-- ב־Dify: Model Provider keys נשמרים ב־Postgres שלו — הגדר גיבוי
+- ב־Dify: Model Provider keys נשמרים ב־Postgres שלו - הגדר גיבוי
   מוצפן; אל תעביר את ה־volume כמו שהוא.
-- ב־n8n: Credentials מוצפנים עם `N8N_ENCRYPTION_KEY` — אבד = איבוד
+- ב־n8n: Credentials מוצפנים עם `N8N_ENCRYPTION_KEY` - אבד = איבוד
   קרדנציאלים.
 
 ### 13.2 רשת
@@ -749,7 +749,7 @@ def analyze(job: Job):
 
 ### 13.5 גיבוי
 
-- `n8n_data`, `ollama_data`, `dify_postgres` — לגבות תקופתית
+- `n8n_data`, `ollama_data`, `dify_postgres` - לגבות תקופתית
   (rsync/borg). אחסון מחוץ למכונה.
 - workflows של n8n גם ניתנים ליצוא כ־JSON וגם לגבותם ב־git פרטי
   (לא בפרויקט הפומבי הזה).
@@ -769,11 +769,11 @@ docker compose logs -f ollama
 
 ### 14.2 מדדים
 
-- זמן ריצה של `judge_cli.py` פר PCAP — נמדד כבר בפרויקט; שמור
+- זמן ריצה של `judge_cli.py` פר PCAP - נמדד כבר בפרויקט; שמור
   ב־SQLite לצד ה־verdict.
-- דיוק (Cohen's kappa) — כבר קיים; הרץ מחדש אחרי החלפת מודל
+- דיוק (Cohen's kappa) - כבר קיים; הרץ מחדש אחרי החלפת מודל
   (`llm_judge/calibration.py`).
-- שיעור override של ה־guardrail — סימן שהמודל נבחר לא מתאים.
+- שיעור override של ה־guardrail - סימן שהמודל נבחר לא מתאים.
 
 ### 14.3 התראות
 
@@ -788,14 +788,14 @@ docker compose logs -f ollama
   עלות = חשמל + חומרה שיש לך.
 - **חינם ב־Cloud**: GitHub Actions (כפי שקיים ב־`.github/workflows/analyze-pcap.yml`)
   ממשיך לתת אפס עלות ל־forks ציבוריים.
-- **ספק LLM חיצוני**: הפעל אותו רק על שלב ה־Analyst (5–40 קריאות
+- **ספק LLM חיצוני**: הפעל אותו רק על שלב ה־Analyst (5-40 קריאות
   ל־PCAP). Cache SQLite שמובנה ב־Judge → הרצות חוזרות = חינם.
 - **טיפ עלות**: כפה `LLM_JUDGE_MAX_CANDIDATES=40` (ברירת מחדל)
-  והפעל `RULE_GUARDRAIL=1` — מונע קריאות מיותרות.
+  והפעל `RULE_GUARDRAIL=1` - מונע קריאות מיותרות.
 
 ---
 
-## 16. Checklist להשקה — מה חייב להיות מוכן
+## 16. Checklist להשקה - מה חייב להיות מוכן
 
 - [ ] Docker + Compose מותקנים ורצים (`docker run hello-world`).
 - [ ] `automation/.env` מלא (`N8N_ENCRYPTION_KEY` ייחודי; לא ברירת מחדל).
@@ -820,13 +820,13 @@ docker compose logs -f ollama
 
 - ודא שה־mount הוא `../incoming:/data/incoming:ro` וה־Trigger מצביע
   על `/data/incoming`.
-- ב־Windows יש לפעמים בעיות inotify — הגדר את ה־trigger כ־poller
+- ב־Windows יש לפעמים בעיות inotify - הגדר את ה־trigger כ־poller
   (ב־n8n: node "Read Binary Files" עם Cron).
 
 ### 17.2 "Ollama מחזיר timeout"
 
 - הגדל `LLM_JUDGE_TIMEOUT_S=600` בסביבה של judge_runner.
-- ודא שהמודל **נמשך** (`ollama pull`) — הפעם הראשונה מורידה גיגה־בייטים.
+- ודא שהמודל **נמשך** (`ollama pull`) - הפעם הראשונה מורידה גיגה־בייטים.
 - למחשב חלש: החלף ל־`gemma3:4b` או `phi3:mini`.
 
 ### 17.3 "Dify לא מוצא את Ollama"
@@ -844,12 +844,12 @@ docker compose logs -f ollama
 
 ### 17.5 "אין דיסק"
 
-- הגבל volumes ל־Ollama (מודלים גדולים תופסים 10–40GB כל אחד).
+- הגבל volumes ל־Ollama (מודלים גדולים תופסים 10-40GB כל אחד).
 - נקה: `docker system prune -a`, `ollama rm <model>`.
 
 ### 17.6 "n8n נתקע אחרי restart"
 
-- לרוב מפתח הצפנה שונה. שמור את `N8N_ENCRYPTION_KEY` — אין דרך לשחזר
+- לרוב מפתח הצפנה שונה. שמור את `N8N_ENCRYPTION_KEY` - אין דרך לשחזר
   credentials בלעדיו.
 
 ---
@@ -858,19 +858,19 @@ docker compose logs -f ollama
 
 שלבים המוצעים ליישום, מסודרים לפי סדר:
 
-1. **פיילוט מקומי** — n8n + Ollama + `judge_api` בלבד. workflow יחיד.
-2. **חיבור Dify** — הוספת Agent עם RAG על המסמכים.
-3. **Second-opinion Committee** — ולידציה של פסיקה על ידי שני מודלים.
-4. **Threat-Intel Enrichment** — WHOIS / GeoIP / ASN לפני החלטה.
-5. **התראות + Ticketing** — Slack/Telegram + GitHub Issue אוטומטי.
-6. **Observability** — Prometheus/Grafana לצד המדדים של הפרויקט.
-7. **Multi-tenant** — הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
-8. **CI Gate** — הרחבת `tests/test_judge_kappa_regression.py` שיריץ
+1. **פיילוט מקומי** - n8n + Ollama + `judge_api` בלבד. workflow יחיד.
+2. **חיבור Dify** - הוספת Agent עם RAG על המסמכים.
+3. **Second-opinion Committee** - ולידציה של פסיקה על ידי שני מודלים.
+4. **Threat-Intel Enrichment** - WHOIS / GeoIP / ASN לפני החלטה.
+5. **התראות + Ticketing** - Slack/Telegram + GitHub Issue אוטומטי.
+6. **Observability** - Prometheus/Grafana לצד המדדים של הפרויקט.
+7. **Multi-tenant** - הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
+8. **CI Gate** - הרחבת `tests/test_judge_kappa_regression.py` שיריץ
    גם את הזרימה החדשה על PCAP סינטטי כחלק מ־regression.
 
 ---
 
 **המסמך הזה הוא המסגרת. כל מה שמפורט בו ניתן ליישום מיידי מעל
-הפרויקט הקיים בלי לגעת בשורת קוד מקורית — כל האינטגרציה היא
+הפרויקט הקיים בלי לגעת בשורת קוד מקורית - כל האינטגרציה היא
 "בצד" של הפרויקט: קבצי פלט, API עטיפה ומשתני סביבה שהוגדרו
 כבר בפרויקט**.

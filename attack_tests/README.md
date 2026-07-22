@@ -12,7 +12,7 @@ python3 attack_tests/run_pipeline.py \
     attack_tests/pcaps/<S1.pcap> attack_tests/pcaps/<S2.pcap>
 ```
 
-`run_pipeline.py` is a faithful subset of the notebook — tshark feature
+`run_pipeline.py` is a faithful subset of the notebook - tshark feature
 extraction, IsolationForest contamination sweep, k-NN-elbow DBSCAN with
 the spoofed-flood guards, the FTP / SMTP / SYN / FIN / NULL / Xmas /
 RST / ARP / DNS rule set, the DNS-response amp rule, and the per-second
@@ -36,7 +36,7 @@ mean-packet-size LSTM. No Dash UI; everything else is identical.
 - Horizontal-scan rule lights up `*** SCAN ***` on the same IP with
   `SYN ratio=1.00`.
 - ARP-spoofing rule flags `192.168.1.1` claimed by two MACs
-  (`08:00:27:2d:f8:5a` and `08:00:27:5e:01:7c`) — textbook MITM.
+  (`08:00:27:2d:f8:5a` and `08:00:27:5e:01:7c`) - textbook MITM.
 - DBSCAN cleanly splits S2 into 5 clusters, silhouette 0.63.
 
 ### `xmas_scan.pcap` → `dns_amp.pcap`  (`run_xmas_dnsamp.log`)
@@ -61,19 +61,19 @@ mean-packet-size LSTM. No Dash UI; everything else is identical.
 
 Five fixes were folded back into the notebook from these runs:
 
-1. **Cell 8** — new TCP flag counters for FIN-only, NULL (no flags),
+1. **Cell 8** - new TCP flag counters for FIN-only, NULL (no flags),
    and Xmas (FIN | PSH | URG) per source IP. Added as `fin_count`,
    `null_count`, `xmas_count` columns on the per-IP aggregation.
-2. **Cell 8** — new `dns_amp_per_src` aggregation: per source IP, the
+2. **Cell 8** - new `dns_amp_per_src` aggregation: per source IP, the
    count / total bytes / mean size of DNS *responses* leaving UDP/53.
-3. **Cell 12** — IsolationForest feature matrix extended with the
+3. **Cell 12** - IsolationForest feature matrix extended with the
    three stealth-scan counters; eps-from-elbow collapse to 0 is
    detected and replaced with the mean k-distance; DBSCAN is skipped
    when `|IPs| > 5 000` so spoofed floods don't blow memory.
-4. **Cell 16** — horizontal-scan rule extended from SYN-only to also
+4. **Cell 16** - horizontal-scan rule extended from SYN-only to also
    trigger on FIN-only, NULL, Xmas with the same > 50-pkt + >20-dst
    or > 0.7-ratio thresholds. Output now includes `scan_alerts`.
-5. **Cell 16** — DNS-response-side amplification rule: for each src IP
+5. **Cell 16** - DNS-response-side amplification rule: for each src IP
    that sent ≥ 50 DNS answers out of UDP/53 with mean response size
    ≥ 200 bytes, emit a reflector finding. Output adds `dns_amp`.
 
@@ -82,7 +82,7 @@ Five fixes were folded back into the notebook from these runs:
 | Attack class | IsoForest | DBSCAN | Rule layer | LSTM |
 |---|:-:|:-:|:-:|:-:|
 | TCP SYN scan      | ✅ | ✅ | ✅ horizontal-scan | n/a |
-| TCP Xmas scan     | – (small pop) | – | ✅ horizontal-scan | n/a |
+| TCP Xmas scan     | - (small pop) | - | ✅ horizontal-scan | n/a |
 | ARP spoofing      | ✅ | ✅ | ✅ ARP multi-MAC | ➖ |
 | DNS amplification | ✅ | ✅ | ✅ amp / reflector | n/a |
 | Spoofed SYN flood | ✅ | ✅ (skip-guarded) | ✅ syn_counter | n/a |

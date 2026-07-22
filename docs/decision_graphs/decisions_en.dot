@@ -7,7 +7,7 @@ digraph NetSecDecisions {
     // node color classes
     // data
     node [fillcolor="#0b3d3a", color="#39d0c4"];
-    D0  [label="Raw Wireshark PCAP — S1 & S2\nLive LAN capture · NO ground-truth labels"];
+    D0  [label="Raw Wireshark PCAP - S1 & S2\nLive LAN capture · NO ground-truth labels"];
 
     // choice nodes (decisions)
     node [fillcolor="#1b2a4a", color="#6aa3ff"];

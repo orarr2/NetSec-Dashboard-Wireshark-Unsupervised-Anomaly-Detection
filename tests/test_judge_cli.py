@@ -81,7 +81,7 @@ def _fake_context(not_flagged_count=3):
 
 
 # --------------------------------------------------------------------------
-# build_context — extracts facts from a real S / findings shape
+# build_context - extracts facts from a real S / findings shape
 # --------------------------------------------------------------------------
 def _synthetic_session(n_benign=3):
     ips = ["192.168.1.10"] + [f"10.0.0.{i + 5}" for i in range(n_benign)]
@@ -153,7 +153,7 @@ def test_build_context_extracts_pipeline_facts():
 
 
 # --------------------------------------------------------------------------
-# Markdown rendering — sections
+# Markdown rendering - sections
 # --------------------------------------------------------------------------
 def test_render_markdown_has_expected_sections():
     out, assembled, client = _judged_batch()

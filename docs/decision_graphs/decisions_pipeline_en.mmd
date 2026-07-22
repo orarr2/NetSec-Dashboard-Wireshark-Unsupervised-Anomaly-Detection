@@ -6,7 +6,7 @@ flowchart TD
     classDef win fill:#2a2440,stroke:#b08bff,color:#efe8ff
     classDef eval fill:#3a2f10,stroke:#e0b020,color:#fff3c9
 
-    D0["<b>Raw Wireshark PCAP — S1 &amp; S2</b><br/>Loads packet captures from a live LAN.<br/>No ground-truth labels exist."]:::data
+    D0["<b>Raw Wireshark PCAP - S1 &amp; S2</b><br/>Loads packet captures from a live LAN.<br/>No ground-truth labels exist."]:::data
 
     DL1{"<b>Dilemma 1: Supervised or Unsupervised?</b><br/>Data has no labelled attacks."}:::choose
     R1["<b>Rejected: Random Forest / XGBoost / SVM</b><br/>Need labelled data we do not have."]:::reject
@@ -15,7 +15,7 @@ flowchart TD
     DL2{"<b>Dilemma 2: Which detectors?</b><br/>One model has blind spots."}:::choose
     C2["<b>Chosen: 3-model ensemble</b><br/>IsolationForest (global outliers) +<br/>DBSCAN (density) + LSTM (temporal).<br/>Cross-validate via agreement matrix."]:::win
 
-    DL3["<b>Feature prep</b><br/>7 per-IP features: mean_len, std_len, count,<br/>burst_score, unique_dsts, syn_count, rst_count.<br/><b>StandardScaler</b> — models are scale-sensitive."]:::choose
+    DL3["<b>Feature prep</b><br/>7 per-IP features: mean_len, std_len, count,<br/>burst_score, unique_dsts, syn_count, rst_count.<br/><b>StandardScaler</b> - models are scale-sensitive."]:::choose
 
     DL4{"<b>Dilemma 3: IsolationForest contamination?</b>"}:::choose
     R4["<b>Rejected: hard-coded contamination</b><br/>Wrong guess over/under-flags."]:::reject
@@ -26,7 +26,7 @@ flowchart TD
     C5["<b>Chosen: auto from k-distance elbow</b><br/>2nd-derivative elbow. S1=0.78, S2=4.86."]:::win
 
     DL6{"<b>Dilemma 5: DBSCAN min_samples?</b>"}:::choose
-    R6["<b>Rejected: min_samples &ge; 3</b><br/>In 7-D with ~50–220 IPs everything collapses to noise."]:::reject
+    R6["<b>Rejected: min_samples &ge; 3</b><br/>In 7-D with ~50-220 IPs everything collapses to noise."]:::reject
     C6["<b>Chosen: min_samples=2</b><br/>cluster = -1 means a lone IP = anomaly."]:::win
 
     DL7{"<b>Dilemma 6: LSTM sequence sampling?</b>"}:::choose

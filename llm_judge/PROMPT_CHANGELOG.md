@@ -13,7 +13,7 @@ only if category kappa did not regress versus the previous version.
 
 First committed calibration: 2026-07-19, model `openai/gpt-oss-120b` (Groq),
 guardrail on, 33 scored candidates, 0 dropped. category kappa (linear)
-**0.7911** · unweighted 0.7925 · verdict kappa 0.7556 — well above the 0.60
+**0.7911** · unweighted 0.7925 · verdict kappa 0.7556 - well above the 0.60
 CI gate. Per-PCAP category kappa: tcp_syn_scan 1.0, xmas_scan 1.0, arpspoof
 0.878, synflood 1.0 (session candidate only), dns_amp 0.675. The report is
 `calibration/results/v0.3.0.json`; `tests/test_judge_kappa_regression.py`

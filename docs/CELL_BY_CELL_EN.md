@@ -134,7 +134,7 @@ Initialises `S1 = None`, `S2 = None`. The dashboard mutates these when the user 
 
 **IsolationForest** with a 20-point contamination sweep from 0.02 to 0.30. For each value, fits the model and records the mean anomaly score of the flagged group. Selects the contamination whose flagged group has the **lowest mean score** (most extreme - points isolated fastest by the trees). Stores the chosen value in `ip_agg.attrs['chosen_contamination']`.
 
-**DBSCAN** with `eps` from k-distance elbow: `NearestNeighbors(n_neighbors=2)`, sort the 2-NN distances descending, find the maximum second derivative - that's the elbow. Use `min_samples=2` because in 7-dim space with 50–150 points, density is naturally low.
+**DBSCAN** with `eps` from k-distance elbow: `NearestNeighbors(n_neighbors=2)`, sort the 2-NN distances descending, find the maximum second derivative - that's the elbow. Use `min_samples=2` because in 7-dim space with 50-150 points, density is naturally low.
 
 **Hopkins statistic H** computed alongside. H ≈ 0.5 = data is random; H > 0.65 = real cluster structure exists.
 

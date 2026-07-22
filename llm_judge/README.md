@@ -1,4 +1,4 @@
-# LLM-as-Judge — Standalone Triage Notebook
+# LLM-as-Judge - Standalone Triage Notebook
 
 An **optional, fully self-contained add-on** to the NetSec Dashboard.
 The main dashboard (`app/Network_Security_Dashboard.ipynb`) runs exactly as
@@ -8,23 +8,23 @@ nothing here ever executes.
 What it does (design: [`docs/LLM_JUDGE_SPEC.md`](../docs/LLM_JUDGE_SPEC.md)):
 the detection pipeline already produces per-IP ML scores (IsolationForest,
 DBSCAN), deterministic rule alerts (scans, floods, DNS amplification, ARP
-spoofing) — but each signal arrives separately and the analyst is the one
+spoofing) - but each signal arrives separately and the analyst is the one
 fusing them. This notebook sends every flagged candidate, with all of its
 signals in one compact JSON blob, to an LLM that returns a **single strict
 JSON verdict**: `benign | suspicious | malicious`, an attack category, a
 confidence, the evidence it used, and a one-paragraph reasoning trace. The
 queue is then re-ranked by an ensemble score and shown as a table.
 
-The judge **never acts** — `recommended_action: "block"` is a suggestion for
+The judge **never acts** - `recommended_action: "block"` is a suggestion for
 a human, wired to nothing.
 
-## Providers — bring your own model
+## Providers - bring your own model
 
 Three interchangeable providers; pick with `LLM_JUDGE_PROVIDER`:
 
 | Provider | What it is | Setup | Cost |
 |---|---|---|---|
-| `claude` (default) | Anthropic API — best JSON quality | `pip install -r llm_judge/requirements.txt` + set `ANTHROPIC_API_KEY` with **your own** key | your key, cents per PCAP |
+| `claude` (default) | Anthropic API - best JSON quality | `pip install -r llm_judge/requirements.txt` + set `ANTHROPIC_API_KEY` with **your own** key | your key, cents per PCAP |
 | `ollama` | Local model via the Ollama daemon | install from <https://ollama.com>, `ollama pull llama3.2` | free, offline |
 | `openai_compat` | Any OpenAI-style chat-completions endpoint: LM Studio / llamafile / vLLM locally, or hosted services that expose the OpenAI protocol | set `OPENAI_COMPAT_BASE_URL` + `OPENAI_COMPAT_MODEL` (+ `OPENAI_COMPAT_API_KEY` if the endpoint needs one) | free locally; hosted per its own terms |
 
@@ -45,27 +45,27 @@ set LLM_JUDGE_PROVIDER=ollama          # Windows;  export ... on Linux/macOS
 jupyter notebook llm_judge/LLM_Judge_Notebook.ipynb
 ```
 
-## Qualify a model before trusting it — the benchmark
+## Qualify a model before trusting it - the benchmark
 
 `benchmark_fixtures.json` holds **11 labeled candidates extracted from the
 five real attack PCAPs** by the production pipeline. Section 0 of the
 notebook judges all of them with any model you name and scores it:
 
-- **detection rate** — attack candidates judged non-benign (with the rule
+- **detection rate** - attack candidates judged non-benign (with the rule
   guardrail this is 1.0 for any model that returns valid JSON);
-- **category accuracy** — exact attack-category match: where model quality
+- **category accuracy** - exact attack-category match: where model quality
   actually shows;
-- **benign accuracy** — ML-only outliers correctly left benign.
+- **benign accuracy** - ML-only outliers correctly left benign.
 
 Measured on a CPU-only machine (11 fixtures, guardrail on): `llama3.2`
-(3B) scored 100% category accuracy — but 7 of its 7 attack verdicts were
+(3B) scored 100% category accuracy - but 7 of its 7 attack verdicts were
 guardrail rescues (raw model said benign); `gemma3:4b` scored 91% with
 zero rescues (its raw verdicts were already non-benign). Small local
 models are thus usable for detection-level triage; their raw judgment
 quality only shows on candidates no rule covers, which is where a
 stronger model still earns its keep.
 
-## Expert panel — a network of judges (opt-in)
+## Expert panel - a network of judges (opt-in)
 
 Instead of trusting one model, `LLM_JUDGE_PANEL` runs every candidate
 through **N independent judges** and makes them argue before anything is
@@ -80,20 +80,20 @@ set LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,ollama:llama3.2
 
 Flow per candidate:
 
-1. **Independent round** — every judge returns a strict-schema verdict
+1. **Independent round** - every judge returns a strict-schema verdict
    (cached per model, so re-runs are free).
-2. **Debate round** — only when judges disagree on the verdict or the
+2. **Debate round** - only when judges disagree on the verdict or the
    category: each judge sees the peers' anonymized analyses and must
    either **revise** its position or **defend** it with a rebuttal that
    cites fields from the candidate blob. Agreed candidates never trigger
    extra calls.
-3. **Deterministic resolution** — consensus takes the highest-confidence
+3. **Deterministic resolution** - consensus takes the highest-confidence
    verdict; a surviving dispute takes the fail-safe (more severe) side
    and flags `needs_human_review` (⚖). The rule guardrail still sits
    above the whole panel.
 
 Every run also emits a **participation report** (in `verdicts.json` and
-the markdown): per model — candidates received, valid verdicts, failures
+the markdown): per model - candidates received, valid verdicts, failures
 (with examples), debates, revisions, agreement with the final verdict,
 cache hits and mean latency. A judge that fails to initialize or answers
 garbage is excluded/logged and the remaining judges carry the batch; the
@@ -101,7 +101,7 @@ run only fails when fewer than two judges can be constructed.
 
 Adding another engine = adding one entry to `LLM_JUDGE_PANEL` (optionally
 with a `provider:` prefix). No code changes. Two judges must not share a
-model name — verdicts are cached per model id, so duplicates would fake
+model name - verdicts are cached per model id, so duplicates would fake
 agreement.
 
 The older `LLM_JUDGE_COMMITTEE` (fixed two-model shape, no debate) is
@@ -123,7 +123,7 @@ toggling the guardrail never needs a cache reset.
 | File | Role |
 |---|---|
 | `LLM_Judge_Notebook.ipynb` | Interactive entry point (Jupyter) |
-| `judge_cli.py` | **Headless CLI** — same pipeline, no Jupyter, used by the GitHub Actions workflow (also handy locally) |
+| `judge_cli.py` | **Headless CLI** - same pipeline, no Jupyter, used by the GitHub Actions workflow (also handy locally) |
 | `judge_config.py` | Provider/model, guardrail, weights, thresholds, prompt version |
 | `judge_core.py` | Candidate assembly, system prompt, verdict validation, rule guardrail, SQLite cache, ensemble ranking |
 | `llm_clients.py` | `ClaudeClient` + `OllamaClient` + `OpenAICompatClient` |
@@ -133,9 +133,9 @@ toggling the guardrail never needs a cache reset.
 | `schemas/*.schema.json` | The input/output JSON contracts |
 | `PROMPT_CHANGELOG.md` | Prompt version history + kappa per version |
 | `calibration/results/` | Committed calibration reports (CI gate reads the newest) |
-| `cache/`, `output/` | Runtime artifacts — gitignored, safe to delete |
+| `cache/`, `output/` | Runtime artifacts - gitignored, safe to delete |
 
-## Run without Jupyter — the CLI
+## Run without Jupyter - the CLI
 
 ```bash
 python llm_judge/judge_cli.py path/to.pcap \
@@ -146,12 +146,12 @@ python llm_judge/judge_cli.py path/to.pcap \
 Same detection pipeline as the notebook, same guardrail, same provider
 env vars. Writes:
 
-- `verdicts.json` — full machine-readable batch (stats + ranked results + drops + capped).
-- `verdicts.md` — GitHub-Issue-friendly report with the verdict table.
+- `verdicts.json` - full machine-readable batch (stats + ranked results + drops + capped).
+- `verdicts.md` - GitHub-Issue-friendly report with the verdict table.
 
 This is the entry point of the autonomous-agent path below.
 
-## Autonomous agent — GitHub Actions (no VM needed)
+## Autonomous agent - GitHub Actions (no VM needed)
 
 `.github/workflows/analyze-pcap.yml` turns the judge into a hands-off
 agent that runs in GitHub's cloud, free of charge, on any PCAP you push
@@ -164,7 +164,7 @@ agent that runs in GitHub's cloud, free of charge, on any PCAP you push
    between runs), and calls `judge_cli.py`.
 3. Uploads `verdicts.json` + `verdicts.md` + logs as a run artifact.
 4. Opens a **GitHub Issue** with the verdict table, labeled
-   `judge-verdict` — visible from mobile without leaving GitHub.
+   `judge-verdict` - visible from mobile without leaving GitHub.
 
 Cost: `ubuntu-latest` runners are free (unlimited on public repos; 2,000
 min/month on private). Ollama runs locally on the runner, so no LLM API
@@ -172,7 +172,7 @@ key or bill. See `incoming/README.md` for the full trigger reference.
 
 Tests live with the rest of the suite: `tests/test_llm_judge_unit.py` and
 `tests/test_llm_judge_providers.py` (mocked LLM + in-process mock
-OpenAI-compatible server — no network), and
+OpenAI-compatible server - no network), and
 `tests/test_judge_kappa_regression.py` (reads the committed calibration
 result; skips until the first one exists).
 
@@ -181,14 +181,14 @@ result; skips until the first one exists).
 | Variable | Default | Meaning |
 |---|---|---|
 | `LLM_JUDGE_PROVIDER` | `claude` | `claude` \| `ollama` \| `openai_compat` |
-| `ANTHROPIC_API_KEY` | — | Required for the Claude provider |
+| `ANTHROPIC_API_KEY` | - | Required for the Claude provider |
 | `LLM_JUDGE_MODEL` | `claude-opus-4-8` | Claude model id |
 | `OLLAMA_MODEL` | `llama3.2` | Local Ollama model name |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama daemon address |
 | `OPENAI_COMPAT_BASE_URL` | `http://localhost:1234/v1` | OpenAI-style endpoint (default: LM Studio local server) |
-| `OPENAI_COMPAT_MODEL` | — | Model name at that endpoint (required for this provider) |
-| `OPENAI_COMPAT_API_KEY` | — | Bearer key, only if the endpoint needs one |
-| `LLM_JUDGE_PANEL` | — | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off |
+| `OPENAI_COMPAT_MODEL` | - | Model name at that endpoint (required for this provider) |
+| `OPENAI_COMPAT_API_KEY` | - | Bearer key, only if the endpoint needs one |
+| `LLM_JUDGE_PANEL` | - | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off |
 | `LLM_JUDGE_DEBATE` | `1` | `0` skips the debate round (plain N-way vote) |
 | `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` disables the benign-override guardrail |
 | `LLM_JUDGE_EFFORT` | `medium` | Claude reasoning effort (`low`/`medium`/`high`) |
@@ -198,22 +198,22 @@ result; skips until the first one exists).
 
 ## Cost & determinism
 
-- Each candidate is one LLM call of roughly 2–4 KB input and a small JSON
+- Each candidate is one LLM call of roughly 2-4 KB input and a small JSON
   output. Verdicts are **cached in SQLite** by a fingerprint of
-  (candidate blob, prompt version, model) — re-running the same PCAP is free
+  (candidate blob, prompt version, model) - re-running the same PCAP is free
   and byte-identical. Local providers cost nothing; on Claude a typical
-  PCAP (5–40 candidates) costs cents on the user's own key.
+  PCAP (5-40 candidates) costs cents on the user's own key.
 - Any model change should be followed by a benchmark run (notebook
-  section 0) and, for real use, a calibration run — kappa is per model.
+  section 0) and, for real use, a calibration run - kappa is per model.
 
-## Calibration — the number that guards the prompt
+## Calibration - the number that guards the prompt
 
 `attack_tests/ground_truth.json` labels five real attack PCAPs. The
 notebook's calibration section runs the judge over all five and computes
 **Cohen's kappa** between the judge's categories and the labels:
 
 - per-IP candidates are scored against the labeled entity lists
-  (unlisted flagged IPs count as `benign_anomaly` — the false positives the
+  (unlisted flagged IPs count as `benign_anomaly` - the false positives the
   judge is supposed to down-rank);
 - aggregate-flood PCAPs are scored **only** on the session-level candidate,
   because spoofed sources have no meaningful per-IP identity.
@@ -232,5 +232,5 @@ calling any LLM**. The prompt-iteration loop is documented in
 | 15 s request timeout | 300 s default | Local models loading from disk need minutes on the first call |
 | prompt-only "strict JSON" | provider structured outputs + client-side validation | Schema-valid by construction on all providers; retry-once-then-drop still applies |
 | LLM verdict is final | + rule guardrail (extension) | Measured failure: small models override fired high-precision rules with "benign"; the guardrail makes that impossible while preserving the model verdict for transparency |
-| dashboard UI card + Model Diagnostics pill | notebook table + JSON export | This add-on is intentionally decoupled from `app/` — the dashboard stays untouched |
+| dashboard UI card + Model Diagnostics pill | notebook table + JSON export | This add-on is intentionally decoupled from `app/` - the dashboard stays untouched |
 | `attack_tests/calibrate_judge.py` CLI | calibration + benchmark sections inside the notebook | The notebook is the single entry point by design |

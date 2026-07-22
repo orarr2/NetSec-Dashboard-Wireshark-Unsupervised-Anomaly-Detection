@@ -185,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
-            --title "Judge verdicts — ${{ steps.pcap.outputs.base }} · run #${{ github.run_number }}" \
+            --title "Judge verdicts - ${{ steps.pcap.outputs.base }} · run #${{ github.run_number }}" \
             --body-file verdicts.md \
             --label judge-verdict \
           | tee issue.txt

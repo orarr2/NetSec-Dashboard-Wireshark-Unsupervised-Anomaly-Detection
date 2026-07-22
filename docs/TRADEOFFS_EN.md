@@ -238,7 +238,7 @@ This document summarises the substantive design decisions, what options were con
 - Z-scores become interpretable: "this device is unusual *for a local device*", not "this device is unusual *compared to a YouTube CDN*".
 
 **Disadvantages:**
-- Small sample size (10–30 local devices) means Z-scores are noisy.
+- Small sample size (10-30 local devices) means Z-scores are noisy.
 - IPv6-only local devices (if not in `is_private` ranges) get excluded.
 
 **When to consider an alternative:** On networks with very few local devices, augment with cross-network reference data.
@@ -273,7 +273,7 @@ This document summarises the substantive design decisions, what options were con
 
 **What was considered:**
 - **Free-space (n=2)** - accurate outdoors with line-of-sight; underestimates indoor walls.
-- **Heavy obstruction (n=3.5–4)** - accurate in dense buildings; overestimates open-plan offices.
+- **Heavy obstruction (n=3.5-4)** - accurate in dense buildings; overestimates open-plan offices.
 - **Indoor average (n=2.5)** ← chosen.
 
 **Advantages:**
@@ -343,7 +343,7 @@ This document summarises the substantive design decisions, what options were con
 - **latin1** ← chosen.
 
 **Advantages:**
-- Accepts all byte values 0–255 without raising `UnicodeDecodeError`.
+- Accepts all byte values 0-255 without raising `UnicodeDecodeError`.
 - The Info column is only used for filtering and display, not byte-level analysis.
 
 **Disadvantages:**

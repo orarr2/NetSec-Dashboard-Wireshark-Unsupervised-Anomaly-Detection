@@ -373,7 +373,7 @@ def _analyze_pcap_tshark(path, label, tshark_path):
         syn_counter = collections.Counter(tcp_df[(tcp_df["fi"] & 0x3F) == 0x02]["ip_src"].tolist())
         # RST: any RST flag (0x04).
         rst_counter = collections.Counter(tcp_df[(tcp_df["fi"] & 0x04) != 0]["ip_src"].tolist())
-        # Stealth scans — FIN-only, NULL (no flags), Xmas (FIN|PSH|URG = 0x29).
+        # Stealth scans - FIN-only, NULL (no flags), Xmas (FIN|PSH|URG = 0x29).
         # Mask against 0x3F so ECE/CWR bits do not perturb the match.
         fin_counter  = collections.Counter(tcp_df[(tcp_df["fi"] & 0x3F) == 0x01]["ip_src"].tolist())
         null_counter = collections.Counter(tcp_df[(tcp_df["fi"] & 0x3F) == 0x00]["ip_src"].tolist())
@@ -1867,7 +1867,7 @@ def _derive_device_name(ip, mdns_names, model):
 
 
 def compute_threat_score(ip, session):
-    """Return (score, tier, reasons) for one IP. Pure heuristic - no ML required. Signals (weighted, capped): • TCP SYN burst (0–30 pts) • Unique destinations (0–20 pts) - port-scan signature • TCP RST flood (0–10 pts) • Many ports used (0–10 pts) - additional scan signal • ARP spoofing (+25 pts) • DNS tunneling (0–15 pts) • NXDOMAIN burst (0–10 pts) • Multi-signal bonus (+10 if ≥3 independent signals) """
+    """Return (score, tier, reasons) for one IP. Pure heuristic - no ML required. Signals (weighted, capped): • TCP SYN burst (0-30 pts) • Unique destinations (0-20 pts) - port-scan signature • TCP RST flood (0-10 pts) • Many ports used (0-10 pts) - additional scan signal • ARP spoofing (+25 pts) • DNS tunneling (0-15 pts) • NXDOMAIN burst (0-10 pts) • Multi-signal bonus (+10 if ≥3 independent signals) """
     score, reasons = 0, []
     n_signals = 0
     ip_agg = session.get("ip_agg")
@@ -2887,7 +2887,7 @@ def make_browsing_hour_fig(s):
 
     fig.update_layout(
         title=(f"Browsing Activity by 5-min Window - {s['label']} "
-               f"({s['t0'].strftime('%H:%M')}–{s['t1'].strftime('%H:%M')})"),
+               f"({s['t0'].strftime('%H:%M')}-{s['t1'].strftime('%H:%M')})"),
         xaxis=dict(title="Time (5-min buckets)", tickmode="array",
                    tickvals=tickvals, ticktext=ticktext, tickangle=-45),
         yaxis=dict(automargin=True, title="Device"),
@@ -5613,7 +5613,7 @@ def _build_education_content(location_key=""):
                                     "background":"rgba(251,191,36,0.08)",
                                     "marginRight":"10px","minWidth":"56px",
                                     "display":"inline-block","textAlign":"center"}),
-                                html.Span("score 25–49 - notable anomalies",
+                                html.Span("score 25-49 - notable anomalies",
                                     style={"fontSize":"0.9rem","color":INK_DIM})
                             ], style={"marginBottom":"8px","display":"flex","alignItems":"center"}),
                             html.Div([
@@ -5625,7 +5625,7 @@ def _build_education_content(location_key=""):
                                     "background":"rgba(248,113,113,0.10)",
                                     "marginRight":"10px","minWidth":"56px",
                                     "display":"inline-block","textAlign":"center"}),
-                                html.Span("score 50–74 - clear attack pattern",
+                                html.Span("score 50-74 - clear attack pattern",
                                     style={"fontSize":"0.9rem","color":INK_DIM})
                             ], style={"marginBottom":"8px","display":"flex","alignItems":"center"}),
                             html.Div([
@@ -5645,13 +5645,13 @@ def _build_education_content(location_key=""):
                     dbc.Col(html.Div([
                         _h3("Eight-signal threat score"),
                         html.Ul([
-                            html.Li("TCP SYN burst - port-scan / flood signal (0–30 pts)"),
-                            html.Li("Unique destinations - scan breadth (0–20 pts)"),
-                            html.Li("TCP RST flood - connection abuse (0–10 pts)"),
-                            html.Li("Many distinct ports used (0–10 pts)"),
+                            html.Li("TCP SYN burst - port-scan / flood signal (0-30 pts)"),
+                            html.Li("Unique destinations - scan breadth (0-20 pts)"),
+                            html.Li("TCP RST flood - connection abuse (0-10 pts)"),
+                            html.Li("Many distinct ports used (0-10 pts)"),
                             html.Li("ARP spoofing - IP↔MAC inconsistencies (+25 pts)"),
-                            html.Li("DNS tunneling - abnormally long queries (0–15 pts)"),
-                            html.Li("NXDOMAIN burst - DGA / typo-squatting (0–10 pts)"),
+                            html.Li("DNS tunneling - abnormally long queries (0-15 pts)"),
+                            html.Li("NXDOMAIN burst - DGA / typo-squatting (0-10 pts)"),
                             html.Li("Multi-signal bonus (+10 if 3+ signals active)"),
                         ], style={"color":INK_DIM,"fontSize":"0.88rem",
                                   "paddingLeft":"20px","marginBottom":"0",
@@ -7088,7 +7088,7 @@ def _render_ai_judge_link(session, session_key):
         return html.Div()
     src_pcap = session.get("_source_pcap") or ""
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
-    caption = (f"Drag `{src_name}` into the page and click Commit — the "
+    caption = (f"Drag `{src_name}` into the page and click Commit - the "
                f"GitHub Actions judge runs automatically, and a new "
                f"Issue with the verdict and analyst commentary is opened.")
     return html.Div([

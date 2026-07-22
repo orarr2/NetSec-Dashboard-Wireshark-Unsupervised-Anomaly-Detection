@@ -12,7 +12,7 @@ Mermaid formats and one Graphviz format.
 ## How to render
 
 **Mermaid (.mmd):**
-- Paste into <https://mermaid.live> — instant preview.
+- Paste into <https://mermaid.live> - instant preview.
 - Or GitHub renders ```mermaid fenced blocks automatically.
 - Or CLI: `npx @mermaid-js/mermaid-cli -i decisions_pipeline_en.mmd -o out.png`
 

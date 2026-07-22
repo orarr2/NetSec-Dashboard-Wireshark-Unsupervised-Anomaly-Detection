@@ -122,7 +122,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
     ctx = context or {}
     commentary = out.get("analyst_commentary")
     lines = [
-        f"# Judge verdicts — `{os.path.basename(pcap_path)}`",
+        f"# Judge verdicts - `{os.path.basename(pcap_path)}`",
         "",
         "| | |",
         "|---|---|",
@@ -208,7 +208,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         lines += [
             "## Top verdict",
             "",
-            f"**`{top['candidate_id']}`** — **{v['verdict'].upper()}** "
+            f"**`{top['candidate_id']}`** - **{v['verdict'].upper()}** "
             f"({v['category']}, confidence {v['confidence']:.2f})",
             "",
             f"> {v['reasoning']}",
@@ -285,7 +285,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                 lines += ["**Debate positions (defended verdicts):**", ""]
                 for cand_id, j in rebutted:
                     lines.append(
-                        f"- `{cand_id}` — `{j['model']}` "
+                        f"- `{cand_id}` - `{j['model']}` "
                         f"({j['stance']}): {j['rebuttal']}")
                 lines.append("")
 
@@ -319,7 +319,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         lines += [
             "## No verdicts",
             "",
-            "The pipeline produced no flagged candidates — nothing to judge. "
+            "The pipeline produced no flagged candidates - nothing to judge. "
             "This is either a clean capture or the detectors did not fire; "
             "check `analyze.log` in the artifact for the pipeline output.",
             "",
@@ -333,7 +333,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             "",
             f"The pipeline analyzed **{len(not_flagged)} additional IP"
             f"{'' if len(not_flagged) == 1 else 's'}** but did not flag "
-            f"{'it' if len(not_flagged) == 1 else 'them'} — no ML anomaly "
+            f"{'it' if len(not_flagged) == 1 else 'them'} - no ML anomaly "
             "and no deterministic rule fired. Included here so you can see "
             "the full traffic set the pipeline reasoned about.",
             "",
@@ -342,7 +342,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         ]
         MAX_ROWS = 20
         for entry in not_flagged[:MAX_ROWS]:
-            iso = "—" if entry["iso_score"] is None \
+            iso = "-" if entry["iso_score"] is None \
                 else f"{entry['iso_score']:+.3f}"
             lines.append(
                 f"| `{entry['ip']}` | {entry['packets']:,} | {iso} |")
@@ -356,7 +356,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
     if out["dropped"]:
         lines += ["## Dropped by the provider (after 1 retry)", ""]
         for d in out["dropped"]:
-            lines.append(f"- `{d['candidate_id']}` — {d['error']}")
+            lines.append(f"- `{d['candidate_id']}` - {d['error']}")
         lines.append("")
 
     if assembled["capped"]:
@@ -390,7 +390,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         for m in stats["models"]:
             row = pr[m]
             ml = (f"{row['mean_latency_ms']} ms"
-                  if row["mean_latency_ms"] is not None else "—")
+                  if row["mean_latency_ms"] is not None else "-")
             lines.append(
                 f"| `{m}` | {row['assigned']} | {row['valid_verdicts']} | "
                 f"{row['failures']} | {row['debates']} | {row['revised']} | "
@@ -410,7 +410,7 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         "",
         "- **Verdict**: `benign` (no attack pattern), `suspicious` (weak or "
         "ambiguous signal), `malicious` (strong, unambiguous evidence).",
-        "- **Category**: the attack shape — `port_scan`, `syn_flood`, "
+        "- **Category**: the attack shape - `port_scan`, `syn_flood`, "
         "`dns_amp`, `arp_mitm`, `beaconing_c2`, `dns_tunnel`, or "
         "`benign_anomaly` (statistical outlier that isn't an attack).",
         "- **Priority**: ensemble rank score, "

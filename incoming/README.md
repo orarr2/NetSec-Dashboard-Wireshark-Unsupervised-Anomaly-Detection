@@ -1,4 +1,4 @@
-# incoming/ — drop PCAPs here to trigger the autonomous LLM Judge
+# incoming/ - drop PCAPs here to trigger the autonomous LLM Judge
 
 Any file pushed under this directory whose name ends in `.pcap` or
 `.pcapng` triggers `.github/workflows/analyze-pcap.yml`:
@@ -15,7 +15,7 @@ Any file pushed under this directory whose name ends in `.pcap` or
 ## How to trigger
 
 - **Push a PCAP here** from any machine (`git add`, `git commit`, `git push`).
-- Or manually: **Actions → Analyze PCAP (LLM Judge) → Run workflow** — pick a
+- Or manually: **Actions → Analyze PCAP (LLM Judge) → Run workflow** - pick a
   file path (defaults to the first file in this folder, else a sample).
 
 ## Cost

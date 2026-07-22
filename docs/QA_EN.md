@@ -14,7 +14,7 @@ A: `tshark` is dramatically faster than `scapy.rdpcap` - it streams the file onc
 
 **Q: Why is the intake function written as a single pass over the packets?**
 
-A: A 200K-packet PCAP takes 5–30 seconds to parse. If each feature (DNS, ARP, TCP flags, timeline, WLAN, classification inputs) required its own loop, a pipeline with 6 features would take 30 seconds to 3 minutes just in IO. The single-pass design collects all data structures simultaneously at the cost of a longer, more complex function. For a notebook that users run interactively, this is meaningful.
+A: A 200K-packet PCAP takes 5-30 seconds to parse. If each feature (DNS, ARP, TCP flags, timeline, WLAN, classification inputs) required its own loop, a pipeline with 6 features would take 30 seconds to 3 minutes just in IO. The single-pass design collects all data structures simultaneously at the cost of a longer, more complex function. For a notebook that users run interactively, this is meaningful.
 
 ---
 
@@ -32,7 +32,7 @@ A: Different lifetimes and different responsibilities. `cloud_ranges.json` is ab
 
 **Q: Why `encoding="latin1"` when reading CSVs?**
 
-A: Wireshark sometimes writes non-ASCII bytes in the Info column when it includes protocol payload text - byte values 0x80–0xFF that are not valid UTF-8 sequences. `latin1` accepts all byte values 0–255 without raising `UnicodeDecodeError`. Some multi-byte Unicode characters will be decoded incorrectly, but the Info column is used only for filtering and display - not for precise byte-level parsing - so this is acceptable.
+A: Wireshark sometimes writes non-ASCII bytes in the Info column when it includes protocol payload text - byte values 0x80-0xFF that are not valid UTF-8 sequences. `latin1` accepts all byte values 0-255 without raising `UnicodeDecodeError`. Some multi-byte Unicode characters will be decoded incorrectly, but the Info column is used only for filtering and display - not for precise byte-level parsing - so this is acceptable.
 
 ---
 
@@ -52,7 +52,7 @@ A: The behavioural fallback is constructed to *always* match. It checks a chain 
 
 **Q: A device gets classified twice when both the rule engine and the DNS fingerprint match - which wins?**
 
-A: The rule engine. The three tiers are evaluated in order and the first match wins. Within the rule engine, rules are sorted by priority descending, so a 900-priority rule like `apple-watch-mdns` beats a 600-priority rule like `apple-vendor`. The priority encodes our confidence in the signal: vendor+mDNS+specific name → 900; just vendor → 500–700; just port pattern → behavioural fallback. Rule-based identification is more constrained than DNS fingerprinting (a rule requires *all* its conditions to match; a DNS fingerprint just needs `match_threshold` signature domains), so a rule-engine match is stronger evidence.
+A: The rule engine. The three tiers are evaluated in order and the first match wins. Within the rule engine, rules are sorted by priority descending, so a 900-priority rule like `apple-watch-mdns` beats a 600-priority rule like `apple-vendor`. The priority encodes our confidence in the signal: vendor+mDNS+specific name → 900; just vendor → 500-700; just port pattern → behavioural fallback. Rule-based identification is more constrained than DNS fingerprinting (a rule requires *all* its conditions to match; a DNS fingerprint just needs `match_threshold` signature domains), so a rule-engine match is stronger evidence.
 
 ---
 
@@ -277,7 +277,7 @@ A: No. High syn_count means the device sent significantly more SYN packets than 
 
 **Q: 157 IPs disappeared between sessions. Is that alarming?**
 
-A: Not necessarily. Most are ephemeral external IPs - CDN edge nodes, cloud service endpoints, advertisement servers - that change with each browsing session. A single YouTube video can involve 5–10 distinct CDN IPs that appear only while the stream is active. The more meaningful question is: are the *new* IPs in S2 generating unusual traffic volumes, or are they communicating with devices that were not previously active? The comparison charts and intelligence insights section highlight the largest changes rather than the raw count.
+A: Not necessarily. Most are ephemeral external IPs - CDN edge nodes, cloud service endpoints, advertisement servers - that change with each browsing session. A single YouTube video can involve 5-10 distinct CDN IPs that appear only while the stream is active. The more meaningful question is: are the *new* IPs in S2 generating unusual traffic volumes, or are they communicating with devices that were not previously active? The comparison charts and intelligence insights section highlight the largest changes rather than the raw count.
 
 ---
 
