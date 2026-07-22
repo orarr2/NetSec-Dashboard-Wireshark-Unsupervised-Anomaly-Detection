@@ -2670,12 +2670,6 @@ def pick_default_wifi_interface():
     return ifs[0][0] if ifs else "1"
 
 
-def list_interfaces(): return list_capture_interfaces()
-def start_live_capture(): return False
-def stop_live_capture():  pass
-def refresh_live_session(): return None
-def _merge_sessions(a, b): return a
-
 print(f"Live capture ready.")
 print(f"  tshark:   {TSHARK_PATH or '(not found - install Wireshark)'}")
 print(f"  mergecap: {MERGECAP_PATH or '(not found - chunks wont merge)'}")
