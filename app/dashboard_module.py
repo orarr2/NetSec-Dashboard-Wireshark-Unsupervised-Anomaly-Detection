@@ -1773,20 +1773,30 @@ def _rdns_lookup_batch(ips, timeout=0.6, max_workers=20):
                 to_do.append(ip)
     if not to_do:
         return result
+    total_deadline = max(1.0, timeout * len(to_do) / max_workers
+                         + timeout)
     with concurrent.futures.ThreadPoolExecutor(
             max_workers=max_workers) as ex:
         futures = {ex.submit(_rdns_lookup_blocking, ip): ip
                    for ip in to_do}
-        for fut in concurrent.futures.as_completed(
-                futures, timeout=max(1.0, timeout * len(to_do) / max_workers
-                                     + timeout)):
-            ip = futures[fut]
-            try:
-                host = fut.result(timeout=timeout)
-            except Exception:
-                host = ""
-            result[ip] = host
-    # Anything that never returned in the outer as_completed loop.
+        try:
+            for fut in concurrent.futures.as_completed(
+                    futures, timeout=total_deadline):
+                ip = futures[fut]
+                try:
+                    host = fut.result(timeout=timeout)
+                except Exception:
+                    host = ""
+                result[ip] = host
+        except concurrent.futures.TimeoutError:
+            # Batch deadline hit: some workers are still blocked in the
+            # OS DNS retry cycle. Whatever we did resolve stays in
+            # `result`; the rest fall back to "" below. Cancel queued
+            # (not-yet-started) work so shutdown does not wait on it.
+            for fut in futures:
+                fut.cancel()
+    # Anything that never returned falls back to "" so a slow DNS
+    # server never poisons the caller.
     for ip in to_do:
         result.setdefault(ip, "")
     with _RDNS_LOCK:
