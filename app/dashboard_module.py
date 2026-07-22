@@ -906,7 +906,7 @@ def run_ml_on_session(S):
 
     S["ip_agg"] = ip_agg
     S["_X"] = X
-    S["_chosen_contamination"] = best_cont
+    S["_chosen_contamination"] = CONTAMINATION
     S["_eps_auto"]    = eps_auto
     S["_min_samples"] = 2
     S["_silhouette"]  = _sil
