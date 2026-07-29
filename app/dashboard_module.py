@@ -5893,8 +5893,9 @@ def build_intro_view():
                    "data outward when you click them: \"Send to AI "
                    "Judge\" opens the GitHub upload page for this "
                    "repo's incoming/ folder, and \"Send to n8n "
-                   "Alert\" copies the PCAP to a locally-running "
-                   "Docker stack you started yourself. Neither is "
+                   "Alert\" uploads the PCAP over Tailscale to the "
+                   "cloud VM you provisioned yourself, where it is "
+                   "analysed and sent to an LLM provider. Neither is "
                    "automatic. This tool is intended for captures you "
                    "are authorised to inspect. By ticking the box "
                    "below you confirm you have read this notice and "
@@ -7122,11 +7123,11 @@ def _render_ai_judge_link(session, session_key):
 def _render_n8n_send_button(session, session_key):
     """Render the '📧 Send to n8n Alert' button for one session card.
 
-    Clicking copies the session's source PCAP into the local incoming/
-    folder that the automation/ n8n workflow polls every 60s. The judge
-    then runs against Groq (or whatever provider is configured in
-    automation/.env), and an HTML alert lands in the user's inbox if any
-    verdict comes back malicious/suspicious.
+    Clicking uploads the session's source PCAP over Tailscale into the
+    incoming/ folder on the cloud VM, which the automation/ n8n workflow
+    polls every 60s. The judge then runs there against Groq (or whatever
+    provider is configured in automation/.env), and an HTML alert lands in
+    the user's inbox if any verdict comes back malicious/suspicious.
 
     Silent no-op if the session is not loaded, so S2 shows nothing until
     a second capture exists.
@@ -7136,10 +7137,11 @@ def _render_n8n_send_button(session, session_key):
         return html.Div()
     src_pcap = session.get("_source_pcap") or ""
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
-    caption = (f"Copy `{src_name}` to the local incoming/ folder. The n8n "
-               f"workflow will pick it up within 60 seconds, run the judge "
-               f"against Groq, and email an HTML alert if any verdict is "
-               f"malicious or suspicious.")
+    caption = (f"Upload `{src_name}` to the incoming/ folder on the cloud "
+               f"VM ({N8N_REMOTE_HOST}). The n8n workflow will pick it up "
+               f"within 60 seconds, run the judge against Groq, and email "
+               f"an HTML alert if any verdict is malicious or suspicious. "
+               f"Requires Tailscale to be connected.")
     return html.Div([
         html.Button(
             [html.Span("\U0001F4E7", style={"marginRight":"8px",
@@ -9430,22 +9432,42 @@ def update_sidebar(active_chart, active_tab, active_session, _rebuild, _tick):
     return _build_sidebar(active_chart, active_tab or "analyze", active_session or "s1")
 
 
+import os as _os_n8n
+
+# Where the automation stack lives. It runs on the Oracle ARM VM, reachable
+# over Tailscale - not on this machine. Every value is overridable by env
+# var so a fork can point at its own host without editing code.
+# See docs/CLOUD_DEPLOYMENT.md.
+N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "100.68.246.54")
+N8N_REMOTE_USER = _os_n8n.environ.get("NETSEC_REMOTE_USER", "ubuntu")
+N8N_REMOTE_INCOMING = _os_n8n.environ.get(
+    "NETSEC_REMOTE_INCOMING", "/home/ubuntu/netsec/incoming")
+N8N_SSH_KEY = _os_n8n.environ.get(
+    "NETSEC_SSH_KEY",
+    _os_n8n.path.expanduser(
+        "~/.ssh/netsec-agent.key/ssh-key-2026-07-12.key"))
+
+
 def _n8n_stack_status():
-    """Best-effort probe of the local n8n + judge_api stack. Returns a dict
+    """Best-effort probe of the remote n8n + judge_api stack. Returns a dict
     {judge_api: bool, n8n: bool, detail: str}. Never raises.
+
+    The stack is on the cloud VM, so this only succeeds while Tailscale is
+    connected. Nothing here touches a local Docker daemon.
     """
     import socket as _socket
     import urllib.request as _urlreq
     out = {"judge_api": False, "n8n": False, "detail": ""}
     try:
-        with _urlreq.urlopen("http://localhost:8765/health", timeout=2) as r:
+        with _urlreq.urlopen(
+                f"http://{N8N_REMOTE_HOST}:8765/health", timeout=4) as r:
             out["judge_api"] = (r.status == 200)
     except Exception as exc:
         out["detail"] = f"judge_api /health: {exc}"
     try:
         s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        s.settimeout(1.5)
-        s.connect(("localhost", 5678))
+        s.settimeout(3)
+        s.connect((N8N_REMOTE_HOST, 5678))
         s.close()
         out["n8n"] = True
     except Exception as exc:
@@ -9467,19 +9489,22 @@ def _n8n_stack_down_message(status):
     return html.Div([
         html.Div([
             html.Span("⚠️", style={"marginRight":"6px"}),
-            html.Span("n8n automation stack is not running",
+            html.Span(f"Cannot reach the automation stack on "
+                      f"{N8N_REMOTE_HOST}",
                       style={"color":"#f59e0b","fontWeight":"600"}),
         ]),
         html.Div(
-            f"Missing: {', '.join(missing)}. Not copying the file - you "
-            "would not get an email. Start the stack, then click again:",
+            f"Missing: {', '.join(missing)}. Not sending the file - you "
+            "would not get an email. The stack runs on the cloud VM and is "
+            "only reachable while Tailscale is connected on this machine. "
+            "Check that first, then click again:",
             style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
         html.Pre(
-            "cd automation\n"
-            ".\\setup.ps1              # one-command bring-up\n"
-            "# OR manually:\n"
-            "docker compose up -d\n"
-            ".\\judge_api\\start.ps1",
+            "tailscale status         # this machine must be connected\n"
+            f"curl http://{N8N_REMOTE_HOST}:8765/health\n"
+            "\n"
+            "# only if the VM itself is down:\n"
+            "ssh ubuntu@<vm> 'cd ~/netsec/automation && docker compose up -d'",
             style={"marginTop":"6px","padding":"6px 8px",
                    "background":"#1e1e2e","color":"#e5e7eb",
                    "fontSize":"10px","borderRadius":"6px",
@@ -9496,17 +9521,20 @@ def _n8n_stack_down_message(status):
     prevent_initial_call=True,
 )
 def send_session_to_n8n(n_clicks, btn_id):
-    """Copy the session's source PCAP into incoming/ so the local n8n
+    """Upload the session's source PCAP to the VM's incoming/ so the n8n
     workflow picks it up on its next 60s poll. Prefixed with session key
     and a timestamp so each click is treated as a fresh capture even
     when the same session is re-sent.
 
-    Probes the stack via /health first so a click on a machine where the
-    automation isn't running gives an actionable warning instead of a
-    misleading "Copied" that goes nowhere.
+    The file goes over Tailscale via scp - nothing is analysed on this
+    machine and no local Docker daemon is involved.
+
+    Probes the stack via /health first so a click while the tunnel is down
+    gives an actionable warning instead of a misleading "Sent" that goes
+    nowhere.
     """
     import os as _os
-    import shutil as _shutil
+    import subprocess as _sp
     if not n_clicks:
         return dash.no_update
     session_key = (btn_id or {}).get("session")
@@ -9531,36 +9559,41 @@ def send_session_to_n8n(n_clicks, btn_id):
     if not (stack["judge_api"] and stack["n8n"]):
         return _n8n_stack_down_message(stack)
 
-    try:
-        _here = _os.path.dirname(_os.path.abspath(
-            _os.environ.get("NETSEC_APP_DIR") or __file__))
-    except Exception:
-        _here = _os.getcwd()
-    project_root = _os.path.dirname(_here) \
-        if _os.path.basename(_here) == "app" else _here
-    incoming_dir = _os.path.join(project_root, "incoming")
-    try:
-        _os.makedirs(incoming_dir, exist_ok=True)
-    except OSError as exc:
+    if not _os.path.isfile(N8N_SSH_KEY):
         return html.Div([
             html.Span("❌", style={"marginRight":"6px"}),
-            html.Span(f"Could not create incoming/: {exc}",
+            html.Span(f"SSH key not found at {N8N_SSH_KEY}. Set "
+                      "NETSEC_SSH_KEY to the private key that opens the VM.",
                       style={"color":"#ef4444"})
         ])
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     dst_name = f"{session_key.upper()}_{ts}_{_os.path.basename(src_pcap)}"
-    dst_path = _os.path.join(incoming_dir, dst_name)
+    target = (f"{N8N_REMOTE_USER}@{N8N_REMOTE_HOST}:"
+              f"{N8N_REMOTE_INCOMING}/{dst_name}")
     try:
-        _shutil.copy2(src_pcap, dst_path)
-    except OSError as exc:
+        r = _sp.run(
+            ["scp", "-q", "-o", "BatchMode=yes",
+             "-o", "StrictHostKeyChecking=accept-new",
+             "-o", "ConnectTimeout=15",
+             "-i", N8N_SSH_KEY, src_pcap, target],
+            capture_output=True, text=True, timeout=300)
+    except Exception as exc:
         return html.Div([
             html.Span("❌", style={"marginRight":"6px"}),
-            html.Span(f"Copy failed: {exc}", style={"color":"#ef4444"})
+            html.Span(f"Upload failed: {exc}", style={"color":"#ef4444"})
+        ])
+    if r.returncode != 0:
+        return html.Div([
+            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span(
+                f"scp exited {r.returncode}: "
+                f"{(r.stderr or '').strip()[:200] or 'no stderr'}",
+                style={"color":"#ef4444"})
         ])
     return html.Div([
         html.Div([
             html.Span("✅", style={"marginRight":"6px"}),
-            html.Span(f"Copied to incoming/{dst_name}",
+            html.Span(f"Uploaded to {N8N_REMOTE_HOST}:incoming/{dst_name}",
                       style={"color":"#22c55e","fontWeight":"600"}),
         ]),
         html.Div(

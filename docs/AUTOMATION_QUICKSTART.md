@@ -1,9 +1,19 @@
 # NetSec Automation Quickstart
 
+> **This document describes running the stack on your own machine.** The
+> reference deployment no longer does that - it runs on a free Oracle
+> Cloud ARM VM reached over Tailscale, and the dashboard's button uploads
+> there rather than writing to a local folder. See
+> [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) for that setup, which is what
+> the default configuration in `app/dashboard_module.py` points at.
+>
+> Everything below still applies if you want the stack local: the compose
+> file, the workflow, and the `.env` are identical. Only the host differs.
+> To use a local stack, set `NETSEC_REMOTE_HOST=localhost`.
+
 The dashboard has a **Send S1 / S2 to n8n Alert** button in its sidebar
-that, when the local `automation/` stack is running, ships the session's
-PCAP through a judge (via Groq by default) and emails you an HTML alert
-if any verdict is `malicious` or `suspicious`.
+that ships the session's PCAP through a judge (via Groq by default) and
+emails you an HTML alert if any verdict is `malicious` or `suspicious`.
 
 The automation is fully containerised. Everything runs inside Docker -
 Windows, Mac, and Linux use the exact same commands. Nothing has to be

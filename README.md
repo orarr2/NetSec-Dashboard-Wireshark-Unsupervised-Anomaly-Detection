@@ -56,6 +56,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `incoming/` | Watched directory - drop `.pcap`/`.pcapng` files here in your fork to trigger the agent |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
+| `docs/CLOUD_DEPLOYMENT.md` | Running the n8n + judge automation 24/7 on a free Oracle ARM VM over Tailscale, instead of on your own machine |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
