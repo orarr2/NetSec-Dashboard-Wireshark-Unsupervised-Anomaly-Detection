@@ -555,6 +555,11 @@ def main(argv=None):
     ap.add_argument("--label", default="S1",
                     help="Session label used inside the pipeline "
                          "(default: S1)")
+    ap.add_argument("--email", default=None,
+                    help="Email the report to this address. SMTP settings "
+                         "come from the environment (SMTP_USER, SMTP_PASS, "
+                         "optionally SMTP_HOST/PORT/FROM). A send failure "
+                         "is reported but never fails the run.")
     args = ap.parse_args(argv)
 
     if not os.path.isfile(args.pcap):
@@ -583,12 +588,29 @@ def main(argv=None):
         }, f, indent=2)
     print(f"[cli] wrote {args.output}", flush=True)
 
+    md = None
     if args.markdown:
         md = _render_markdown(args.pcap, out, assembled, client,
                               context=context)
         with open(args.markdown, "w", encoding="utf-8") as f:
             f.write(md)
         print(f"[cli] wrote {args.markdown}", flush=True)
+
+    if args.email:
+        # Render on demand when --markdown was not requested, so --email
+        # works on its own.
+        if md is None:
+            md = _render_markdown(args.pcap, out, assembled, client,
+                                  context=context)
+        from llm_judge.send_report import send_report  # noqa: E402
+        with open(args.output, encoding="utf-8") as f:
+            verdict_json = f.read()
+        ok, message = send_report(
+            args.email, md,
+            subject=f"NetSec Judge verdicts - {os.path.basename(args.pcap)}",
+            attachments={os.path.basename(args.output): verdict_json})
+        print(f"[cli] email: {message}", flush=True)
+        # A delivery failure must not discard an analysis that already ran.
 
     return 0
 

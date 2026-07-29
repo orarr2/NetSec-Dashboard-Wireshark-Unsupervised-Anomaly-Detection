@@ -135,6 +135,38 @@ private forks have 2000 free minutes/month. See
 `.github/workflows/analyze-pcap.yml` and `incoming/README.md` for the
 trigger reference.
 
+#### Get the report by email
+
+The workflow can mail the report to any address instead of (or as well
+as) opening an Issue. It sends through **your** mailbox, so nothing is
+routed via anyone else's server and no account here is needed:
+
+1. In your fork: **Settings → Secrets and variables → Actions → New
+   repository secret**, and add two secrets:
+   - `SMTP_USER` - the address you send *from* (e.g. your Gmail address);
+   - `SMTP_PASS` - an **app password**, not your account password. For
+     Gmail: Google Account → Security → 2-Step Verification → App
+     passwords.
+2. Optional secrets for a non-Gmail provider: `SMTP_HOST` (default
+   `smtp.gmail.com`), `SMTP_PORT` (`587` STARTTLS, or `465` for implicit
+   TLS), `SMTP_FROM` (a different From: header).
+3. Run the workflow from **Actions → Analyze PCAP (LLM Judge) → Run
+   workflow** and type the destination into **notify_email**.
+
+Without the secrets the workflow logs a warning and skips the email; the
+Issue still opens, so a fork that skips this section keeps working. The
+same delivery is available locally:
+
+```bash
+python llm_judge/judge_cli.py capture.pcap --email you@example.com
+```
+
+or for a report you already generated:
+
+```bash
+python llm_judge/send_report.py verdicts.md you@example.com --json verdicts.json
+```
+
 ### B. Run the headless CLI on your own machine
 
 For users who don't want to touch GitHub. Same detection pipeline, same

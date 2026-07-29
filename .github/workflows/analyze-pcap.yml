@@ -31,6 +31,13 @@ on:
           Blank = single-model judge.
         required: false
         default: ""
+      notify_email:
+        description: >
+          Email the verdict report to this address. Needs the SMTP_USER and
+          SMTP_PASS repository secrets (see README). Blank = no email; the
+          GitHub Issue is opened either way.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -157,6 +164,31 @@ jobs:
             --output verdicts.json \
             --markdown verdicts.md \
           | tee analyze.log
+
+      # Self-serve delivery: any fork can set SMTP_USER / SMTP_PASS as
+      # repository secrets and receive the report at whatever address it
+      # types into notify_email. Without the secrets the step reports why
+      # it skipped and the run continues - the Issue below still opens.
+      - name: Email the report
+        if: success() && github.event.inputs.notify_email != ''
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          NOTIFY_EMAIL: ${{ github.event.inputs.notify_email }}
+          PCAP_BASE: ${{ steps.pcap.outputs.base }}
+        run: |
+          if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ]; then
+            echo "::warning::notify_email was given but SMTP_USER/SMTP_PASS"\
+                 "secrets are not set - skipping email. See the README"\
+                 "section 'Get the report by email'."
+            exit 0
+          fi
+          python llm_judge/send_report.py verdicts.md "$NOTIFY_EMAIL" \
+            --subject "NetSec Judge verdicts - $PCAP_BASE" \
+            --json verdicts.json
 
       - name: Upload verdicts + logs (artifact)
         if: always()

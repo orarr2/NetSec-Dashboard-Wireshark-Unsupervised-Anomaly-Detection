@@ -195,6 +195,32 @@ result; skips until the first one exists).
 | `LLM_JUDGE_TIMEOUT_S` | `300` | Per-request timeout (local models can need minutes on first load) |
 | `LLM_JUDGE_MAX_CANDIDATES` | `40` | Per-batch cap; rule-triggered candidates always survive |
 | `LLM_JUDGE_ENABLED` | `1` | `0` turns the judge into a no-op |
+| `SMTP_USER` | - | Mailbox to send the report from (enables `--email`) |
+| `SMTP_PASS` | - | App password for that mailbox |
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP server |
+| `SMTP_PORT` | `587` | `587` STARTTLS, `465` implicit TLS |
+| `SMTP_FROM` | `SMTP_USER` | Override the From: header |
+
+## Email the report
+
+`send_report.py` mails a rendered report to any address, using stdlib
+`smtplib` and whatever mailbox the SMTP variables above point at - no
+third-party service, no account here:
+
+```bash
+# during a run
+python llm_judge/judge_cli.py capture.pcap --email you@example.com
+
+# or for a report that already exists
+python llm_judge/send_report.py verdicts.md you@example.com --json verdicts.json
+```
+
+The markdown is converted to HTML for the body and kept as the
+plain-text alternative, with `verdicts.json` attached. A delivery
+failure is reported and returns a non-zero exit code from the standalone
+CLI, but never aborts `judge_cli.py` - an analysis that already ran is
+not thrown away because a mailbox rejected a login. The same module
+backs the `notify_email` input of `.github/workflows/analyze-pcap.yml`.
 
 ## Cost & determinism
 
