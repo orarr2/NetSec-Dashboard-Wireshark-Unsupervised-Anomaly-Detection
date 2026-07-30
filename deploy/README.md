@@ -24,11 +24,14 @@ a fork needs lands here instead, stage by stage.
 
 - Any Ubuntu 22.04+ VM, x86-64 or ARM (aarch64 is verified - every
   pinned dependency publishes an aarch64 wheel, see
-  `docs/CLOUD_DEPLOYMENT.md`). 4GB RAM minimum for the pipeline alone;
+  `docs/VM_DEPLOYMENT.md`). 4GB RAM minimum for the pipeline alone;
   16-24GB recommended if you also want the free local Ollama judge.
-- Oracle Cloud Always Free (4 OCPU / 24GB RAM / 200GB total block
-  storage) is the recommended zero-cost path; AWS / GCP / Azure /
-  Hetzner work identically.
+- Oracle Always Free (4 OCPU / 24GB RAM / 100GB boot volume) is the
+  recommended $0 path; AWS / Azure / Hetzner or any provider work
+  identically. **Staying free:** the free tier allows up to 200GB total
+  block storage - keep the 100GB boot and DON'T add a volume that pushes
+  past 200GB, or you start paying. Retention (below) keeps the disk
+  bounded so it never spills onto a paid resource.
 - Docker + the compose plugin, Tailscale, and chrony (NTP - required by
   the telemetry-reconciliation protocol, spec section 12).
 - Nothing is exposed publicly except SSH: every service binds to the
@@ -38,13 +41,14 @@ a fork needs lands here instead, stage by stage.
 
 1. Install Docker, Tailscale and chrony on the VM; join your tailnet:
    `sudo tailscale up --hostname=netsec-agent`.
-2. Apply the firewall notes from `docs/CLOUD_DEPLOYMENT.md` (the
+2. Apply the firewall notes from `docs/VM_DEPLOYMENT.md` (the
    `tailscale0` ACCEPT rule must precede the cloud image's catch-all
    REJECT, and must be persisted).
-3. Attach a dedicated 100-150GB block volume and mount it at
-   `/srv/netsec` (decision IDX-02+03). On Oracle Always Free this fits
-   inside the 200GB no-cost storage budget. Skip this if you only
-   analyze occasional manual sessions.
+3. Create the data root on the boot disk - no extra volume, stays $0:
+   `sudo mkdir -p /srv/netsec && sudo chown $USER /srv/netsec`
+   (decision IDX-02+03; retention keeps it bounded). Only if you later
+   need continuous 24/7 capture, add a block volume of **at most 100GB**
+   so boot + volume stays within the free 200GB.
 4. `git clone` this repository onto the VM and `cd deploy/`.
 5. `cp .env.example .env` and fill in values - at minimum `TS_BIND`
    (the VM's Tailscale IP) and `N8N_ENCRYPTION_KEY`.

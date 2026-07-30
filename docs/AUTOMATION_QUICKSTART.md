@@ -4,7 +4,7 @@
 > reference deployment no longer does that - it runs on a free Oracle
 > Cloud ARM VM reached over Tailscale, and the dashboard's button uploads
 > there rather than writing to a local folder. See
-> [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) for that setup, which is what
+> [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md) for that setup, which is what
 > the default configuration in `app/dashboard_module.py` points at.
 >
 > Everything below still applies if you want the stack local: the compose

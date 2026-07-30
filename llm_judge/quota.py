@@ -1,13 +1,14 @@
-"""Per-provider quota counters (spec section 6.3). Stdlib only.
+"""Per-provider usage counters (spec section 6.3). Stdlib only.
+
+Purely informational: it records how many requests/tokens each provider
+served today so you can see how close you are to a free-tier limit.
+Nothing is ever auto-skipped or swapped - which judges run is the user's
+explicit choice (the panel). is_exhausted() is a convenience predicate
+for a "you have hit this provider's daily limit" notice, not a control.
 
 Schema matches the history DB's llm_quota table exactly, so the same
 code works whether it writes to llm_judge's own sqlite (standalone
 default) or to the VM's netsec.db (point LLM_JUDGE_QUOTA_DB at it).
-
-A provider is "exhausted" for the day once it records a 429 AND its
-request/token counters reach the profile's declared ceilings - the
-counters are advisory and the 429 is authoritative, so a provider that
-never 429s is never skipped no matter what the ceiling says.
 """
 import os
 import sqlite3

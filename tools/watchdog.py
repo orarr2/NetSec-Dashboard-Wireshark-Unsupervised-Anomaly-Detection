@@ -1,7 +1,7 @@
 """External watchdog for the analysis VM (spec section 4/D6: no machine
 monitors itself). Standalone stdlib file - copy it to ANY always-on box
-outside the VM (a free GCP e2-micro, another Pi, a shell account) and
-run it under cron or as a loop:
+outside the VM (a second Oracle Always Free micro instance, a Raspberry
+Pi, a shell account) and run it under cron or as a loop:
 
     python3 watchdog.py --url http://<vm-tailscale-ip>:8766/healthz
 

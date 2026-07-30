@@ -122,14 +122,11 @@ def endpoint_profiles(env=None):
     return profiles
 
 
-# Failover chain (spec section 6.3). Comma-separated provider/profile
-# names tried in order until one succeeds; put a local Ollama last so the
-# system slows down instead of failing when hosted quotas are exhausted.
-LLM_JUDGE_FAILOVER = os.environ.get("LLM_JUDGE_FAILOVER", "").strip()
-
-# Where per-provider quota counters live (spec 6.3, llm_quota schema).
-# A standalone sqlite by default so llm_judge stays independent of the
-# VM history DB; the server worker can point this at netsec.db instead.
+# Where per-provider usage counters live (informational; spec 6.3,
+# llm_quota schema). Lets you see how close a provider is to its free-tier
+# limit - there is no automatic fallback, the panel simply runs whatever
+# judges you selected. A standalone sqlite by default so llm_judge stays
+# independent of the VM history DB; the worker can point this at netsec.db.
 _HERE_Q = os.path.dirname(os.path.abspath(__file__))
 QUOTA_DB = os.environ.get("LLM_JUDGE_QUOTA_DB",
                           os.path.join(_HERE_Q, "cache", "llm_quota.sqlite"))

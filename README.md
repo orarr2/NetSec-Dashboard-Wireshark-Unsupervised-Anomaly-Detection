@@ -56,7 +56,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `incoming/` | Watched directory - drop `.pcap`/`.pcapng` files here in your fork to trigger the agent |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
-| `docs/CLOUD_DEPLOYMENT.md` | Running the n8n + judge automation 24/7 on a free Oracle ARM VM over Tailscale, instead of on your own machine |
+| `docs/VM_DEPLOYMENT.md` | Running the n8n + judge automation 24/7 on a free Oracle ARM VM over Tailscale, instead of on your own machine |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
@@ -218,12 +218,13 @@ request) is `ARCHITECTURE_HE.md`, and the deployment templates live in
   a SQLite history database. Raw PCAPs are kept 7 days then auto-purged;
   a tiny compressed field-index, the verdicts, and the HTML/PDF reports
   are kept for good.
-- **Judges (Tier 2)** - the existing LLM-as-Judge panel, now able to mix
-  several free providers (Groq, Gemini, Cerebras, OpenRouter, GitHub
-  Models) with a local Ollama as the always-available fallback: quota
-  pressure slows the system, it does not stop it.
-- **Consumers (Tier 3)** - the notebook (as a remote client *or* the
-  offline fallback), email, and n8n alerts.
+- **Judges (Tier 2)** - the existing LLM-as-Judge panel. YOU choose which
+  judges run (one, two, or many free providers: Groq, Gemini, Cerebras,
+  OpenRouter, GitHub Models, plus a free local Ollama). Every judge you
+  pick runs and all verdicts come back by email - there is no automatic
+  fallback that swaps models behind your back.
+- **Consumers (Tier 3)** - the notebook (as a remote client *or* a fully
+  offline local analyzer), email, and n8n alerts.
 
 **Why a VM instead of GitHub Actions.** The Actions path (way A) caps
 uploads at 25 MB and analyzes one file per run. The VM path has no size

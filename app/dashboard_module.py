@@ -9437,7 +9437,7 @@ import os as _os_n8n
 # Where the automation stack lives. It runs on the Oracle ARM VM, reachable
 # over Tailscale - not on this machine. Every value is overridable by env
 # var so a fork can point at its own host without editing code.
-# See docs/CLOUD_DEPLOYMENT.md.
+# See docs/VM_DEPLOYMENT.md.
 N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "100.68.246.54")
 N8N_REMOTE_USER = _os_n8n.environ.get("NETSEC_REMOTE_USER", "ubuntu")
 N8N_REMOTE_INCOMING = _os_n8n.environ.get(
