@@ -6,12 +6,16 @@ that any fork can stand up the 24/7 analysis stack on its own VM. The
 original local-only `automation/` directory stays untracked; everything
 a fork needs lands here instead, stage by stage.
 
-## What ships today (stage A)
+## What ships today (stages A-B)
 
 | File | Purpose |
 |---|---|
 | `.env.example` | Every environment variable the stack reads, documented. Variables consumed by later stages are included and clearly marked - they are inert until that stage lands. |
-| `docker-compose.yml` | The n8n automation container, bound to your Tailscale IP only. Service slots for `judge_api`, the ingest API and the worker are declared and arrive in stages B-C. |
+| `docker-compose.yml` | n8n + the ingest API, bound to your Tailscale IP only. Slots for `judge_api` and the worker arrive in stage C. |
+| `Dockerfile.ingest` | The ingest API image - `server/` + FastAPI, port 8766. |
+| `create_sensor.py` | Registers a sensor in the history DB and prints its credentials once. |
+| `../server/` | History DB schema, HMAC upload auth, streaming storage, and the FastAPI ingest layer. |
+| `../tools/upload_pcap.py` | Signed streaming upload from any machine - the no-size-cap replacement for the GitHub 25MB path. |
 | `../tools/measure_pipeline_ratios.py` | Re-measures the PCAP-vs-fields size ratios the plan is built on, against your own long capture (the plan's numbers came from a single 135-second sample). |
 
 ## Requirements
@@ -42,12 +46,19 @@ a fork needs lands here instead, stage by stage.
 4. `git clone` this repository onto the VM and `cd deploy/`.
 5. `cp .env.example .env` and fill in values - at minimum `TS_BIND`
    (the VM's Tailscale IP) and `N8N_ENCRYPTION_KEY`.
-6. `docker compose up -d` - today this starts n8n. Verify:
+6. `docker compose up -d` - starts n8n and the ingest API. Verify from
+   a machine on your tailnet (and confirm the public IP answers
+   nothing on either port):
    `curl -s -o /dev/null -w "%{http_code}\n" http://$TS_BIND:5678/`
-   from a machine on your tailnet (expect 200), and confirm the public
-   IP answers nothing on 5678.
-7. *(Arrives in stage B)* create a per-sensor token, upload a PCAP with
-   `tools/upload_pcap.py`, and receive the HTML/PDF report.
+   `curl -s http://$TS_BIND:8766/healthz`
+7. Register a sensor and copy the printed credentials into the
+   sensor's environment (shown once, not recoverable):
+   `python3 deploy/create_sensor.py laptop`
+8. Upload a capture from any machine on the tailnet - no size cap:
+   `python3 tools/upload_pcap.py capture.pcapng`
+   (needs `NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766` plus the
+   sensor credentials in the environment). The session is queued;
+   analysis and the HTML/PDF reports arrive with stage C.
 
 ## Storage layout (per the approved plan, spec section 8)
 

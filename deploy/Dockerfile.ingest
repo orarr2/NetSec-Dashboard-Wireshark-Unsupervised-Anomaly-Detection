@@ -1,0 +1,11 @@
+# Ingest API container (stage B). Build from the repo root:
+#   docker compose -f deploy/docker-compose.yml build ingest_api
+# The container binds 0.0.0.0 internally; the host port publication in
+# docker-compose.yml pins it to ${TS_BIND}, so nothing is public.
+FROM python:3.11-slim
+WORKDIR /app
+COPY server/ server/
+RUN pip install --no-cache-dir -r server/requirements.txt
+ENV NETSEC_DATA_ROOT=/srv/netsec
+EXPOSE 8766
+CMD ["uvicorn", "server.ingest_api:app", "--host", "0.0.0.0", "--port", "8766"]

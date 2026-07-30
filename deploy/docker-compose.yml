@@ -5,8 +5,8 @@
 # for a local smoke test. This template replaces the untracked
 # local-only automation/ stack so any fork can deploy (spec section 9).
 #
-# Stage A runs n8n only. The judge_api HTTP wrapper, the ingest API and
-# the analysis worker join in stages B-C of ARCHITECTURE_HE.md; their
+# Stages A-B run n8n and the ingest API. The judge_api HTTP wrapper and
+# the analysis worker join in stage C of ARCHITECTURE_HE.md; their
 # service blocks below are deliberate placeholders until then.
 
 services:
@@ -22,8 +22,20 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
-  # judge_api:   # stage B - HTTP wrapper around llm_judge/judge_cli.py (:8765)
-  # ingest_api:  # stage B - authenticated PCAP upload endpoint (spec 5.1)
+  ingest_api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.ingest
+    restart: unless-stopped
+    ports:
+      - "${TS_BIND:-127.0.0.1}:8766:8766"
+    environment:
+      - NETSEC_DATA_ROOT=/srv/netsec
+      - NETSEC_MAX_UPLOAD_GB=${NETSEC_MAX_UPLOAD_GB:-10}
+    volumes:
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+
+  # judge_api:   # stage C - HTTP wrapper around llm_judge/judge_cli.py (:8765)
   # worker:      # stage C - queue consumer running the pipeline (spec 5.2)
 
 volumes:

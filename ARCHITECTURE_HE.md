@@ -296,7 +296,9 @@ LLM_JUDGE_PANEL="groq:llama-3.3-70b-versatile,gemini:gemini-2.5-flash,ollama:qwe
 -- זהות ומקור
 CREATE TABLE sensors (
     id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
-    token_hash TEXT NOT NULL, hmac_secret_hash TEXT NOT NULL,
+    token_hash TEXT NOT NULL,      -- sha256 של טוקן הקריאה בלבד
+    hmac_secret TEXT NOT NULL,     -- סוד החתימה עצמו: אימות HMAC מחייב
+                                   -- את הסוד; מוגן בהרשאות קובץ ה-DB
     created_at TEXT NOT NULL, last_seen_at TEXT, revoked_at TEXT);
 
 CREATE TABLE pcap_files (
@@ -556,8 +558,8 @@ chunk - ‏sha256 ‏← חתימה ‏← ‏POST עם retry; כישלון - ס
 
 | שלב | תוכן | תלות |
 |---|---|---|
-| א' | `deploy/` בריפו + ‏`.env.example` + ניקוי IPs אישיים מהמסמכים + כלי המדידה `tools/measure_pipeline_ratios.py` (ההרצה על הקלטה ארוכה - אצל בעל הפרויקט) | - |
-| ב' | `server/db.py` + ‏`ingest_api.py` + ‏`tools/upload_pcap.py` + בדיקות | א' |
+| א' | `deploy/` בריפו + ‏`.env.example` + ניקוי IPs אישיים מהמסמכים + כלי המדידה `tools/measure_pipeline_ratios.py` (ההרצה על הקלטה ארוכה - אצל בעל הפרויקט) **(בוצע)** | - |
+| ב' | `server/db.py` + ‏`ingest_api.py` + ‏`tools/upload_pcap.py` + בדיקות **(בוצע)** | א' |
 | ג' | `server/worker.py` + כתיבת תוצרים ל-DB + הצלבת טלמטריה + ‏HTML + ‏PDF | ב' |
 | ד' | `retention.py` + גיבוי DB + ‏watchdog חיצוני | ב' |
 | ה' | פרופילי LLM + ‏failover + ‏quota + פאנל הטרוגני | - (מקביל) |

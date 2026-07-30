@@ -1,0 +1,5 @@
+# Ingest API layer only - server/db.py, auth.py and storage.py are
+# stdlib-pure and need none of this. Install on the VM (or locally to
+# run the API tests):  pip install -r server/requirements.txt
+fastapi==0.115.6
+uvicorn==0.32.1
