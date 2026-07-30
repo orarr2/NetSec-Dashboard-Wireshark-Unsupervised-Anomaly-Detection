@@ -819,13 +819,16 @@ def parse_panel_spec(spec, default_provider=None):
     """
     default_provider = (default_provider
                         or judge_config.LLM_JUDGE_PROVIDER).lower()
+    # built-ins plus any endpoint profiles defined in the environment
+    # (spec 6.1), so "gemini:gemini-2.5-flash" resolves the GEMINI profile
+    known = set(PANEL_PROVIDERS) | set(judge_config.endpoint_profiles())
     entries = []
     for raw in (spec or "").split(","):
         raw = raw.strip()
         if not raw:
             continue
         head, _, tail = raw.partition(":")
-        if head.strip().lower() in PANEL_PROVIDERS:
+        if head.strip().lower() in known:
             provider, model = head.strip().lower(), tail.strip()
         else:
             provider, model = default_provider, raw

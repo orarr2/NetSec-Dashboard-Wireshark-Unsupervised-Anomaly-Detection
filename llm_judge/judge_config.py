@@ -87,6 +87,53 @@ LLM_JUDGE_PANEL = os.environ.get("LLM_JUDGE_PANEL", "").strip()
 LLM_JUDGE_DEBATE = os.environ.get("LLM_JUDGE_DEBATE",
                                   "1").lower() not in ("0", "false")
 
+# Named endpoint profiles (spec section 6.1, decision IDX-05). Each profile
+# is an OpenAI-compatible host that can appear in a panel by name, so one
+# panel can mix several providers (Groq + Gemini + local Ollama) - which a
+# single global base_url/key could not express. Defined entirely by env:
+#
+#   LLM_JUDGE_EP_<NAME>_BASE_URL   required - the /v1 chat-completions root
+#   LLM_JUDGE_EP_<NAME>_MODEL      default model for the profile
+#   LLM_JUDGE_EP_<NAME>_KEY_ENV    name of the env var holding the API key
+#                                  (indirection so keys are never inlined)
+#
+# A profile named GEMINI becomes provider "gemini" in a panel spec, e.g.
+#   LLM_JUDGE_PANEL="groq:llama-3.3-70b-versatile,gemini:gemini-2.5-flash"
+def endpoint_profiles(env=None):
+    """Discover {name: {base_url, model, key_env, api_key}} from the
+    environment. Only profiles with a base URL are returned."""
+    env = os.environ if env is None else env
+    prefix, suffix = "LLM_JUDGE_EP_", "_BASE_URL"
+    profiles = {}
+    for key, base_url in env.items():
+        if not (key.startswith(prefix) and key.endswith(suffix)):
+            continue
+        name = key[len(prefix):-len(suffix)].lower()
+        if not name or not base_url.strip():
+            continue
+        up = name.upper()
+        key_env = env.get(f"{prefix}{up}_KEY_ENV", "").strip()
+        profiles[name] = {
+            "base_url": base_url.strip(),
+            "model": env.get(f"{prefix}{up}_MODEL", "").strip() or None,
+            "key_env": key_env or None,
+            "api_key": env.get(key_env, "").strip() if key_env else "",
+        }
+    return profiles
+
+
+# Failover chain (spec section 6.3). Comma-separated provider/profile
+# names tried in order until one succeeds; put a local Ollama last so the
+# system slows down instead of failing when hosted quotas are exhausted.
+LLM_JUDGE_FAILOVER = os.environ.get("LLM_JUDGE_FAILOVER", "").strip()
+
+# Where per-provider quota counters live (spec 6.3, llm_quota schema).
+# A standalone sqlite by default so llm_judge stays independent of the
+# VM history DB; the server worker can point this at netsec.db instead.
+_HERE_Q = os.path.dirname(os.path.abspath(__file__))
+QUOTA_DB = os.environ.get("LLM_JUDGE_QUOTA_DB",
+                          os.path.join(_HERE_Q, "cache", "llm_quota.sqlite"))
+
 # Prompt versioning (spec section 10). Bump on every prompt change, re-run
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a

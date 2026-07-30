@@ -108,6 +108,11 @@ class ClaudeClient:
         text = next((b.text for b in response.content if b.type == "text"), "")
         if not text:
             raise JudgeClientError("empty response body")
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.last_usage = {
+                "tokens_in": getattr(usage, "input_tokens", None),
+                "tokens_out": getattr(usage, "output_tokens", None)}
         return text
 
 
@@ -120,6 +125,7 @@ class OllamaClient:
         self.host = (host or judge_config.OLLAMA_HOST).rstrip("/")
         self.timeout_s = timeout_s or judge_config.JUDGE_TIMEOUT_S
         self.verdict_schema = verdict_schema
+        self.last_usage = None
 
     def judge(self, system_prompt, user_content):
         payload = {
@@ -156,6 +162,8 @@ class OllamaClient:
         text = (data.get("message") or {}).get("content", "")
         if not text:
             raise JudgeClientError("empty response body from Ollama")
+        self.last_usage = {"tokens_in": data.get("prompt_eval_count"),
+                           "tokens_out": data.get("eval_count")}
         return text
 
 
@@ -178,6 +186,7 @@ class OpenAICompatClient:
         self.timeout_s = timeout_s or judge_config.JUDGE_TIMEOUT_S
         self.verdict_schema = verdict_schema
         self.max_tokens = max_tokens
+        self.last_usage = None
         # Set to True only after the json_object fallback SUCCEEDS where
         # json_schema got a 400 - later calls then skip json_schema.
         self._schema_unsupported = False
@@ -306,6 +315,9 @@ class OpenAICompatClient:
         if not text:
             raise JudgeClientError(
                 "empty response body from OpenAI-compatible endpoint")
+        usage = data.get("usage") or {}
+        self.last_usage = {"tokens_in": usage.get("prompt_tokens"),
+                           "tokens_out": usage.get("completion_tokens")}
         return text
 
 
@@ -336,6 +348,11 @@ def make_client(provider=None, verdict_schema=None, model=None):
     `model` overrides the provider's default model - used by committee mode
     to build a second judge (Judge B) on the same provider/key with a
     different model. None keeps each provider's configured default.
+
+    `provider` may be one of the three built-ins (claude | ollama |
+    openai_compat) or the name of an endpoint profile from
+    judge_config.endpoint_profiles() (spec 6.1) - a profile resolves to
+    an OpenAICompatClient carrying that host's base_url, model and key.
     """
     provider = (provider or judge_config.LLM_JUDGE_PROVIDER).lower()
     if provider == "claude":
@@ -344,6 +361,94 @@ def make_client(provider=None, verdict_schema=None, model=None):
         return OllamaClient(verdict_schema=verdict_schema, model=model)
     if provider == "openai_compat":
         return OpenAICompatClient(verdict_schema=verdict_schema, model=model)
+
+    profiles = judge_config.endpoint_profiles()
+    if provider in profiles:
+        p = profiles[provider]
+        client = OpenAICompatClient(
+            verdict_schema=verdict_schema, model=model or p["model"],
+            base_url=p["base_url"], api_key=p["api_key"] or None)
+        # tag so the failover/quota layer records under the profile name,
+        # not the shared "openai_compat" bucket
+        client.provider_name = provider
+        return client
+
     raise JudgeClientError(
-        f"unknown LLM_JUDGE_PROVIDER '{provider}' "
-        "(expected claude | ollama | openai_compat)")
+        f"unknown provider '{provider}' (expected claude | ollama | "
+        "openai_compat, or a defined LLM_JUDGE_EP_<NAME> profile: "
+        f"{sorted(profiles) or 'none defined'})")
+
+
+class FailoverClient:
+    """Try an ordered list of clients until one returns a verdict (spec
+    section 6.3). A client that raises JudgeClientError - or that quota
+    marks exhausted for the day - is skipped; the next in the chain takes
+    over. With a local Ollama last, the panel/judge slows down under
+    quota pressure instead of failing. Records every attempt in the quota
+    store so tomorrow's runs start fresh.
+
+    Exposes the same (judge, model_id) shape as a single client, so it
+    drops into judge_candidates/committee/panel unchanged. model_id
+    reflects the client that actually answered the most recent call.
+    """
+
+    def __init__(self, clients, providers=None, quota=None):
+        if not clients:
+            raise JudgeClientError("FailoverClient needs at least one client")
+        self._clients = clients
+        self._providers = providers or [
+            getattr(c, "provider_name", type(c).__name__) for c in clients]
+        self._quota = quota
+        self.model_id = clients[0].model_id
+        self.last_provider = self._providers[0]
+
+    def judge(self, system_prompt, user_content):
+        errors = []
+        for client, provider in zip(self._clients, self._providers):
+            if self._quota is not None and self._quota.is_exhausted(provider):
+                errors.append(f"{provider}: skipped (quota exhausted today)")
+                continue
+            try:
+                text = client.judge(system_prompt, user_content)
+            except JudgeClientError as e:
+                was_429 = "429" in str(e)
+                if self._quota is not None:
+                    self._quota.record(provider, was_429=was_429)
+                errors.append(f"{provider}: {e}")
+                continue
+            self.model_id = client.model_id
+            self.last_provider = provider
+            if self._quota is not None:
+                usage = getattr(client, "last_usage", None) or {}
+                self._quota.record(
+                    provider,
+                    tokens=(usage.get("tokens_in") or 0)
+                    + (usage.get("tokens_out") or 0))
+            return text
+        raise JudgeClientError(
+            "all failover providers failed or are exhausted: "
+            + "; ".join(errors))
+
+
+def make_failover_client(spec=None, verdict_schema=None, quota=None):
+    """Build a FailoverClient from a comma-separated provider/profile
+    chain (defaults to judge_config.LLM_JUDGE_FAILOVER). Unconstructible
+    providers are dropped with a warning; at least one must remain."""
+    spec = spec if spec is not None else judge_config.LLM_JUDGE_FAILOVER
+    names = [n.strip().lower() for n in (spec or "").split(",") if n.strip()]
+    if not names:
+        raise JudgeClientError(
+            "no failover chain configured (set LLM_JUDGE_FAILOVER)")
+    clients, providers = [], []
+    for name in names:
+        try:
+            clients.append(make_client(provider=name,
+                                       verdict_schema=verdict_schema))
+            providers.append(name)
+        except Exception as e:
+            print(f"[failover] provider {name!r} unavailable, skipping: {e}",
+                  flush=True)
+    if not clients:
+        raise JudgeClientError(
+            f"none of the failover providers {names} could be constructed")
+    return FailoverClient(clients, providers=providers, quota=quota)
