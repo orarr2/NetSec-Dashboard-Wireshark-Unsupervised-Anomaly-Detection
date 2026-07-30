@@ -28,13 +28,15 @@ FIELDS = [
     "frame.time_epoch", "frame.len",
     "eth.src", "eth.dst",
     "ip.src", "ip.dst",
+    "ipv6.src", "ipv6.dst",
     "_ws.col.Protocol",
     "tcp.srcport", "tcp.dstport", "tcp.flags",
     "udp.srcport", "udp.dstport",
     "dns.qry.name", "dns.flags.rcode", "dns.flags.response",
     "arp.src.proto_ipv4", "arp.src.hw_mac", "arp.opcode",
 ]
-COLS = ["ts","len","eth_src","eth_dst","ip_src","ip_dst","proto",
+COLS = ["ts","len","eth_src","eth_dst","ip_src","ip_dst",
+        "ip6_src","ip6_dst","proto",
         "tcp_sport","tcp_dport","tcp_flags","udp_sport","udp_dport",
         "dns_qname","dns_rcode","dns_response",
         "arp_psrc","arp_hwsrc","arp_opcode"]
@@ -53,6 +55,12 @@ def analyze_pcap(path, label):
     df["ts"]  = pd.to_numeric(df["ts"], errors="coerce")
     df["len"] = pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
     df = df.dropna(subset=["ts"])
+    # Fold IPv6 into the v4 columns so the per-IP layer sees the whole
+    # capture; on a modern network most of it is v6.
+    _m = (df["ip_src"] == "") & (df["ip6_src"] != "")
+    df.loc[_m, "ip_src"] = df.loc[_m, "ip6_src"]
+    _m = (df["ip_dst"] == "") & (df["ip6_dst"] != "")
+    df.loc[_m, "ip_dst"] = df.loc[_m, "ip6_dst"]
     t0 = datetime.fromtimestamp(df["ts"].min())
     t1 = datetime.fromtimestamp(df["ts"].max())
 

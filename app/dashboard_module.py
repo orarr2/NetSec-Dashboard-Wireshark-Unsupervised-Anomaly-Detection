@@ -309,6 +309,7 @@ def _analyze_pcap_tshark(path, label, tshark_path):
         "frame.time_epoch", "frame.len",
         "eth.src", "eth.dst",
         "ip.src", "ip.dst",
+        "ipv6.src", "ipv6.dst",
         "_ws.col.Protocol",
         "tcp.srcport", "tcp.dstport", "tcp.flags",
         "udp.srcport", "udp.dstport",
@@ -326,7 +327,8 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     raw = subprocess.check_output(cmd, encoding="utf-8", errors="replace",
                                    stderr=subprocess.DEVNULL)
     df = pd.read_csv(io.StringIO(raw), sep="|", header=None,
-        names=["ts","len","eth_src","eth_dst","ip_src","ip_dst","proto",
+        names=["ts","len","eth_src","eth_dst","ip_src","ip_dst",
+               "ip6_src","ip6_dst","proto",
                "tcp_sport","tcp_dport","tcp_flags","udp_sport","udp_dport",
                "dns_qname","dns_rcode","dns_response","arp_psrc","arp_hwsrc",
                "wlan_type","wlan_subtype","wlan_sa","wlan_retry",
@@ -338,6 +340,19 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     df["ts"]  = pd.to_numeric(df["ts"],  errors="coerce")
     df["len"] = pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
     df = df.dropna(subset=["ts"])
+
+    # Coalesce v6 into the v4 columns. On a modern home network most
+    # traffic is IPv6, and every mask below keys on ip_src/ip_dst being
+    # non-empty - without this the per-IP layer would silently analyse a
+    # small IPv4 remnant and report it as the whole network.
+    _v6s = df["ip6_src"] != ""
+    if _v6s.any():
+        df.loc[_v6s & (df["ip_src"] == ""), "ip_src"] = df.loc[
+            _v6s & (df["ip_src"] == ""), "ip6_src"]
+    _v6d = df["ip6_dst"] != ""
+    if _v6d.any():
+        df.loc[_v6d & (df["ip_dst"] == ""), "ip_dst"] = df.loc[
+            _v6d & (df["ip_dst"] == ""), "ip6_dst"]
 
     t0 = _safe_fromtimestamp(df["ts"].min())
     t1 = _safe_fromtimestamp(df["ts"].max())
@@ -2174,6 +2189,8 @@ class LiveCaptureWorker:
         "udp.srcport", "udp.dstport",
         "dns.qry.name", "dns.flags.rcode", "dns.flags.response",
         "arp.src.proto_ipv4", "arp.src.hw_mac",
+        # Appended, not inserted: _process_line indexes positionally.
+        "ipv6.src", "ipv6.dst",
     ]
 
     MIN_SECONDS = 120
@@ -2591,6 +2608,12 @@ class LiveCaptureWorker:
             udp_sp, udp_dp = parts[9], parts[10]
             dns_q, dns_rc, dns_rsp = parts[11], parts[12], parts[13]
             arp_p, arp_h = parts[14], parts[15]
+            # Live capture on a modern network is mostly IPv6; fold it
+            # into the same columns the rest of this method uses.
+            if not ip_src and len(parts) > 16:
+                ip_src = parts[16]
+            if not ip_dst and len(parts) > 17:
+                ip_dst = parts[17]
         except IndexError:
             return
         try:    ts = float(ts_s)
@@ -4363,6 +4386,7 @@ _ADV_TSHARK_FIELDS = [
     "frame.time_epoch", "frame.len",
     "eth.src", "eth.dst",
     "ip.src", "ip.dst",
+    "ipv6.src", "ipv6.dst",
     "_ws.col.Protocol",
     "tcp.srcport", "tcp.dstport", "tcp.flags",
     "udp.srcport", "udp.dstport",
@@ -4372,7 +4396,8 @@ _ADV_TSHARK_FIELDS = [
     "dhcp.option.dhcp_server_id",
 ]
 _ADV_COLS = [
-    "ts", "len", "eth_src", "eth_dst", "ip_src", "ip_dst", "proto",
+    "ts", "len", "eth_src", "eth_dst", "ip_src", "ip_dst",
+    "ip6_src", "ip6_dst", "proto",
     "tcp_sport", "tcp_dport", "tcp_flags", "udp_sport", "udp_dport",
     "dns_qname", "dns_qtype", "dns_rcode", "dns_response",
     "arp_opcode", "arp_psrc", "arp_hwsrc", "arp_pdst",
@@ -4393,6 +4418,13 @@ def _adv_load_pk(pcap_path, label):
     df["ts"]  = _adv_pd.to_numeric(df["ts"],  errors="coerce")
     df["len"] = _adv_pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
     df = df.dropna(subset=["ts"]).reset_index(drop=True)
+    # Same coalesce as the fast loader: the beaconing, DGA and TLS
+    # engines all group by ip_src/ip_dst, so without this they would only
+    # ever see the IPv4 slice of the capture.
+    _m = (df["ip_src"] == "") & (df["ip6_src"] != "")
+    df.loc[_m, "ip_src"] = df.loc[_m, "ip6_src"]
+    _m = (df["ip_dst"] == "") & (df["ip6_dst"] != "")
+    df.loc[_m, "ip_dst"] = df.loc[_m, "ip6_dst"]
     df["session"] = label
     df["dns_response"] = df["dns_response"].astype(str).map(
         lambda v: "1" if v in ("1", "True", "true") else

@@ -34,6 +34,7 @@ BASE_FIELDS = [
     "frame.time_epoch", "frame.len",
     "eth.src", "eth.dst",
     "ip.src", "ip.dst",
+    "ipv6.src", "ipv6.dst",
     "_ws.col.Protocol",
     "tcp.srcport", "tcp.dstport", "tcp.flags",
     "udp.srcport", "udp.dstport",
