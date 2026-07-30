@@ -1,0 +1,30 @@
+# Generic automation stack - committed template, no secrets.
+# Values come from ./.env (cp .env.example .env). Services bind to
+# ${TS_BIND} so nothing listens on a public interface (decision IDX-08):
+# set TS_BIND to the VM's Tailscale IP, or leave the loopback default
+# for a local smoke test. This template replaces the untracked
+# local-only automation/ stack so any fork can deploy (spec section 9).
+#
+# Stage A runs n8n only. The judge_api HTTP wrapper, the ingest API and
+# the analysis worker join in stages B-C of ARCHITECTURE_HE.md; their
+# service blocks below are deliberate placeholders until then.
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "${TS_BIND:-127.0.0.1}:5678:5678"
+    environment:
+      - N8N_HOST=${TS_BIND:-127.0.0.1}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=${TZ:-UTC}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # judge_api:   # stage B - HTTP wrapper around llm_judge/judge_cli.py (:8765)
+  # ingest_api:  # stage B - authenticated PCAP upload endpoint (spec 5.1)
+  # worker:      # stage C - queue consumer running the pipeline (spec 5.2)
+
+volumes:
+  n8n_data:

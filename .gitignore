@@ -44,3 +44,6 @@ processed/
 
 # Runtime stdout/stderr logs from launching the dashboard / judge_api locally.
 *.log
+
+# Local deployment secrets (see deploy/README.md) - never committed.
+deploy/.env

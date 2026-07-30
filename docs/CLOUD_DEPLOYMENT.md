@@ -10,9 +10,8 @@ Nothing here changes the application code. It is the same
 `automation/docker-compose.yml`, the same `judge_api` image, and the same
 workflow JSON - only the host changed.
 
-> **Before making this repository public**, scrub the IP addresses and the
-> instance name from this file. They are infrastructure addresses for a
-> live machine.
+> All addresses and key paths in this file are placeholders - substitute
+> your own VM's values. Nothing here identifies a live machine.
 
 ---
 
@@ -35,12 +34,12 @@ triaged at 3am.
 | property | value |
 |---|---|
 | Display name | `netsec-agent` |
-| Region | `il-jerusalem-1` (Israel Central), AD-1 |
+| Region | `<your-region>`, any AD with A1.Flex capacity |
 | Shape | `VM.Standard.A1.Flex` |
 | Resources | 4 OCPU / 24GB RAM / 100GB boot volume |
 | OS | Ubuntu 24.04 LTS, **aarch64** |
-| Public IP | `82.70.253.253` (SSH only) |
-| Tailscale IP | `100.68.246.54` (everything else) |
+| Public IP | `<vm-public-ip>` (SSH only) |
+| Tailscale IP | `<vm-tailscale-ip>` (everything else) |
 | Project path | `~/netsec` |
 
 `VM.Standard.A1.Flex` at 4 OCPU / 24GB consumes the entire Always Free ARM
@@ -50,7 +49,7 @@ A second A1 instance cannot be created alongside it.
 SSH in with:
 
 ```bash
-ssh -i ~/.ssh/netsec-agent.key/ssh-key-2026-07-12.key ubuntu@82.70.253.253
+ssh -i <path-to-your-ssh-key> ubuntu@<vm-public-ip>
 ```
 
 ---
@@ -94,12 +93,12 @@ reachable on the public IP is 22.
 
 ```
 your laptop  ──(Tailscale, WireGuard)──►  netsec-agent
-100.78.253.22                             100.68.246.54:5678  n8n
-                                          100.68.246.54:8765  judge_api
+<laptop-tailscale-ip>                             <vm-tailscale-ip>:5678  n8n
+                                          <vm-tailscale-ip>:8765  judge_api
 
-the internet ────────────────────────►    82.70.253.253:22    SSH only
-                                          82.70.253.253:5678  no listener
-                                          82.70.253.253:8765  no listener
+the internet ────────────────────────►    <vm-public-ip>:22    SSH only
+                                          <vm-public-ip>:5678  no listener
+                                          <vm-public-ip>:8765  no listener
 ```
 
 Three things are required to make this hold, and missing any one of them
@@ -114,12 +113,12 @@ on the VM with `automation/docker-compose.override.yml`:
 services:
   n8n:
     ports: !override
-      - "100.68.246.54:5678:5678"
+      - "<vm-tailscale-ip>:5678:5678"
     environment:
-      - N8N_HOST=100.68.246.54
+      - N8N_HOST=<vm-tailscale-ip>
   judge_api:
     ports: !override
-      - "100.68.246.54:8765:8765"
+      - "<vm-tailscale-ip>:8765:8765"
 ```
 
 **The `!override` tag is not optional.** Compose *merges* list-valued keys
@@ -154,8 +153,8 @@ the bind in step 1 is ever wrong.
 Verify both directions after any change:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://100.68.246.54:5678/    # expect 200
-curl -s -o /dev/null -w "%{http_code}\n" http://82.70.253.253:5678/    # expect 000
+curl -s -o /dev/null -w "%{http_code}\n" http://<vm-tailscale-ip>:5678/    # expect 200
+curl -s -o /dev/null -w "%{http_code}\n" http://<vm-public-ip>:5678/    # expect 000
 ```
 
 ---
@@ -216,7 +215,7 @@ are immediate. Confirm with:
 
 ```bash
 docker compose ps                              # both Up, judge_api healthy
-curl -s http://100.68.246.54:8765/health       # {"status":"ok", ...}
+curl -s http://<vm-tailscale-ip>:8765/health       # {"status":"ok", ...}
 ```
 
 ---
@@ -253,7 +252,7 @@ The workflow imports inactive. Activation is deliberate and separate.
 ## Credentials
 
 Recent n8n releases ignore `N8N_BASIC_AUTH_ACTIVE` and friends. The first
-visit to `http://100.68.246.54:5678` prompts for an owner account instead.
+visit to `http://<vm-tailscale-ip>:5678` prompts for an owner account instead.
 Create it there; the env vars in the compose file have no effect.
 
 The Gmail SMTP credential can be re-entered by hand (see
@@ -307,15 +306,16 @@ daemon for anything. The **Send S1 / S2 to n8n Alert** button uploads the
 session's PCAP over Tailscale straight into the VM's `incoming/`, using
 the `scp` binary that ships with Windows and every Unix.
 
-Four environment variables control the target. The defaults match the
-deployment described here, so nothing needs to be set for normal use:
+Four environment variables control the target. The code ships with the
+original deployment's values baked in as defaults, so **always set all
+four** for your own deployment (`deploy/.env.example` documents them):
 
 | variable | default |
 |---|---|
-| `NETSEC_REMOTE_HOST` | `100.68.246.54` |
+| `NETSEC_REMOTE_HOST` | `<vm-tailscale-ip>` |
 | `NETSEC_REMOTE_USER` | `ubuntu` |
 | `NETSEC_REMOTE_INCOMING` | `/home/ubuntu/netsec/incoming` |
-| `NETSEC_SSH_KEY` | `~/.ssh/netsec-agent.key/ssh-key-2026-07-12.key` |
+| `NETSEC_SSH_KEY` | `<path-to-your-ssh-key>` |
 
 Before uploading, the button probes `judge_api` and n8n on the remote
 host. If Tailscale is disconnected it says so and refuses to upload,
@@ -324,7 +324,7 @@ rather than reporting a success that goes nowhere.
 Dropping a file on the VM by hand does the same thing:
 
 ```bash
-scp -i <key> capture.pcap ubuntu@82.70.253.253:~/netsec/incoming/
+scp -i <key> capture.pcap ubuntu@<vm-public-ip>:~/netsec/incoming/
 ```
 
 **Nothing about the analysis runs locally any more.** The pipeline,
@@ -346,7 +346,7 @@ first:
 
 ```bash
 mv ~/netsec/llm_judge/cache/judge_cache.sqlite /tmp/
-curl -s -X POST http://100.68.246.54:8765/analyze \
+curl -s -X POST http://<vm-tailscale-ip>:8765/analyze \
   -H "Content-Type: application/json" \
   -d '{"pcap_path":"incoming/dns_amp.pcap","label":"S1"}'
 mv /tmp/judge_cache.sqlite ~/netsec/llm_judge/cache/
