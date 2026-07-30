@@ -99,3 +99,64 @@ def test_quota_limit_notice(tmp_path):
     assert q.is_exhausted("groq", token_cap=100) is True
     assert q.is_exhausted("groq", token_cap=10_000) is False
     q.close()
+
+
+# ---- key isolation between endpoint profiles (security regression) -------
+# An endpoint profile points at a specific host. The global
+# OPENAI_COMPAT_API_KEY belongs to whatever host OPENAI_COMPAT_BASE_URL
+# names, so it must never be attached to a request going somewhere else.
+
+def test_profile_host_never_borrows_the_global_key(monkeypatch):
+    """A profile whose own key is empty must not fall back to the global
+    key: that would put one provider's secret in the Authorization header
+    sent to a different provider's host."""
+    # judge_config reads the base URL at import time, so patch the module
+    # attribute rather than the environment.
+    monkeypatch.setattr(judge_config, "OPENAI_COMPAT_BASE_URL",
+                        "https://groq.example/v1")
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "gsk_global_secret")
+    # An endpoint that needs no key at all (no KEY_ENV declared).
+    client = llm_clients.OpenAICompatClient(
+        model="m", base_url="https://other-provider.example/v1")
+    assert client.base_url == "https://other-provider.example/v1"
+    assert client.api_key == "", (
+        "the global key leaked to a different host: "
+        f"{client.api_key!r}")
+
+
+def test_default_host_still_uses_the_global_key(monkeypatch):
+    """The fallback is still correct when no base_url is passed - that is
+    the default host the global key actually belongs to."""
+    monkeypatch.setattr(judge_config, "OPENAI_COMPAT_BASE_URL",
+                        "https://groq.example/v1")
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "gsk_global_secret")
+    client = llm_clients.OpenAICompatClient(model="m")
+    assert client.base_url == "https://groq.example/v1"
+    assert client.api_key == "gsk_global_secret"
+
+
+def test_profile_with_declared_but_empty_key_fails_loudly(monkeypatch):
+    """Half-finished setup (KEY_ENV named, variable empty) must raise at
+    construction rather than send an unauthenticated request."""
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "gsk_global_secret")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_BASE_URL",
+                       "https://gemini.example/v1beta/openai")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_KEY_ENV", "GEMINI_API_KEY")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    with pytest.raises(llm_clients.JudgeClientError) as exc:
+        llm_clients.make_client(provider="gemini")
+    assert "GEMINI_API_KEY" in str(exc.value)
+
+
+def test_profile_with_its_own_key_is_unaffected(monkeypatch):
+    """The normal, fully configured case keeps working."""
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "gsk_global_secret")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_BASE_URL",
+                       "https://gemini.example/v1beta/openai")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("LLM_JUDGE_EP_GEMINI_KEY_ENV", "GEMINI_API_KEY")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini_own_key")
+    client = llm_clients.make_client(provider="gemini")
+    assert client.api_key == "gemini_own_key"
+    assert client.provider_name == "gemini"

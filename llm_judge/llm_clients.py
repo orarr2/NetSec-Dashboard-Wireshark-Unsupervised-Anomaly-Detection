@@ -180,9 +180,20 @@ class OpenAICompatClient:
             raise JudgeClientError(
                 "OPENAI_COMPAT_MODEL is not set - the openai_compat "
                 "provider needs an explicit model name")
+        # An explicit base_url means the caller is pointing at a specific
+        # host (an endpoint profile). The global OPENAI_COMPAT_API_KEY
+        # belongs to whatever host OPENAI_COMPAT_BASE_URL names, so
+        # falling back to it here would put one provider's secret in the
+        # Authorization header sent to a different provider. Only the
+        # default host may use the default key.
+        explicit_host = base_url is not None
         self.base_url = (base_url
                          or judge_config.OPENAI_COMPAT_BASE_URL).rstrip("/")
-        self.api_key = api_key or os.environ.get("OPENAI_COMPAT_API_KEY", "")
+        if explicit_host:
+            self.api_key = api_key or ""
+        else:
+            self.api_key = api_key or os.environ.get("OPENAI_COMPAT_API_KEY",
+                                                     "")
         self.timeout_s = timeout_s or judge_config.JUDGE_TIMEOUT_S
         self.verdict_schema = verdict_schema
         self.max_tokens = max_tokens
@@ -365,6 +376,16 @@ def make_client(provider=None, verdict_schema=None, model=None):
     profiles = judge_config.endpoint_profiles()
     if provider in profiles:
         p = profiles[provider]
+        # A profile that names a key variable but leaves it empty is a
+        # half-finished setup. Fail here, loudly, rather than sending an
+        # unauthenticated request that comes back as an opaque 401 - and
+        # never silently borrow another provider's key.
+        if p["key_env"] and not p["api_key"]:
+            raise JudgeClientError(
+                f"endpoint profile '{provider}' declares "
+                f"LLM_JUDGE_EP_{provider.upper()}_KEY_ENV={p['key_env']}, "
+                f"but {p['key_env']} is empty. Set it, or drop the "
+                f"KEY_ENV line if this endpoint needs no key.")
         client = OpenAICompatClient(
             verdict_schema=verdict_schema, model=model or p["model"],
             base_url=p["base_url"], api_key=p["api_key"] or None)

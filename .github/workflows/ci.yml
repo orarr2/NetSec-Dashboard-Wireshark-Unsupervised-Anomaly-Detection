@@ -35,6 +35,11 @@ jobs:
             pip install -r /tmp/requirements-no-manuf.txt
             pip install --no-build-isolation manuf==1.1.5 || true
           fi
+          # The ingest API tests skip themselves when fastapi is absent.
+          # Install the server extras so the signed-upload path - the
+          # security boundary between sensor and analyzer - is actually
+          # exercised in CI instead of silently skipped.
+          pip install -r server/requirements.txt
           pip install pytest pytest-timeout
 
       - name: Run tests
