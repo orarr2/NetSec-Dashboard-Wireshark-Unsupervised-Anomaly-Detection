@@ -222,10 +222,56 @@ def latest_session_for_pcap(conn, pcap_id):
 
 def get_session(conn, session_id):
     row = conn.execute(
-        "SELECT s.*, p.sha256, p.orig_name, p.size_bytes"
+        "SELECT s.*, p.sha256, p.orig_name, p.size_bytes, p.storage_path"
         " FROM sessions s JOIN pcap_files p ON p.id = s.pcap_id"
         " WHERE s.id = ?", (session_id,)).fetchone()
     return dict(row) if row else None
+
+
+# ---- worker queue --------------------------------------------------------
+
+def claim_next_job(conn):
+    """Atomically move the oldest queued session to running and return it
+    (joined with its pcap row), or None when the queue is empty. Uses an
+    IMMEDIATE transaction instead of RETURNING so any sqlite3 works."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        row = conn.execute(
+            "SELECT id FROM sessions WHERE status='queued' "
+            "ORDER BY id LIMIT 1").fetchone()
+        if row is None:
+            conn.execute("COMMIT")
+            return None
+        conn.execute(
+            "UPDATE sessions SET status='running', started_at=? WHERE id=?",
+            (_utcnow(), row["id"]))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return get_session(conn, row["id"])
+
+
+def mark_done(conn, session_id, **stats):
+    """Finish a session. stats may set n_pkts, n_ips, duration_s,
+    pipeline_version, prompt_version, tshark_version, git_commit."""
+    allowed = ("n_pkts", "n_ips", "duration_s", "pipeline_version",
+               "prompt_version", "tshark_version", "git_commit")
+    sets, vals = ["status='done'", "finished_at=?"], [_utcnow()]
+    for key in allowed:
+        if key in stats and stats[key] is not None:
+            sets.append(f"{key}=?")
+            vals.append(stats[key])
+    vals.append(session_id)
+    conn.execute(f"UPDATE sessions SET {', '.join(sets)} WHERE id=?", vals)
+    conn.commit()
+
+
+def mark_error(conn, session_id, error):
+    conn.execute(
+        "UPDATE sessions SET status='error', finished_at=?, error=? "
+        "WHERE id=?", (_utcnow(), str(error)[:2000], session_id))
+    conn.commit()
 
 
 # ---- reports + telemetry -------------------------------------------------

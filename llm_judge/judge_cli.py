@@ -479,8 +479,15 @@ def _build_panel():
     return entries, clients, init_failures
 
 
-def analyze_and_judge(pcap_path, label="S1", verbose=True):
-    """Run the pipeline + judge; returns (out, assembled, client, context)."""
+def analyze_and_judge(pcap_path, label="S1", verbose=True,
+                      return_session=False):
+    """Run the pipeline + judge; returns (out, assembled, client, context).
+
+    return_session=True appends the raw session dict and the rule
+    findings to the tuple - (out, assembled, client, context, S,
+    findings) - so the VM worker can persist them without re-running
+    the pipeline. The default stays the 4-tuple for existing callers.
+    """
     _validate_committee_config()
     panel = None
     if judge_config.LLM_JUDGE_PANEL:
@@ -539,6 +546,8 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True):
     out["analyst_commentary"] = judge_core.analyst_commentary(
         client, context, out, session_label=label,
         provider=commentary_provider, model=commentary_model)
+    if return_session:
+        return out, assembled, client, context, S, findings
     return out, assembled, client, context
 
 

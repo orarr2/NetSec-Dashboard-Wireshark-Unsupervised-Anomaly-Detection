@@ -1,0 +1,18 @@
+# Analysis worker container (stage C). Heavy by nature: it runs the
+# real pipeline, so it needs tshark and the full requirements.txt
+# (CPU torch first, mirroring .github/workflows/analyze-pcap.yml).
+# WeasyPrint system libraries are included for the PDF report (IDX-07).
+# Build from the repo root:
+#   docker compose -f deploy/docker-compose.yml build worker
+FROM python:3.11-slim
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        tshark libpango-1.0-0 libpangocairo-1.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --index-url \
+        https://download.pytorch.org/whl/cpu torch \
+    && pip install --no-cache-dir -r requirements.txt weasyprint
+COPY . .
+ENV NETSEC_DATA_ROOT=/srv/netsec
+CMD ["python", "-m", "server.worker"]

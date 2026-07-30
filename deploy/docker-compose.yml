@@ -35,8 +35,19 @@ services:
     volumes:
       - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
 
-  # judge_api:   # stage C - HTTP wrapper around llm_judge/judge_cli.py (:8765)
-  # worker:      # stage C - queue consumer running the pipeline (spec 5.2)
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NETSEC_DATA_ROOT=/srv/netsec
+    volumes:
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+
+  # judge_api:   # optional - HTTP wrapper around llm_judge/judge_cli.py
+  #              # (:8765); the worker supersedes it for the queue path
 
 volumes:
   n8n_data:
