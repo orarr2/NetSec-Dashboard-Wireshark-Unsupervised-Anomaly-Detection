@@ -10151,3 +10151,33 @@ print(f"  Dashboard -> http://127.0.0.1:{PORT}")
 print("  Stop: press Interrupt (square button) in Jupyter")
 print("=" * 52)
 app.run(debug=False, port=PORT, use_reloader=False, jupyter_mode="external")
+
+
+# ==== notebook cell 49 ====
+
+# ==== VM client integration (stage G) ====
+# The dashboard can act as a client of the analysis VM: upload the
+# source PCAP over HTTP (scp remains the fallback) and load a finished
+# analysis back for remote viewing. The logic lives in
+# server/dashboard_client.py so this auto-generated module stays a thin,
+# in-sync wrapper. Optional add-on - the local analysis path never
+# depends on it.
+import os as _os_vmclient, sys as _sys_vmclient
+try:
+    _base_vmclient = _os_vmclient.path.dirname(_os_vmclient.path.abspath(__file__))
+except NameError:
+    _base_vmclient = _os_vmclient.getcwd()
+for _cand_vmclient in (_base_vmclient, _os_vmclient.path.dirname(_base_vmclient),
+                       _os_vmclient.getcwd(),
+                       _os_vmclient.path.dirname(_os_vmclient.getcwd())):
+    if _os_vmclient.path.isdir(_os_vmclient.path.join(_cand_vmclient, 'server')) \
+            and _cand_vmclient not in _sys_vmclient.path:
+        _sys_vmclient.path.insert(0, _cand_vmclient)
+try:
+    from server.dashboard_client import (load_session_from_api,
+                                          upload_session_via_api)
+    print('VM client helpers ready (upload_session_via_api, load_session_from_api)')
+except Exception as _e_vmclient:
+    load_session_from_api = None
+    upload_session_via_api = None
+    print(f'VM client helpers unavailable ({_e_vmclient}); local + scp paths unaffected')

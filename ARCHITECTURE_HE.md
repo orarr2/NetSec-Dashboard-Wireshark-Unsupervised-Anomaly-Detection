@@ -563,8 +563,8 @@ chunk - ‏sha256 ‏← חתימה ‏← ‏POST עם retry; כישלון - ס
 | ג' | `server/worker.py` + כתיבת תוצרים ל-DB + הצלבת טלמטריה + ‏HTML + ‏PDF **(בוצע)** | ב' |
 | ד' | `retention.py` + גיבוי DB + ‏watchdog חיצוני **(בוצע)** | ב' |
 | ה' | פרופילי LLM + ‏failover + ‏quota + פאנל הטרוגני | - (מקביל) |
-| ו' | `sensor/capture_agent.py` + מניפסט + ספול + רשומות gap | ב' |
-| ז' | דשבורד: כפתור ‏HTTP + ‏`load_session_from_api` | ג' |
+| ו' | `sensor/capture_agent.py` + מניפסט + ספול + רשומות gap **(בוצע)** | ב' |
+| ז' | דשבורד: כפתור ‏HTTP + ‏`load_session_from_api` **(בוצע)** | ג' |
 | ח' | ‏README באנגלית + נספח Oracle | א'-ז' |
 | ט' | ‏baseline פר-מכשיר מההיסטוריה + השוואות לאורך זמן | ג' |
 | י' | חומרה: ‏Pi 5 נכנס כ-Tier 0 - אפס שינוי ארכיטקטוני | ו' |

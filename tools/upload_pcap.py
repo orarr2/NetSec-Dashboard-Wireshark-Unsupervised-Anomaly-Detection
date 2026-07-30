@@ -81,6 +81,66 @@ def _append_manifest(manifest_path, record):
         f.write(json.dumps(record, sort_keys=True) + "\n")
 
 
+def upload_file(path, url, sensor, secret, kind="prod", label=None,
+                manifest=None, timeout=600.0, retries=4, sleep_fn=time.sleep):
+    """Sign and stream one PCAP to the ingest API. Shared by the CLI and
+    the capture agent. Returns a dict:
+        {"ok": bool, "status": int|None, "session_id": ..., "duplicate":
+         bool, "error": str|None}
+    On success (and only then) appends a telemetry-manifest line when a
+    manifest path is given. Raises nothing - callers branch on ok."""
+    digest = sha256_of(path)
+    started_at = time.time()
+    u = urllib.parse.urlsplit(url)
+    delay, attempt = 2.0, 0
+    status, body = None, ""
+    while True:
+        attempt += 1
+        ts = int(time.time())
+        headers = {
+            "X-Sensor-Id": sensor,
+            "X-Sha256": digest,
+            "X-Timestamp": str(ts),
+            "X-Signature": _signature(secret, digest, sensor, ts),
+            "X-Session-Kind": kind,
+            "X-Filename": os.path.basename(path),
+            "User-Agent": "netsec-upload/0.1",
+        }
+        if label:
+            headers["X-Session-Label"] = label
+        try:
+            status, body = _post_stream(url, path, headers, timeout)
+        except OSError as e:
+            status, body = None, str(e)
+        if status in (200, 202):
+            out = json.loads(body)
+            if manifest:
+                _append_manifest(manifest, {
+                    "started_at": round(started_at, 3),
+                    "ended_at": round(time.time(), 3),
+                    "dst": u.hostname,
+                    "dst_port": u.port or (443 if u.scheme == "https"
+                                           else 80),
+                    "bytes_sent": os.path.getsize(path),
+                    "file_sha256": digest, "sensor_id": sensor})
+            return {"ok": True, "status": status,
+                    "session_id": out.get("session_id"),
+                    "duplicate": bool(out.get("duplicate")), "error": None}
+        if status is not None and 400 <= status < 500:
+            return {"ok": False, "status": status, "session_id": None,
+                    "duplicate": False,
+                    "error": f"server rejected ({status}): {body}"}
+        if attempt > retries:
+            return {"ok": False, "status": status, "session_id": None,
+                    "duplicate": False,
+                    "error": f"failed after {retries} retries "
+                             f"({status}): {body}"}
+        print(f"  transient failure ({status}): retrying in {delay:.0f}s",
+              file=sys.stderr)
+        sleep_fn(delay)
+        delay *= 2
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Upload a PCAP to the ingest API (signed, streamed)")
@@ -110,57 +170,16 @@ def main(argv=None):
         print(f"error: no such file: {args.pcap}", file=sys.stderr)
         return 2
 
-    digest = sha256_of(args.pcap)
-    started_at = time.time()
-    u = urllib.parse.urlsplit(args.url)
-
-    delay, attempt = 2.0, 0
-    while True:
-        attempt += 1
-        ts = int(time.time())
-        headers = {
-            "X-Sensor-Id": args.sensor,
-            "X-Sha256": digest,
-            "X-Timestamp": str(ts),
-            "X-Signature": _signature(args.secret, digest, args.sensor, ts),
-            "X-Session-Kind": args.kind,
-            "X-Filename": os.path.basename(args.pcap),
-            "User-Agent": "netsec-upload/0.1",
-        }
-        if args.label:
-            headers["X-Session-Label"] = args.label
-        try:
-            status, body = _post_stream(args.url, args.pcap, headers,
-                                        args.timeout)
-        except OSError as e:
-            status, body = None, str(e)
-        if status in (200, 202):
-            break
-        if status is not None and 400 <= status < 500:
-            print(f"error: server rejected the upload ({status}): {body}",
-                  file=sys.stderr)
-            return 1
-        if attempt > args.retries:
-            print(f"error: upload failed after {args.retries} retries "
-                  f"({status}): {body}", file=sys.stderr)
-            return 1
-        print(f"  transient failure ({status}): retrying in {delay:.0f}s",
-              file=sys.stderr)
-        time.sleep(delay)
-        delay *= 2
-
-    ended_at = time.time()
-    out = json.loads(body)
-    _append_manifest(args.manifest, {
-        "started_at": round(started_at, 3), "ended_at": round(ended_at, 3),
-        "dst": u.hostname, "dst_port": u.port or (443 if u.scheme == "https"
-                                                  else 80),
-        "bytes_sent": os.path.getsize(args.pcap),
-        "file_sha256": digest, "sensor_id": args.sensor,
-    })
-    dup = " (duplicate - existing session returned)" if out.get(
-        "duplicate") else ""
-    print(f"session_id={out['session_id']}{dup}")
+    result = upload_file(args.pcap, args.url, args.sensor, args.secret,
+                         kind=args.kind, label=args.label,
+                         manifest=args.manifest, timeout=args.timeout,
+                         retries=args.retries)
+    if not result["ok"]:
+        print(f"error: {result['error']}", file=sys.stderr)
+        return 1
+    dup = " (duplicate - existing session returned)" if result[
+        "duplicate"] else ""
+    print(f"session_id={result['session_id']}{dup}")
     return 0
 
 
