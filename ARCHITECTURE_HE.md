@@ -561,7 +561,7 @@ chunk - ‏sha256 ‏← חתימה ‏← ‏POST עם retry; כישלון - ס
 | א' | `deploy/` בריפו + ‏`.env.example` + ניקוי IPs אישיים מהמסמכים + כלי המדידה `tools/measure_pipeline_ratios.py` (ההרצה על הקלטה ארוכה - אצל בעל הפרויקט) **(בוצע)** | - |
 | ב' | `server/db.py` + ‏`ingest_api.py` + ‏`tools/upload_pcap.py` + בדיקות **(בוצע)** | א' |
 | ג' | `server/worker.py` + כתיבת תוצרים ל-DB + הצלבת טלמטריה + ‏HTML + ‏PDF **(בוצע)** | ב' |
-| ד' | `retention.py` + גיבוי DB + ‏watchdog חיצוני | ב' |
+| ד' | `retention.py` + גיבוי DB + ‏watchdog חיצוני **(בוצע)** | ב' |
 | ה' | פרופילי LLM + ‏failover + ‏quota + פאנל הטרוגני | - (מקביל) |
 | ו' | `sensor/capture_agent.py` + מניפסט + ספול + רשומות gap | ב' |
 | ז' | דשבורד: כפתור ‏HTTP + ‏`load_session_from_api` | ג' |

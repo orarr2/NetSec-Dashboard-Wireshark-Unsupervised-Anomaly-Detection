@@ -46,6 +46,18 @@ services:
     volumes:
       - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
 
+  retention:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NETSEC_DATA_ROOT=/srv/netsec
+    volumes:
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+    command: ["python", "-m", "server.retention"]
+
   # judge_api:   # optional - HTTP wrapper around llm_judge/judge_cli.py
   #              # (:8765); the worker supersedes it for the queue path
 

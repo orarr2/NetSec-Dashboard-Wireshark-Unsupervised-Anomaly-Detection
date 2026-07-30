@@ -17,6 +17,8 @@ a fork needs lands here instead, stage by stage.
 | `../server/` | History DB schema, HMAC upload auth, streaming storage, and the FastAPI ingest layer. |
 | `../tools/upload_pcap.py` | Signed streaming upload from any machine - the no-size-cap replacement for the GitHub 25MB path. |
 | `../tools/measure_pipeline_ratios.py` | Re-measures the PCAP-vs-fields size ratios the plan is built on, against your own long capture (the plan's numbers came from a single 135-second sample). |
+| `../server/retention.py` | Daily housekeeping (runs as the `retention` compose service): DB backup + prune, 7-day raw purge with the permanent field-index backfilled first, 85% disk watermark, monthly VACUUM. `--once --dry-run` shows what it would do. |
+| `../tools/watchdog.py` | Standalone external checker - copy to any always-on machine OUTSIDE the VM, point it at `http://<vm>:8766/healthz`, get one email per outage and one per recovery. No machine monitors itself. |
 
 ## Requirements
 
