@@ -1,300 +1,606 @@
-# ארכיטקטורת האקוסיסטם - תכנון מלא
+# ארכיטקטורת האקוסיסטם - מסמך אפיון v2.0
 
-תאריך: 2026-07-22 · מסמך תכנון, ללא מימוש קוד
+תאריך: 2026-07-30 · מחליף את v1 (2026-07-22) · מסמך תכנון, ללא מימוש קוד
 
 > הריפו הוא אנגלית-בלבד ככלל, והמסמך הזה הוא חריגה מוצהרת - כמו
 > `docs/DOCKER_AI_AGENTS_HE.md`. הוא נשמר בעברית בשורש לפי בקשה
 > מפורשת, כדי שתכנון המערכת יהיה הדבר הראשון שרואים.
 
-מטרה: לתכנן את המערכת השלמה - חיישן הקלטה, מכונת ניתוח בענן, שכבת
-LLM, ומחברת הדשבורד - כמערכת אחת שרכיביה מדברים ביניהם, במקום ארבעה
-כלים שמחוברים ב-scp. התכנון מתייחס לחומרה עתידית (Raspberry Pi 5)
-אבל עובד היום כשהלפטופ ממלא את תפקיד החיישן.
+**סטטוס: טיוטה לאישור.** שום שורת קוד לא נכתבת ושום קובץ אחר בפרויקט
+לא משתנה עד אישור סופי ומפורש של המסמך הזה. המימוש, כשיאושר, יתבצע
+שלב-אחר-שלב (סעיף 10), כל שלב באישור נפרד, בענף נפרד מחוץ ל-main.
 
 ---
 
-## 1. המספרים שקובעים את הכול
+## 1. מה השתנה מ-v1 - תמצית ההכרעות
 
-נמדדו על ההקלטה החיה האמיתית מ-2026-07-22 (135 שניות, 24,241 חבילות,
-Wi-Fi ביתי אמיתי - לא סינתטי):
+| # | הכרעת v1 | הכרעת v2 (מחייבת) |
+|---|---|---|
+| 1 | שדות tshark דחוסים עוברים לענן; PCAP גולמי נשאר על החיישן בלבד | **ה-PCAP הגולמי הוא המקור והוא מה שעולה ל-VM.** נשמר שם עם מחיקה אוטומטית שבועית. ההמרה לשדות היא שלב עיבוד פנימי, לא תחליף למקור |
+| 2 | GitHub Actions הוא מסלול קליטה, תקרת 25MB רלוונטית | **העלאה ישירה ל-VM, בלי שום תלות ב-GitHub** ובלי תקרת גודל. Actions נשאר ל-CI ולהדגמה ציבורית בלבד |
+| 3 | שופטים: Groq + Ollama בלבד | **מטריצת ספקי LLM חינמיים** (Gemini, Cerebras, OpenRouter, GitHub Models, Mistral ועוד) עם שרשרת failover ומעקב מכסות (סעיף 6) |
+| 4 | מסד היסטוריה מינימלי (6 טבלאות) | **סכימה מלאה** שכוללת את כל שדות הניתוח הקריטיים להמשך: פיצ'רים פר-IP, אותות מנועים מתקדמים, פסיקות מלאות, audit של הפאנל, baselines, מכסות (סעיף 7) |
+| 5 | בענן נשמרים רק אגרגטים ופסיקות | על דיסק ה-VM נשמרים גם **ה-PCAP הגולמי (שבוע), דוח ה-PDF ודוח ה-HTML של השופט - לתמיד** (סעיף 8) |
+| 6 | אין מדריך הקמה גנרי | **מדריך VM גנרי לכל משתמש** + סעיף README באנגלית; חסימת ה-automation/ ב-gitignore מטופלת (סעיף 9) |
 
-| שלב בצינור | גודל | יחס ל-PCAP | קצב |
-|---|---:|---:|---:|
-| PCAP גולמי | 22.1 MB | 1.0x | 590 MB/שעה |
-| שדות tshark (טקסט) | 2.2 MB | 10x | 59 MB/שעה |
-| שדות tshark **gzipped** | 0.06 MB | **368x** | **1.6 MB/שעה** |
-| verdicts.json | 3.1 KB | 7,202x | - |
+---
 
-**למה הפער הזה קיים:** PCAP גולמי מכיל payload מוצפן של TLS - אנטרופיה
-מקסימלית, לא נדחס (מדדנו 1.1x בפועל על הקלטה אמיתית). ייצוא השדות
-מכיל רק כתובות, פורטים ושמות פרוטוקול - טקסט שחוזר על עצמו אלפי
-פעמים, ולכן נדחס 368x.
+## 2. תיקון הנחות היסוד של v1
 
-**התובנה הארכיטקטונית המרכזית:** `analyze_pcap` לא קורא PCAP. הוא
-מריץ tshark, מקבל טקסט של 22 שדות, ובונה ממנו DataFrame:
+בדיקה מחודשת של הקוד מצאה גם אי-דיוקים ב-v1 עצמו. נרשמים כאן כדי
+שהמסמך הזה יהיה מקור אמת יחיד:
+
+1. **"analyze_pcap לא קורא PCAP" - ניסוח מטעה, והמסקנה שנגזרה ממנו
+   נדחתה.** ההסבר המלא והתיקון בסעיף 3.
+2. **"22 שדות" - לא מדויק.** הלואדר המהיר (`_analyze_pcap_tshark`)
+   מייצא **23 שדות**; המנועים המתקדמים (`_adv_load_pk`) מייצאים **24
+   שדות** (כולל TLS SNI/JA3/JA4, ‏DHCP server-id, ‏ARP opcode); האיחוד
+   הוא כ-30 שדות שונים.
+3. **הפניה לקובץ שאינו קיים.** v1 הפנה ל-`SELF_MONITORING_DESIGN_HE.md`
+   (חלופות A ו-D) - הקובץ הזה לא נמצא בריפו. מנגנון החתימה מוגדר
+   מעתה במסמך הזה עצמו (סעיף 5.1) בלי תלות חיצונית.
+4. **"103 הבדיקות" - המספר לא נכון להיום.** בסוויטה יש כרגע 99
+   פונקציות בדיקה (חלקן פרמטריות, כך שמספר המקרים הנאסף שונה).
+   מסמך תכנון לא צריך לקבע מספר - הכלל הוא: הסוויטה כולה ממשיכה
+   לעבור ללא שינוי.
+5. **"ייצוא השדות הוא חסר-אובדן" - נכון רק ביחס לצינור של היום,
+   ולכן לא קביל כעקרון תכנון.** ראו סעיף 3.1 לרשימת מה שכן אובד.
+6. **"שבוע נתק הוא 270MB - שום דבר"** - היה נכון לשדות דחוסים. עם
+   ההכרעה החדשה (PCAP גולמי עולה לענן) שבוע נתק בהקלטה רציפה הוא
+   כ-99GB. מדיניות הספול עודכנה בהתאם (סעיף 11).
+7. **פערים שנמצאו בקוד ורלוונטיים לתכנון:**
+   - `automation/` (docker-compose, ‏judge_api, ‏תבניות n8n) נמצא כולו
+     ב-.gitignore - משתמש חיצוני שעושה fork לא יכול להקים את ה-VM
+     בכלל. זה חוסם את דרישת הגנריות ומטופל בסעיף 9.
+   - `docs/CLOUD_DEPLOYMENT.md` מכיל כתובות IP חיות ושם קובץ מפתח
+     אישי; הקובץ עצמו מזהיר "לנקות לפני פרסום". בגרסה הגנרית הם
+     יוחלפו ב-placeholders.
+   - הלואדר מייצא `ip.src`/`ip.dst` בלבד - תעבורת IPv6 (שדות
+     `ipv6.src`/`ipv6.dst`) לא נכנסת לאגרגציה פר-IP היום. דוגמה
+     חיה לסיבה שהגולמי חייב להישמר: כשנוסיף IPv6, רק PCAP שמור
+     יאפשר ניתוח רטרואקטיבי.
+   - הדשבורד כבר מעלה PCAP ל-VM (כפתור "Send S1/S2 to n8n Alert",
+     ‏scp מעל Tailscale) - כלומר "גולמי עולה לענן" הוא לא רעיון חדש
+     אלא הרחבה של נתיב קיים ועובד.
+8. **מכסת Groq** - v1 ציין 100k tokens ליום; ‏`CLOUD_DEPLOYMENT.md`
+   מדד גם 12k tokens לדקה. שתי המגבלות אמיתיות ושתיהן נכנסות למעקב
+   המכסות (סעיף 6.3).
+9. **המספרים של v1 אומתו חשבונאית** (590MB לשעה, פי 368, ‏15.6 שעות
+   בתקרת 25MB, ‏7.3 שנות שדות ב-100GB) - אבל כולם נמדדו על הקלטה
+   אחת של 135 שניות. הם משמשים כאן כסדרי גודל; מדידה חוזרת על
+   הקלטה ארוכה היא משימת פתיחה של שלב א' במימוש.
+
+---
+
+## 3. סוגיה 1: מעמד ה-PCAP הגולמי (ההכרעה המרכזית)
+
+### 3.1 למה בכלל נכתב "analyze_pcap לא קורא PCAP", ומה באמת אובד
+
+העובדה הטכנית: `analyze_pcap` מפעיל את `tshark` על קובץ ה-PCAP,
+ו-tshark - לא פייתון - הוא שמפענח את החבילות. לתוך פייתון נכנס רק
+פלט טקסטואלי של 23 עמודות שממנו נבנה ה-DataFrame:
 
 ```python
-raw = subprocess.check_output([TSHARK, "-r", path, "-T", "fields", ...])
+raw = subprocess.check_output([tshark_path, "-r", str(path), "-n",
+                               "-T", "fields", ...])
 df  = pd.read_csv(io.StringIO(raw), sep="|", ...)
 ```
 
-לכן **ייצוא השדות הוא חסר-אובדן ביחס לכל מה שהמערכת עושה בפועל** -
-ML, כללים, מנועי APT, כל 52 הצ'ארטים. ה-PCAP הגולמי דרוש רק
-לפורנזיקה ידנית של חבילה בודדת (לפתוח ב-Wireshark ולראות bytes).
+מכאן נולד הניסוח של v1. הוא נכון מילולית - ושגוי כעקרון תכנון, כי
+"חסר-אובדן" שם נמדד רק מול מה שהצינור *של היום* צורך. מול ההקלטה
+עצמה, ייצוא השדות מאבד באופן בלתי-הפיך:
 
-זה מה שמאפשר את כל התכנון למטה: מה שעובר על הקווים הוא לא חבילות.
+- **תוכן החבילות** - payload של פרוטוקולים לא מוצפנים (DNS מלא,
+  ‏HTTP, ‏DHCP options, ‏mDNS/SSDP), תעודות TLS, כותרות.
+- **שדות שלא נכללו בייצוא** - TTL, ‏IP ID, ‏TCP seq/ack/window
+  (ניתוח retransmission ו-RTT), ‏ICMP, פרגמנטציה, QUIC, ‏SMB,
+  ו-IPv6 כולו (סעיף 2.7).
+- **יכולת פענוח מחדש** - גרסת tshark חדשה, תיקון באג פענוח, מנוע
+  עתידי שדורש שדה שלא חשבנו עליו. בלי הגולמי אין ניתוח רטרואקטיבי.
+- **פורנזיקה וראיות** - פתיחת flow ב-Wireshark ברמת bytes; ‏PCAP
+  עם sha256 הוא ארטיפקט ראייתי, CSV נגזר איננו.
 
-השלכות מספריות:
+**ההכרעה (מחייבת): קובץ ה-PCAP הגולמי הוא מהות הפרויקט והמקור
+היחיד. הוא מה שמועלה ל-VM ומה שהניתוח רץ עליו. כל המרה לשדות היא
+שלב עיבוד פנימי בתוך ה-VM, שנגזר מהמקור ולעולם לא מחליף אותו.**
 
-| | PCAP גולמי | שדות דחוסים |
-|---|---|---|
-| 100GB דיסק ב-VM מחזיק | 7 ימים | **7.3 שנים** |
-| תקרת 25MB של GitHub מחזיקה | 3 דקות | **15.6 שעות** |
-| רוחב פס לשעת הקלטה | 590 MB | 1.6 MB |
+יתרון מעשי מיידי של ההכרעה: **אפס שינוי בליבת הצינור.** ה-worker על
+ה-VM מריץ את `analyze_pcap` על קובץ PCAP בדיוק כמו היום. השינוי
+היחיד שv1 תכנן בליבה (קלט קובץ-שדות) מתייתר.
+
+### 3.2 פתרון 25MB: העלאה ישירה ל-VM, בלי GitHub
+
+הצורך בתקרת 25MB נעלם כי GitHub יוצא ממסלול הקליטה:
+
+- **הנתיב הראשי:** העלאת ה-PCAP ישירות ל-VM דרך Ingest API ‏(HTTP
+  מעל Tailscale, סעיף 5.1). אין תקרת גודל מעשית - קובץ של 1GB
+  עולה כמו קובץ של 10MB, רק לאט יותר. רוחב הפס הנדרש להקלטה רציפה
+  הוא כ-590MB לשעה = ‏1.3Mbps - זניח לכל חיבור ביתי.
+- **נתיב גיבוי ידני:** `scp` נשאר עובד (הוא כבר ממומש בדשבורד),
+  אבל הופך ל-fallback מתועד ולא לנתיב הראשי.
+- **GitHub Actions נשאר** בדיוק לשני תפקידים: CI על כל push, והדגמה
+  ציבורית למי שאין לו VM (fork, קובץ קטן, Issue עם טבלת פסיקות).
+  שום דבר בזרימה האישית לא תלוי בו יותר.
+
+### 3.3 שמירה ומחיקה על ה-VM
+
+- **PCAP גולמי: נשמר 7 ימים, נמחק אוטומטית** (job יומי, סעיף 10,
+  רכיב `retention.py`). אין כוונה ואין יכולת לאחסן גולמי לאורך
+  שנים - זו הצהרה מפורשת של התכנון.
+- מחיקה היא לפי גיל **וגם** לפי watermark: אם הדיסק חוצה 85% תפוסה,
+  נמחקים הישנים ביותר גם לפני תום השבוע. רשומת ה-DB של הקובץ לא
+  נמחקת לעולם - רק מסומנת `deleted_at`, כך שההיסטוריה יודעת בדיוק
+  מה נותח ומתי נמחק.
+- **חשבון נפח אמיתי** (הקלטה רציפה 24/7, לפי הקצב שנמדד):
+  ‏14.2GB ליום, כ-99GB לשבוע. דיסק boot של 100GB, אחרי OS, ‏Docker
+  ומודל Ollama, לא מכיל את זה. שלוש אפשרויות:
+  - **א. (מומלץ)** לצרף block volume ייעודי ל-`/srv/netsec/data`.
+    תקציב ה-Always Free של Oracle הוא 200GB אחסון כולל - ‏boot של
+    50-100GB ועוד volume נתונים של 100-150GB נכנסים בחינם.
+  - ב. לקצר את חלון השמירה ל-4-5 ימים.
+  - ג. אם ההקלטה איננה רציפה (sessions יזומים בלבד), הבעיה קטנה
+    בסדר גודל וה-boot מספיק.
+- **המלצה משלימה לאישורך (לא הכרעה):** לצד הגולמי, לשמור **לתמיד**
+  את ייצוא השדות הדחוס של כל קובץ (gzip, ‏1.6MB לשעת הקלטה, ‏14GB
+  לשנה רציפה). זה לא מחליף את הגולמי - זה אינדקס היסטורי זעיר
+  שממשיך לאפשר baseline, ‏beaconing רב-שבועי והשוואות "עכשיו מול
+  לפני חודשיים" גם אחרי שהגולמי של אותו שבוע נמחק. בלי זה, ההיסטוריה
+  העמוקה של המערכת מוגבלת למה שנשמר ב-DB המסוכם.
 
 ---
 
-## 2. העקרון המנחה
-
-> **צמצם ליד החיישן, החלט בענן, שמור את הגולמי רק במקום שבו הוא נוצר.**
-
-זו ארכיטקטורת edge/fog קלאסית, והנתונים למעלה מראים שהיא לא תיאורטית
-כאן - היא הפרש של שלושה סדרי גודל.
-
-לכל קישור במערכת מוגדר במפורש **מה עובר בו** ו**מה נשאר מאחור**:
+## 4. הארכיטקטורה המעודכנת
 
 ```
-   Tier 0                Tier 1                  Tier 2         Tier 3
-   חיישן                 מנתח                    שופטים         צרכנים
- ┌──────────┐   שדות   ┌────────────┐  ~4KB   ┌──────────┐   ┌─────────────┐
- │ Pi 5 /   │  דחוסים  │ Oracle VM  │ מועמדים │ Groq     │   │ מחברת       │
- │ לפטופ    │ ───────► │ 4 OCPU     │ ──────► │ Ollama   │──►│ מייל        │
- │          │  1.6MB/h │ 24GB/100GB │         │ (fallback)│   │ GitHub Issue│
- │ ring     │          │            │         └──────────┘   └─────────────┘
- │ buffer   │◄─ ─ ─ ─ ─│ בקשת גולמי │
- │ גולמי    │ on-demand│ לפורנזיקה  │
- │ N ימים   │          │ + היסטוריה │
- └──────────┘          └────────────┘
+   Tier 0                    Tier 1                        Tier 2             Tier 3
+   חיישן                     מנתח (VM)                     שופטים             צרכנים
+ ┌────────────┐   PCAP     ┌──────────────────┐   ~4KB   ┌────────────┐   ┌──────────────┐
+ │ לפטופ /    │   גולמי    │ Ingest API       │  מועמדים │ שרשרת      │   │ מחברת        │
+ │ Pi 5       │ ─────────► │ Worker (הצינור   │ ───────► │ ספקים      │──►│ מייל (SMTP)  │
+ │            │  HTTP/     │ הקיים, ללא שינוי)│          │ חינמיים +  │   │ n8n התראות   │
+ │ ring       │  Tailscale │ SQLite היסטוריה  │          │ Ollama     │   │ GitHub Issue │
+ │ buffer     │            │ PCAP - 7 ימים    │          │ (fallback  │   │ (דמו ציבורי) │
+ │ מקומי      │            │ HTML/PDF - לתמיד │          │ תמידי)     │   └──────────────┘
+ │ (אופציה)   │            │ שדות gz - לתמיד* │          └────────────┘
+ └────────────┘            └──────────────────┘                 * בכפוף לאישור, סעיף 3.3
 ```
 
----
+העיקרון המנחה עודכן: **המקור עולה לענן, ההחלטות מתקבלות בענן,
+והזמן קוצב את הגולמי - שבוע בענן, ולפי בחירה גם ring buffer מקומי
+על החיישן.**
 
-## 3. שכבה אחר שכבה
+מה עובר בכל קישור:
 
-### Tier 0 - החיישן (Pi 5 בעתיד, הלפטופ היום)
-
-**תפקיד:** להקליט, לצמצם, לשלוח, ולשמור גולמי לזמן מוגבל.
-
-- `tshark` ב-ring buffer (`-b duration:` / `-b filesize:`) - גולמי
-  נשמר מקומית עם מחיקה אוטומטית של הישן. ב-Pi 5 עם כרטיס 128GB זה
-  ~9 ימים של גולמי בקצב שמדדנו.
-- לכל chunk שנסגר: ייצוא שדות → gzip → שליחה ל-Tier 1.
-- **ספול מקומי:** אם הקישור נפל, הקבצים הדחוסים מצטברים בתור מקומי
-  ומתנקזים כשהוא חוזר. ‏1.6MB/שעה אומר שאפילו שבוע של נתק הוא 270MB -
-  שום דבר.
-- **רשומת פער מפורשת:** אם הספול נמלא והוחלט למחוק, נכתבת רשומת `gap`
-  עם טווח הזמן. שקט וחוסר-נתונים חייבים להיות מובחנים - הפרויקט כבר
-  מקפיד על זה (ה-LSTM ממלא שניות ריקות באפס בכוונה).
-- **חתימה:** כל מסר יוצא חתום HMAC (מתחבר לתכנון ב-
-  `SELF_MONITORING_DESIGN_HE.md`, חלופה A). זה מה שמאפשר לשרת להפריד
-  בין תעבורת השליחות של החיישן לבין תעבורה חשודה - בלי allow-list.
-
-**היום, בלי Pi:** בדיוק אותו agent רץ על הלפטופ. `LiveCaptureWorker`
-כבר מייצר את ה-chunks; מה שנוסף הוא הצמצום והשליחה.
-
-### Tier 1 - המנתח (Oracle VM)
-
-**תפקיד:** לקלוט, לנתח, לזכור.
-
-- **‏Ingest API** (‏FastAPI, מאחורי Tailscale): מאמת חתימה, שומר את
-  הקובץ הדחוס, מחזיר 202, מכניס לתור. **לא scp.** נקודת קצה HTTP
-  יכולה לאמת כל חיישן בנפרד, לתת rate-limit, ולהחזיר ack - בעוד scp
-  דורש חשבון shell, שהוא הרשאה גדולה בהרבה ממה שנחוץ.
-- **‏Worker** שמריץ את הצינור הקיים על השדות. השינוי היחיד בליבה:
-  ש-`analyze_pcap` יקבל גם קובץ-שדות ולא רק נתיב PCAP. זה שינוי
-  כירורגי - הכול במורד הזרם לא מודע להבדל.
-- **‏מסד היסטוריה** (‏SQLite - הפרויקט כבר משתמש בו ל-judge cache):
-  טבלאות `sessions`, `ip_features`, `findings`, `verdicts`,
-  `device_baselines`, `gaps`. זה מה שהמערכת חסרה היום לגמרי.
-- **מדרג שמירה:** שדות דחוסים - לתמיד (7.3 שנים ב-100GB). אגרגטים
-  ופסיקות - לתמיד. גולמי - לא נשמר בענן בכלל; נשאר על החיישן ונשאב
-  לפי דרישה לחלון זמן/flow ספציפי.
-
-### Tier 2 - השופטים
-
-- **‏Groq** ראשי: 743ms פר-מועמד (נמדד), אבל **מכסה של 100k
-  tokens/יום** - נתקלתי בה בכיול. צריך מעקב תקציב.
-- **‏Ollama על ה-VM** כ-fallback: ‏24GB RAM מריצים מודל 13-14B בנוחות.
-  איטי (‏~80s/מועמד ב-ARM CPU, נמדד ב-Actions על חומרה דומה) אבל
-  **תמיד זמין ובחינם**. כשה-Groq ממותג, המערכת לא נופלת - היא מאטה.
-- ה-**פאנל** הקיים (‏N שופטים + סבב עימות) עובד מעל שניהם ללא שינוי.
-
-### Tier 3 - הצרכנים
-
-- **המחברת** (‏‏‏‏‏‏‏‏הדרישה שלך: דשבורד + ניתוח גיבוי) - הופכת ל**לקוח** של
-  ה-VM. שני מצבים, אותם 52 צ'ארטים:
-  - `load_session_from_pcap(path)` - כמו היום, ניתוח מקומי עצמאי (גיבוי,
-    עבודה offline, PCAP שלא עבר בענן).
-  - `load_session_from_api(session_id)` - שולף מה-VM ומחזיר **אותו
-    מבנה S-dict בדיוק**. אפס שינוי בצ'ארטים, כי החוזה הוא ה-dict.
-- **מייל** - `send_report.py` שנבנה היום.
-- **‏GitHub Issue** - נשאר למסלול הציבורי.
-
----
-
-## 4. שש הכרעות התכנון
-
-### D1 - מה עובר בקישור חיישן→מנתח
-
-| חלופה | רוחב פס | ה-VM יכול לנתח? | פורנזיקה? | היסטוריה? |
-|---|---:|---|---|---|
-| PCAP גולמי (היום) | 590 MB/h | ✅ | ✅ בענן | ✅ אבל 7 ימים בלבד |
-| **שדות דחוסים** | **1.6 MB/h** | ✅ מלא | ⚠️ לפי דרישה מהחיישן | ✅ 7.3 שנים |
-| מועמדים בלבד | ~4 KB | ❌ | ❌ | ❌ אין נתונים לבסיס |
-
-**המלצה: שדות דחוסים.** הן חסרות-אובדן ביחס לצינור, והפער הוא 368x.
-הגולמי נשאר על החיישן ב-ring buffer ונשאב רק כשאנליסט רוצה לראות
-bytes של flow ספציפי. חלופת "מועמדים בלבד" נשמעת מפתה אבל היא הורגת
-את היכולת לבנות baseline - שהוא בדיוק מה שחסר למערכת.
-
-**פרט למימוש:** מנועי ה-APT (`_adv_load_pk`) משתמשים ב-field set רחב
-יותר (‏TLS SNI/JA3, ‏DHCP server-id, ‏ARP opcode, ‏DNS rcode) ובמפריד
-טאב. הייצוא צריך להיות **האיחוד** של שני ה-field sets, אחרת המנועים
-המתקדמים יאבדו קלט.
-
-### D2 - תעבורה: SSH או HTTP
-
-היום הדשבורד עושה `scp`. זה עובד אבל דורש חשבון shell על ה-VM לכל
-חיישן. **המלצה: ingest API מעל Tailscale** - טוקן פר-חיישן, אימות
-חתימה, rate-limit, ack. חיישן שנפרץ מקבל גישה ל-endpoint אחד
-append-only, לא ל-shell.
-
-### D3 - האם לבנות מסד היסטוריה
-
-זה **הפער העמוק ביותר במערכת היום**: כל PCAP נותח בבידוד. הביקורת
-המדעית מצאה ש-fusion מקבל recall=0 על קבצי הבסיס - לא כי הוא שבור,
-אלא כי beaconing/DGA/tunneling דורשים **שעות של היסטוריה**, ולנתח
-קובץ של 2 שניות זה חסר משמעות עבורם.
-
-מסד היסטוריה פותח:
-- **‏beaconing אמיתי** - תקשורת מחזורית לאורך ימים, לא שניות.
-- **‏baseline פר-מכשיר** - "מה נורמלי למכשיר הזה", במקום "מה נורמלי
-  ב-2 השניות האלה". זה משנה את איכות ה-anomaly detection מהיסוד.
-- **‏‏S1/S2 אוטומטי** - "עכשיו מול שבוע שעבר" בלי לטעון שני קבצים ביד.
-- **‏‏‏trust-tiered self-monitoring** - חלופה D במסמך phase 6 דורשת
-  היסטוריה של drift. בלי מסד, אין מה למדוד.
-
-**המלצה: כן, וזה הרכיב שנותן את ההחזר הגבוה ביותר.**
-
-### D4 - איפה הדשבורד מוגש
-
-| חלופה | יתרון | חיסרון |
+| קישור | מה עובר | מה נשאר מאחור |
 |---|---|---|
-| מחברת מקומית בלבד (היום) | פשוט, offline | רק כשהלפטופ דלוק |
-| Dash על ה-VM מעל Tailscale | נגיש מכל מקום, כולל מהנייד | עוד שירות לתחזק |
-| **שניהם** | המחברת לניתוח ופיתוח, ה-VM לצפייה מרחוק | - |
-
-**המלצה: שניהם**, כי המחברת היא גם סביבת הפיתוח וגם הגיבוי. אותו
-`dashboard_module.py` רץ בשני המקומות - הוא כבר מיוצא אוטומטית.
-
-### D5 - מה קורה עם GitHub Actions
-
-בארכיטקטורה הזו Actions **מפסיק להיות מסלול הקליטה** של ההקלטות שלך -
-לזה יש VM. הוא נשאר:
-1. **‏CI** - הבדיקות.
-2. **המסלול הציבורי** - מי שאין לו VM: מנתח מקומית, דוחף JSON של 4KB,
-   מקבל דוח במייל. **זה מה שמייתר את תקרת 25MB.**
-3. **הדגמה** - fork, הרצה על ה-PCAPs המצורפים, בלי להתקין כלום.
-
-### D6 - ניצול מלא של ה-VM החינמי
-
-תקציב 24GB / 4 OCPU / 100GB:
-
-| רכיב | RAM | תפקיד |
-|---|---:|---|
-| Ingest API + Worker | ~2 GB | קליטה + הרצת הצינור |
-| מסד היסטוריה (SQLite) | ~0.2 GB | דיסק, לא RAM |
-| **Ollama + מודל 14B Q4** | **~10 GB** | שופט fallback חינמי ובלתי מוגבל |
-| n8n (קיים) | ~0.5 GB | התראות ואוטומציה |
-| Dash מרוחק | ~0.5 GB | צפייה מהנייד מעל Tailscale |
-| **‏Self-hosted Actions runner** | ~2 GB | CI + כיול לילי על 4 ליבות ARM במקום לשרוף דקות חינמיות |
-| OS + Docker | ~1.5 GB | |
-| **סה"כ** | **~17 GB** | נשאר headroom ל-burst של pandas |
-
-**עבודות מתוזמנות** (‏cron/systemd timers):
-- לילי: חישוב baseline מחדש מהיסטוריית היום.
-- שבועי: הרצת כיול ‏kappa ורישום ב-`PROMPT_CHANGELOG`.
-- יומי: גיזום מדרג השמירה.
-
-**ה-VM של GCP (‏0.25 vCPU / 1GB)** קטן מדי לניתוח, אבל מושלם כ-**watchdog
-חיצוני**: בודק שה-Oracle VM חי ומתריע אם לא. אף מכונה לא מנטרת את
-עצמה - זה עקרון, לא נוחות.
+| חיישן ← VM | PCAP גולמי חתום HMAC, עם sha256 | כלום - המקור עצמו עובר |
+| VM ← שופטים | מועמדים בלבד (~4KB ל-batch) | הגולמי, השדות, הפיצ'רים |
+| VM ← צרכנים | דוחות (HTML/PDF/JSON), שאילתות DB | הגולמי (זמין להורדה בחלון השבוע) |
 
 ---
 
-## 5. מצבי כשל וטיפול בהם
+## 5. שכבה אחר שכבה
+
+### 5.1 ‏Tier 0+1: קליטה - ‏Ingest API במקום scp כנתיב ראשי
+
+- `POST /v1/pcap` ‏(FastAPI על ה-VM, מאחורי Tailscale): מקבל stream
+  של הקובץ עם שלוש כותרות - `X-Sensor-Id`, ‏`X-Sha256`,
+  ‏`X-Signature`. השרת מאמת sha256 בכתיבה, מאמת חתימה, שומר תחת
+  `data/pcap/YYYY/MM/DD/<sha8>_<name>.pcap`, רושם ב-DB, מכניס לתור
+  ומחזיר `202 {"session_id": ...}`. העלאה חוזרת של אותו sha256 היא
+  ‏idempotent (מוחזר ה-session הקיים).
+- **חתימה (מגדיר את מה שv1 הפנה אליו החוצה):** ‏HMAC-SHA256 על
+  ‏`sha256(file) + sensor_id + timestamp` עם סוד פר-חיישן שנוצר
+  בהקמה. ‏Replay נחסם בחלון timestamp; חיישן שנפרץ מבטלים בשורת
+  DB אחת. זה מה שמאפשר לשרת להבדיל בין תעבורת שליחות לגיטימית לבין
+  כל דבר אחר - בלי allow-list של כתובות.
+- למה לא scp כנתיב ראשי: ‏scp דורש חשבון shell על ה-VM לכל חיישן -
+  הרשאה גדולה בהרבה מהנחוץ. ‏endpoint אחד append-only עם טוקן נותן
+  אימות פר-חיישן, rate-limit, ‏ack מפורש, ו-resume. ‏scp נשאר
+  כ-fallback מתועד.
+- `GET /v1/sessions/{id}` - סטטוס + פסיקות; `GET /v1/reports/{id}.html|.pdf`
+  ‏- הדוחות; `GET /healthz` - ל-watchdog. גישה לקריאה עם אותו טוקן.
+
+### 5.2 ‏Tier 1: ‏Worker - הצינור הקיים, עטוף ולא משוכתב
+
+ה-worker שולף מהתור ומריץ בדיוק את מה ש-`judge_cli.analyze_and_judge`
+עושה היום: ‏`analyze_pcap` ‏← ‏`run_ml_on_session` ‏←
+‏`run_security_scans` ‏← ‏`assemble_candidates` ‏← שופטים ‏←
+‏commentary. התוספות הן מסביב: כתיבת כל התוצרים ל-DB (סעיף 7),
+רינדור HTML+PDF (סעיף 8), שליחת מייל/וובהוק ל-n8n, ועדכון סטטוס.
+
+### 5.3 ‏Tier 2: השופטים - ראו סעיף 6.
+
+### 5.4 ‏Tier 3: הצרכנים
+
+- **המחברת** נשארת גם דשבורד וגם מסלול גיבוי עצמאי מלא (offline,
+  בלי VM). נוסף לה מצב לקוח: `load_session_from_api(session_id)`
+  שמחזיר את אותו מבנה S-dict בדיוק - אפס שינוי ב-52 הצ'ארטים.
+  כפתור ההעלאה הקיים עובר מ-scp ל-HTTP (עם scp כ-fallback).
+- **מייל** - `send_report.py` הקיים, ללא שינוי.
+- **n8n** - נשאר לאוטומציית התראות; ה-worker קורא לוובהוק שלו.
+- **GitHub Issue** - רק במסלול ההדגמה הציבורי.
+
+---
+
+## 6. סוגיה 2: מטריצת ספקי LLM חינמיים
+
+נקודת המוצא בקוד: הפאנל כבר יודע לערבב ספקים
+(`LLM_JUDGE_PANEL="provider:model,..."`), וכל ספק שמדבר את פרוטוקול
+ה-chat-completions של OpenAI עובר דרך `OpenAICompatClient` הקיים
+בלי שורת קוד חדשה - רק env. כמעט כל הספקים בטבלה הם כאלה.
+
+המגבלות נכונות לינואר 2026 ומשתנות תדיר - **חובה לאמת בעת ההקמה**:
+
+| ספק | endpoint ‏(OpenAI-compatible) | מודלים רלוונטיים | מגבלת חינם ידועה | הערות |
+|---|---|---|---|---|
+| Groq (קיים) | `api.groq.com/openai/v1` | llama-3.3-70b-versatile, llama-3.1-8b-instant, qwen3-32b | ‏~12k TPM, תקרה יומית פר-מודל | המהיר ביותר (743ms נמדד) |
+| **Google Gemini** | `generativelanguage.googleapis.com/v1beta/openai/` | gemini-2.5-flash, gemini-2.5-flash-lite | ‏~10-15 RPM, מאות בקשות ליום | איכות גבוהה; חלון הקשר ענק |
+| **Cerebras** | `api.cerebras.ai/v1` | llama-3.3-70b, qwen-3-32b | ‏~1M tokens ליום | מהיר מאוד, מכסה יומית נדיבה |
+| **OpenRouter** | `openrouter.ai/api/v1` | deepseek-r1:free, qwen3:free ועוד עשרות `:free` | ‏~50 בקשות ליום | שער אחד להרבה מודלים, כולל Qwen ו-DeepSeek |
+| **GitHub Models** | `models.github.ai/inference` | gpt-4o-mini, Phi-4, Llama-3.3-70B | ‏rate-limit פר-tier, חינם עם חשבון GitHub | מתאים במיוחד - למשתמשי הפרויקט כבר יש GitHub |
+| **Mistral** | `api.mistral.ai/v1` | mistral-small, open-mistral-nemo | ‏tier ניסוי חינמי, ~1 RPS | דורש הרשמה |
+| SambaNova | `api.sambanova.ai/v1` | Llama 70B/405B | ‏tier חינמי | מודלים גדולים בחינם |
+| NVIDIA NIM | `integrate.api.nvidia.com/v1` | Llama, Qwen, DeepSeek | ‏~40 RPM למפתחים | מבחר רחב |
+| Alibaba (Qwen ישיר) | `dashscope-intl.aliyuncs.com/compatible-mode/v1` | qwen-plus, qwen-turbo | מכסת ניסיון חד-פעמית | ‏Qwen ההוסטד הרשמי; לטווח ארוך עדיף Qwen מקומי/OpenRouter |
+| **Ollama על ה-VM** | מקומי `:11434` | qwen2.5:14b, phi4:14b, gemma3:12b, mistral-nemo:12b, llama3.1:8b, deepseek-r1:14b | ללא מגבלה, חינם תמיד | ‏24GB RAM מריצים 14B Q4 בנוחות; איטי (~80s למועמד ב-ARM) אך בלתי-נגמר |
+
+### 6.1 מה זה דורש בקוד (הרחבה קטנה, לא שכתוב)
+
+הפער היחיד: ל-`OpenAICompatClient` יש base_url וגם key גלובליים
+יחידים, כך שפאנל על שני ספקי-compat שונים (Groq + Gemini) לא אפשרי
+היום. הפתרון - פרופילי endpoint בשמות, דרך env בלבד:
+
+```
+LLM_JUDGE_EP_GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_JUDGE_EP_GEMINI_KEY_ENV=GEMINI_API_KEY
+LLM_JUDGE_EP_GEMINI_MODEL=gemini-2.5-flash
+LLM_JUDGE_EP_GEMINI_TPD=250000        # תקרה יומית למעקב המכסות
+
+LLM_JUDGE_PANEL="groq:llama-3.3-70b-versatile,gemini:gemini-2.5-flash,ollama:qwen2.5:14b"
+```
+
+`make_client` יזהה שם פרופיל כספק ויבנה `OpenAICompatClient` עם
+הערכים שלו. תאימות לאחור מלאה: ‏`claude`/`ollama`/`openai_compat`
+ממשיכים לעבוד כמו היום, וה-cache כבר ממופתח לפי model_id כך שאין
+זיהום פסיקות בין ספקים.
+
+### 6.2 פאנל הטרוגני - המלצת ברירת מחדל
+
+שלושה שופטים משלושה ספקים שונים:
+`groq:llama-3.3-70b + gemini:gemini-2.5-flash + ollama:qwen2.5:14b`.
+מודלים ממשפחות שונות טועים אחרת - הצבעה ביניהם שווה יותר משלושה
+עותקים של אותו מודל, ומנגנון הפאנל/עימות הקיים עובד עליהם ללא שינוי.
+
+### 6.3 מעקב מכסות ו-failover
+
+- טבלת `llm_quota` ‏(סעיף 7): צריכת בקשות ו-tokens פר-ספק פר-יום,
+  כולל חותמת 429 אחרון. הערת מימוש: תשובות ה-API כוללות שדה
+  ‏`usage` שהקליינטים היום זורקים - הוא יתחיל להישמר.
+- שרשרת failover מוגדרת env: ‏`LLM_JUDGE_FAILOVER="groq,gemini,cerebras,ollama"`.
+  ספק שמוצה (מכסה יומית או 429 עקבי) מדולג עד חצות; ‏Ollama בסוף
+  השרשרת תמיד זמין - **כשהמכסות נגמרות המערכת מאטה, לא נופלת.**
+
+---
+
+## 7. סוגיה 3: סכימת מסד הנתונים המלאה
+
+‏SQLite, קובץ `db/netsec.db` על ה-VM, ‏WAL mode, גרסת סכימה ב-
+`PRAGMA user_version`. ‏`judge_cache.sqlite` הקיים נשאר קובץ נפרד
+כמו היום (הוא cache, לא היסטוריה). הסכימה נגזרת מהשדות שהקוד באמת
+מייצר - שמות העמודות זהים לשמות בקוד:
+
+```sql
+-- זהות ומקור
+CREATE TABLE sensors (
+    id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
+    token_hash TEXT NOT NULL, hmac_secret_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL, last_seen_at TEXT, revoked_at TEXT);
+
+CREATE TABLE pcap_files (
+    id INTEGER PRIMARY KEY, sha256 TEXT UNIQUE NOT NULL,
+    orig_name TEXT, size_bytes INTEGER, sensor_id INTEGER,
+    received_at TEXT NOT NULL, capture_start REAL, capture_end REAL,
+    storage_path TEXT NOT NULL,
+    fields_path TEXT,          -- ייצוא שדות דחוס, אם אושר לשמור
+    deleted_at TEXT);          -- הגולמי נמחק; השורה נשארת לתמיד
+
+-- ריצת ניתוח (קובץ אחד יכול להינתח יותר מפעם אחת)
+CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY, pcap_id INTEGER NOT NULL,
+    label TEXT, status TEXT NOT NULL,          -- queued|running|done|error
+    queued_at TEXT, started_at TEXT, finished_at TEXT, error TEXT,
+    n_pkts INTEGER, n_ips INTEGER, duration_s REAL,
+    pipeline_version TEXT, prompt_version TEXT,
+    tshark_version TEXT, git_commit TEXT);
+
+-- הפיצ'רים שהמודלים רואים - קריטי ל-baseline ולשחזור
+CREATE TABLE ip_features (
+    session_id INTEGER NOT NULL, ip TEXT NOT NULL,
+    mean_len REAL, std_len REAL, count INTEGER, burst_score REAL,
+    unique_dsts INTEGER, syn_count INTEGER, rst_count INTEGER,
+    fin_count INTEGER, null_count INTEGER, xmas_count INTEGER,
+    bytes_src INTEGER, bytes_dst INTEGER,
+    iso_score REAL, iso_flag INTEGER,
+    dbscan_cluster INTEGER, dbscan_anomaly INTEGER, lstm_flag INTEGER,
+    PRIMARY KEY (session_id, ip));
+
+-- שכבת הכללים הדטרמיניסטית
+CREATE TABLE findings (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    layer TEXT, rule TEXT, ip TEXT, severity TEXT, detail_json TEXT);
+
+-- חמשת המנועים המתקדמים - בדיוק סכימת _adv_sig מהקוד
+CREATE TABLE adv_signals (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    device TEXT, peer TEXT, signal TEXT, tactic TEXT, technique TEXT,
+    score REAL, severity TEXT, count INTEGER,
+    first_ts REAL, last_ts REAL, detail TEXT);
+
+CREATE TABLE fusion_scores (
+    session_id INTEGER NOT NULL, device TEXT NOT NULL,
+    score REAL, engines_hit INTEGER, window_start REAL,
+    PRIMARY KEY (session_id, device));
+
+-- מה נשלח לשופט ומה חזר
+CREATE TABLE candidates (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    candidate_id TEXT NOT NULL,     -- ip או session:<label>
+    kind TEXT, rank INTEGER, capped INTEGER DEFAULT 0,
+    context_json TEXT NOT NULL);    -- ה-blob המדויק שנשלח - שחזור מלא
+
+CREATE TABLE verdicts (
+    id INTEGER PRIMARY KEY, candidate_row INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    verdict TEXT, category TEXT, confidence REAL, priority_score REAL,
+    guardrail_applied INTEGER, needs_human_review INTEGER,
+    verdict_json TEXT NOT NULL,
+    provider TEXT, model TEXT, latency_ms INTEGER, cached INTEGER,
+    tokens_in INTEGER, tokens_out INTEGER);
+
+-- שקיפות הפאנל: עמדה ראשונית, עימות, עמדה סופית - פר שופט
+CREATE TABLE panel_audit (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    candidate_id TEXT NOT NULL, judge_model TEXT NOT NULL,
+    initial_verdict TEXT, final_verdict TEXT,
+    debated INTEGER DEFAULT 0, error TEXT);
+
+-- תוצרים על הדיסק (סעיף 8)
+CREATE TABLE reports (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('json','md','html','pdf')),
+    path TEXT NOT NULL, sha256 TEXT, created_at TEXT NOT NULL);
+
+-- ההמשך: baseline פר-מכשיר, פערי הקלטה, מכסות LLM
+CREATE TABLE device_baselines (
+    device_key TEXT NOT NULL,       -- MAC כשידוע, אחרת IP
+    window_start TEXT NOT NULL, window_end TEXT,
+    features_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY (device_key, window_start));
+
+CREATE TABLE gaps (
+    id INTEGER PRIMARY KEY, sensor_id INTEGER,
+    start_ts REAL, end_ts REAL, reason TEXT);
+
+CREATE TABLE llm_quota (
+    provider TEXT NOT NULL, day TEXT NOT NULL,
+    requests INTEGER DEFAULT 0, tokens INTEGER DEFAULT 0,
+    last_429_at TEXT,
+    PRIMARY KEY (provider, day));
+
+CREATE INDEX idx_sessions_pcap    ON sessions(pcap_id);
+CREATE INDEX idx_verdicts_session ON verdicts(session_id);
+CREATE INDEX idx_adv_session      ON adv_signals(session_id);
+CREATE INDEX idx_findings_session ON findings(session_id);
+```
+
+מה שהסכימה הזו פותחת, מעבר לתיעוד: ‏beaconing אמיתי לאורך ימים,
+‏baseline פר-מכשיר ("מה נורמלי למכשיר הזה" במקום "מה נורמלי ב-135
+השניות האלה"), השוואת now-מול-שבוע-שעבר בלי לטעון שני קבצים ביד,
+מדידת drift של השופטים לאורך גרסאות prompt, וחשבון מכסות אמיתי.
+גיבוי: ‏`sqlite3 .backup` לילי לצד הדוחות (הקובץ קטן - עשרות MB
+לשנה).
+
+---
+
+## 8. סוגיה 4: תוצרים שנשמרים על דיסק ה-VM
+
+פריסת הדיסק (volume הנתונים):
+
+```
+/srv/netsec/
+├── data/pcap/YYYY/MM/DD/<sha8>_<orig>.pcap      ← גולמי, 7 ימים
+├── data/fields/YYYY/MM/<sha8>.tsv.gz            ← אם אושר (סעיף 3.3), לתמיד
+├── reports/<session_id>/verdicts.json           ← לתמיד
+├── reports/<session_id>/verdicts.md             ← לתמיד
+├── reports/<session_id>/report.html             ← לתמיד
+├── reports/<session_id>/report.pdf              ← לתמיד
+└── db/netsec.db (+ גיבויים יומיים)              ← לתמיד
+```
+
+- **HTML - כמעט בחינם:** ‏`send_report.markdown_to_html` כבר מרנדר
+  את הדוח המלא כ-HTML עצמאי בשביל המייל. אותה פונקציה בדיוק תכתוב
+  את הקובץ לדיסק. תוספת מתוכננת: בלוק metadata (שם קובץ, sha256,
+  גרסאות, הרכב פאנל) בראש הדוח.
+- **PDF - רכיב חדש:** ההמלצה היא **WeasyPrint** - ‏HTML+CSS נכנס,
+  ‏PDF יוצא, אותו HTML שכבר יש לנו, רץ נקי על aarch64 (תלויות
+  מערכת: ‏pango/cairo דרך apt). חלופות שנשקלו: ‏reportlab (בניית
+  עמוד ידנית - לבנות את הדוח פעמיים), ‏wkhtmltopdf (פרויקט נעצר),
+  ‏Chromium headless (מאות MB בשביל PDF). ההכרעה סופית רק באישור
+  המסמך.
+- נפח: ‏HTML+PDF+JSON כ-1-2MB לניתוח. גם עשרת אלפים ניתוחים הם
+  פחות מ-20GB - "לתמיד" הוא מעשי.
+- כל תוצר נרשם בטבלת `reports` עם sha256, כך שהמחברת וה-API יודעים
+  בדיוק מה קיים לכל session.
+
+---
+
+## 9. סוגיה 6: מדריך VM גנרי + README
+
+### 9.1 החסם שחייב להיפתר קודם
+
+`automation/` (compose, ‏judge_api, תבניות n8n) נמצא כולו ב-
+‏.gitignore - כלומר משתמש שעושה fork היום מקבל הוראות שמפנות לקבצים
+שאינם קיימים אצלו. במימוש: תיקיית `deploy/` חדשה **בתוך הריפו** עם
+כל התבניות, בלי אף סוד - ‏`docker-compose.yml`, ‏`Dockerfile` של
+‏judge_api/ingest, יחידות systemd, ‏`.env.example` עם כל משתנה מתועד,
+ותבנית workflow של n8n. הסודות עצמם (מפתחות API, סוד HMAC, ‏SMTP)
+חיים רק ב-`.env` מקומי על ה-VM, שנשאר מחוץ ל-git.
+
+### 9.2 המדריך הגנרי (ייכנס ל-README באנגלית, תמצית כאן)
+
+- **דרישות מינימום:** כל VM עם ‏Ubuntu 22.04+, ‏x86-64 או ‏ARM,
+  ‏4GB RAM לצינור בלבד; ‏16-24GB אם רוצים גם שופט Ollama מקומי.
+  ‏Oracle Always Free ‏(4 OCPU / ‏24GB / ‏200GB) הוא המסלול החינמי
+  המומלץ ומקבל נספח מפורט; ‏AWS/GCP/Azure/Hetzner עובדים זהה.
+- **שלבי הקמה:** ‏(1) התקנת Docker + ‏Tailscale, צירוף ל-tailnet;
+  ‏(2) ‏`git clone` של הריפו; ‏(3) ‏`cp deploy/.env.example .env`
+  ומילוי ערכים; ‏(4) ‏`docker compose up -d`; ‏(5) יצירת חיישן -
+  ‏`python deploy/create_sensor.py <name>` שמדפיס token+secret
+  חד-פעמיים; ‏(6) בדיקת עשן - העלאת PCAP לדוגמה וקבלת דוח.
+- **מה נפתח לרשת:** כלום ציבורי מלבד SSH. הכול מעל Tailscale
+  (החלופה למתקדמים - reverse proxy עם TLS ו-token - מתועדת אך לא
+  ברירת המחדל). כללי ה-iptables הקיימים ב-`CLOUD_DEPLOYMENT.md`
+  נשארים, עם placeholders במקום כתובות אישיות.
+- **שימוש יומי:** העלאה מהדשבורד בכפתור, או
+  ‏`python tools/upload_pcap.py capture.pcap` מכל מכונה, או ‏scp
+  ‏fallback; צפייה - ‏`/v1/sessions`, דוח HTML/PDF בדפדפן, מייל.
+- סעיף ה-README החדש ("Run your own analysis VM") ייכתב באנגלית
+  כחלק משלב ההקמה במימוש, לפי התמצית הזו, כולל טבלת env מלאה.
+
+---
+
+## 10. תוכנית המימוש בפייתון
+
+מודולים חדשים תחת `server/` ו-`sensor/`; ליבת `app/` ו-`llm_judge/`
+לא משתכתבת. סקיצות - לא קוד סופי:
+
+**`server/ingest_api.py`** ‏(FastAPI; נכנס ל-image של judge_api או
+לצדו):
+
+```python
+@app.post("/v1/pcap", status_code=202)
+async def upload_pcap(request: Request,
+                      x_sensor_id: str = Header(...),
+                      x_sha256: str = Header(...),
+                      x_signature: str = Header(...)):
+    sensor = auth.verify(x_sensor_id, x_sha256, x_signature)  # 401 on fail
+    tmp = spool_path(x_sha256)
+    digest = await stream_to_disk(request, tmp)               # sha256 תוך כדי כתיבה
+    if digest != x_sha256:
+        raise HTTPException(400, "sha256 mismatch")
+    pcap_id = db.register_pcap(digest, tmp, sensor)           # idempotent
+    session_id = db.enqueue(pcap_id)
+    return {"session_id": session_id}
+```
+
+**`server/worker.py`** - לולאת תור על ה-DB (תהליך systemd נפרד):
+
+```python
+while True:
+    job = db.claim_next()               # UPDATE ... WHERE status='queued'
+    if not job:
+        time.sleep(POLL_S); continue
+    out, assembled, client, context = judge_cli.analyze_and_judge(job.pcap_path)
+    db.write_session_results(job, out, assembled, context)   # סעיף 7
+    html = report_html.render(job, out)                      # markdown_to_html הקיים
+    report_pdf.render(html, job.pdf_path)                    # WeasyPrint
+    notify.email_and_webhook(job, out)                       # send_report + n8n
+    db.mark_done(job)
+```
+
+**`server/db.py`** - ה-DDL מסעיף 7 + מיגרציות לפי `user_version`.
+
+**`server/retention.py`** - ‏systemd timer יומי: מחיקת PCAP מעל 7
+ימים או מעל watermark ‏85%, סימון `deleted_at`, גיבוי DB, ‏VACUUM
+חודשי.
+
+**`sensor/capture_agent.py`** - על הלפטופ היום, על Pi 5 בעתיד, אותו
+קוד: ‏tshark ב-ring buffer ‏(`-b duration:900 -b files:N`), על סגירת
+chunk - ‏sha256 ‏← חתימה ‏← ‏POST עם retry; כישלון - ספול מקומי
+שמתנקז כשהקישור חוזר (סעיף 11). ‏`LiveCaptureWorker` הקיים כבר כותב
+‏chunks של PCAP גולמי - ה-agent הוא הגנרול שלו מחוץ למחברת.
+
+**`llm_judge/` - הרחבות בלבד:** פרופילי endpoint ‏(סעיף 6.1), שמירת
+‏`usage` מהתשובות, שרשרת failover, כתיבת `llm_quota`.
+
+**`tools/upload_pcap.py`** - ‏CLI חד-פעמי: קובץ ‏← חתימה ‏← העלאה
+‏← הדפסת session_id. זה הפתרון הישיר לקובץ גדול מהטלפון של תקרת
+‏25MB - בלי GitHub בכלל.
+
+**שינוי דשבורד מינימלי:** כפתור השליחה קורא ל-`upload_pcap` במקום
+‏scp ‏(env ‏`NETSEC_INGEST_URL`; ‏scp נשאר fallback מוצהר).
+
+**בדיקות לכל שלב:** אימות HMAC (תקין/מזויף/replay), ‏idempotency של
+העלאה כפולה, ‏retention על עץ קבצים מדומה, ‏failover עם ‏429 מדומה,
+סכימת DB ומיגרציות, ‏round-trip של דוח HTML/PDF. הסוויטה הקיימת
+ממשיכה לעבור ללא שינוי.
+
+### שלבי הביצוע (כל שלב עומד בפני עצמו, כל שלב באישור נפרד)
+
+| שלב | תוכן | תלות |
+|---|---|---|
+| א' | `deploy/` בריפו + ‏`.env.example` + ניקוי IPs אישיים מהמסמכים + מדידה חוזרת של המספרים על הקלטה ארוכה | - |
+| ב' | `server/db.py` + ‏`ingest_api.py` + ‏`tools/upload_pcap.py` + בדיקות | א' |
+| ג' | `server/worker.py` + כתיבת תוצרים ל-DB + ‏HTML + ‏PDF | ב' |
+| ד' | `retention.py` + גיבוי DB + ‏watchdog חיצוני | ב' |
+| ה' | פרופילי LLM + ‏failover + ‏quota + פאנל הטרוגני | - (מקביל) |
+| ו' | `sensor/capture_agent.py` + ספול + רשומות gap | ב' |
+| ז' | דשבורד: כפתור ‏HTTP + ‏`load_session_from_api` | ג' |
+| ח' | ‏README באנגלית + נספח Oracle | א'-ז' |
+| ט' | ‏baseline פר-מכשיר מההיסטוריה + השוואות לאורך זמן | ג' |
+| י' | חומרה: ‏Pi 5 נכנס כ-Tier 0 - אפס שינוי ארכיטקטוני | ו' |
+
+**שער אישור (סוגיה 5, מחייב):** המימוש מתחיל רק אחרי אישור מפורש
+בכתב של המסמך הזה, שלב-אחר-שלב לפי הטבלה, בענף נפרד מחוץ ל-main.
+שום שלב לא מתמזג בלי אישור נפרד שלו.
+
+---
+
+## 11. מצבי כשל
 
 | כשל | התנהגות מתוכננת |
 |---|---|
-| הקישור חיישן→VM נפל | ספול מקומי, ניקוז אוטומטי, רשומת `gap` אם נמחק |
-| ה-VM למטה | החיישן ממשיך להקליט; המחברת מנתחת מקומית (מסלול הגיבוי) |
-| Groq מותג (100k/יום) | מעבר אוטומטי ל-Ollama על ה-VM; איטי אך פועל |
-| שופט אחד מחזיר זבל | הפאנל הקיים ממשיך עם השאר + `panel_report` מתעד |
-| החיישן נפרץ | תעבורתו הלא-חתומה נבדקת כמו כל מכשיר; trust יורד על drift |
-| הדיסק ב-VM מתמלא | גיזום מדרג; שדות דחוסים הם 1.6MB/h - לא תרחיש מעשי |
-| הלפטופ כבוי | לא רלוונטי - הענן ממשיך; זו כל הנקודה |
+| הקישור חיישן-VM נפל | ספול מקומי עם תקרה קונפיגורבילית (ברירת מחדל 20GB); בהקלטה רציפה זה ~33 שעות של גולמי. מעבר לתקרה - הישן נמחק ונכתבת רשומת `gap` עם טווח הזמן. שקט וחוסר-נתונים נשארים מובחנים |
+| ה-VM למטה | החיישן ממשיך להקליט ל-ring המקומי; המחברת מנתחת מקומית (מסלול הגיבוי המלא נשמר) |
+| מכסת ספק LLM מוצתה | ‏failover אוטומטי בשרשרת עד Ollama המקומי - המערכת מאטה, לא נופלת |
+| שופט אחד מחזיר זבל | מנגנון הפאנל הקיים ממשיך עם השאר ומתעד ב-`panel_audit` |
+| חיישן נפרץ | ביטול token+secret בשורת DB; תעבורה לא-חתומה נדחית ב-401 ונרשמת |
+| הדיסק מתמלא | ‏watermark ‏85% מוחק גולמי ישן לפני שהכתיבה נחנקת; הדוחות וה-DB לא נמחקים לעולם |
+| העלאה נקטעת באמצע | ‏sha256 לא מאומת - הקובץ החלקי נזרק, החיישן מעלה מחדש (idempotent) |
+| tshark קורס על PCAP עוין | ה-worker רץ כמשתמש לא-מיוחס בקונטיינר; הכשל נרשם ב-`sessions.error` והתור ממשיך. ‏tshark מתעדכן שוטף - פענוח PCAP הוא משטח תקיפה |
 
 ---
 
-## 6. מסלול מימוש בשלבים
+## 12. שאלות פתוחות לאישורך (נדרשת הכרעה לפני מימוש)
 
-כל שלב עומד בזכות עצמו ומספק ערך גם אם עוצרים אחריו.
-
-**שלב A - הפרדת הצינור (הבסיס לכל השאר)**
-`analyze_pcap` מקבל גם קובץ-שדות. ‏CLI חדש: `export_fields.py` שמייצר
-את הייצוא הדחוס מ-PCAP או מ-interface חי. אחרי שלב זה כבר אפשר לשלוח
-15.6 שעות הקלטה דרך תקרת 25MB של GitHub.
-
-**שלב B - מסלול הקליטה בענן**
-Ingest API על ה-VM + agent על הלפטופ. הדשבורד עובר מ-scp ל-HTTP.
-
-**שלב C - מסד היסטוריה**
-טבלאות + כתיבה בכל ניתוח. עדיין בלי baseline - רק צבירה.
-
-**שלב D - baseline והשוואה לאורך זמן**
-"מה נורמלי למכשיר הזה" מחליף את "מה נורמלי בקובץ הזה". כאן ה-fusion
-וה-beaconing מתחילים לתת ערך אמיתי.
-
-**שלב E - Ollama fallback + runner + watchdog**
-ניצול מלא של החומרה.
-
-**שלב F - חומרה**
-Pi 5 מחליף את הלפטופ כחיישן. אפס שינוי בארכיטקטורה - אותו agent.
+1. **חלון שמירת הגולמי** - ‏7 ימים כברירת מחדל? (קונפיגורבילי בכל
+   מקרה, ‏`RETENTION_PCAP_DAYS`.)
+2. **‏Block volume ייעודי** של 100-150GB לנתונים (בחינם בתקציב
+   Oracle) - לאשר? נדרש רק אם ההקלטה רציפה.
+3. **שמירת ייצוא השדות הדחוס לתמיד** כאינדקס היסטורי (ההמלצה
+   מסעיף 3.3) - לאשר או לוותר?
+4. **אילו ספקי LLM לרשום ראשונים** - ההמלצה: ‏Gemini + ‏Cerebras
+   ‏(+ ‏Groq הקיים + ‏Ollama), והרכב הפאנל ההטרוגני מסעיף 6.2.
+5. **‏PDF ב-WeasyPrint** - לאשר את הבחירה?
+6. **חשיפת ה-API** - ‏Tailscale בלבד (ההמלצה), או שנדרשת גם גישה
+   ציבורית עם TLS+token מהיום הראשון?
+7. **ההקלטה בפועל** - רציפה 24/7 או sessions יזומים? משפיע רק על
+   חשבון הנפח (סעיף 3.3) ועל שאלות 1-2.
 
 ---
 
-## 7. מה לא משתנה
+## 13. מה לא משתנה
 
-חשוב לא פחות ממה שמשתנה:
-
-- **חוזה ה-S-dict** - כל 52 הצ'ארטים ממשיכים לעבוד. הם לא יודעים
-  מאיפה הגיע ה-dict.
-- **‏‏llm_judge** - הפאנל, ה-guardrail, ה-cache, הכיול. הוא מקבל
-  מועמדים, לא PCAP-ים. אדיש לגמרי לשינוי.
-- **המחברת כמסלול עצמאי** - מי שרוצה רק לנתח קובץ בלפטופ ממשיך
-  בדיוק כמו היום, בלי VM ובלי רשת.
-- **‏‏‏‏103 הבדיקות** - הצינור לא משתנה, רק מקבל מקור קלט נוסף.
-
----
-
-## 8. מה שההצעה הזו פותרת מעבר ל-25MB
-
-1. **ההקלטה הופכת רציפה** במקום אירועי-קובץ. זה מה שהופך את
-   fusion/beaconing/DGA ממנועים תיאורטיים למנועים עם קלט אמיתי.
-2. **הפרטיות משתפרת** - חבילות גולמיות לא עוזבות את הרשת הביתית.
-   רק metadata דחוס.
-3. **המערכת שורדת נתק** - ספול + מסלול גיבוי במחברת.
-4. **ה-VM מנוצל** - היום הוא מריץ n8n ו-judge_api, כלומר אחוזים
-   בודדים מ-24GB.
-5. **החומרה העתידית היא drop-in** - ה-Pi לא דורש ארכיטקטורה חדשה,
-   הוא נכנס לתפקיד Tier 0 שכבר מוגדר.
+- **חוזה ה-S-dict** - כל 52 הצ'ארטים ממשיכים לעבוד; הם לא יודעים
+  אם ה-dict הגיע מקובץ מקומי או מה-API.
+- **ליבת הצינור** - ‏`analyze_pcap` ממשיך לקבל PCAP גולמי, כמו
+  היום. בזכות הכרעת סעיף 3 אין בו שום שינוי.
+- **‏llm_judge** - הפאנל, ה-guardrail, ה-cache והכיול עובדים כמו
+  שהם; ההרחבות (פרופילים, מכסות) מתווספות מסביב.
+- **המחברת כמסלול עצמאי מלא** - ניתוח מקומי בלי VM ובלי רשת נשאר
+  בדיוק כמו היום.
+- **סוויטת הבדיקות** - ממשיכה לעבור ללא שינוי; כל שלב מוסיף בדיקות
+  משלו.
+- **מסלול ההדגמה הציבורי** - ‏fork + ‏Actions + ‏Issue ממשיך לעבוד
+  למי שאין לו VM.
