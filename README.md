@@ -197,6 +197,64 @@ the verdict table inline. (The main dashboard has its own separate
 notebook, `app/Network_Security_Dashboard.ipynb`, which does not depend
 on any of this.)
 
+### D. Run your own always-on analysis VM (continuous, private)
+
+Ways A-C analyze one capture at a time. For continuous monitoring that
+does not depend on your laptop being awake - and where raw packets never
+leave your own network - run the analysis stack on a small VM you
+control. This is the "ecosystem" path; the full design (in Hebrew, by
+request) is `ARCHITECTURE_HE.md`, and the deployment templates live in
+`deploy/`.
+
+**What it is.** Four cooperating tiers instead of four tools glued by
+`scp`:
+
+- **Sensor (Tier 0)** - the laptop, or a Raspberry Pi 5, records raw
+  PCAP in a `tshark` ring buffer and uploads each closed chunk to the
+  VM. The raw capture - not a lossy CSV of it - is the source of truth
+  and what gets analyzed.
+- **Analyzer (Tier 1)** - a VM runs a signed ingest API, a worker that
+  runs the *exact* detection pipeline of the dashboard on each PCAP, and
+  a SQLite history database. Raw PCAPs are kept 7 days then auto-purged;
+  a tiny compressed field-index, the verdicts, and the HTML/PDF reports
+  are kept for good.
+- **Judges (Tier 2)** - the existing LLM-as-Judge panel, now able to mix
+  several free providers (Groq, Gemini, Cerebras, OpenRouter, GitHub
+  Models) with a local Ollama as the always-available fallback: quota
+  pressure slows the system, it does not stop it.
+- **Consumers (Tier 3)** - the notebook (as a remote client *or* the
+  offline fallback), email, and n8n alerts.
+
+**Why a VM instead of GitHub Actions.** The Actions path (way A) caps
+uploads at 25 MB and analyzes one file per run. The VM path has no size
+cap (upload is a direct, signed HTTP stream), keeps history so that
+beaconing and per-device baselines become meaningful, and keeps raw
+packets on infrastructure you own. Actions stays for CI and the public
+zero-setup demo; nothing in your personal flow depends on it.
+
+**Quickstart** (full guide in `deploy/README.md`):
+
+```bash
+# on the VM (any Ubuntu 22.04+ box; Oracle Always Free is the $0 path)
+git clone <your-fork> && cd <repo>/deploy
+cp .env.example .env          # set TS_BIND, N8N_ENCRYPTION_KEY, LLM keys
+docker compose up -d          # n8n + ingest API + worker + retention
+python3 create_sensor.py laptop   # prints sensor credentials once
+
+# on any machine that has a capture (no size limit, no GitHub)
+export NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766
+export NETSEC_SENSOR_ID=laptop NETSEC_SENSOR_SECRET=...
+python3 tools/upload_pcap.py capture.pcapng
+```
+
+The VM answers only on your private Tailscale network (nothing public
+but SSH). An external `tools/watchdog.py` on a separate always-on box
+watches the VM, because no machine should monitor itself.
+
+**Everything above is optional.** Ways A-C keep working exactly as
+before; the local dashboard notebook still analyzes a file with no VM
+and no network at all.
+
 ## Testing
 
 ```

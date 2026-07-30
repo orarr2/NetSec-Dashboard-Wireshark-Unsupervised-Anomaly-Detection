@@ -29,7 +29,8 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from . import db, reconcile, report_html, report_pdf, results, storage
+from . import baseline, db, reconcile, report_html, report_pdf, results
+from . import storage
 
 
 def _default_analyze(pcap_path, label):
@@ -111,6 +112,15 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
 
         results.write_all(conn, sid, S, findings, assembled, out)
         recon = reconcile.reconcile(conn, sid, S)
+        # score this session against each device's own history; a device
+        # with no baseline yet is simply skipped (spec section 3/D3)
+        try:
+            n_dev = baseline.write_baseline_findings(conn, sid)
+            if n_dev:
+                print(f"[worker] session {sid}: {n_dev} baseline "
+                      f"deviation(s)", flush=True)
+        except Exception as e:
+            print(f"[worker] baseline scoring skipped: {e}", flush=True)
 
         rep_dir = os.path.join(root, "reports", str(sid))
         os.makedirs(rep_dir, exist_ok=True)

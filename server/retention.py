@@ -170,6 +170,16 @@ def run_cycle(conn=None, root=None, dry_run=False, export_fn=None,
                 usage_fn=usage_fn),
             "vacuum": False,
         }
+        if not dry_run:
+            # nightly baseline recompute from prod history (spec 10, stage
+            # ט); best-effort so a baseline error never blocks purging
+            try:
+                from . import baseline
+                summary["baselines"] = baseline.compute_baselines(conn,
+                                                                  now=now)
+            except Exception as e:
+                print(f"[retention] baseline recompute skipped: {e}",
+                      flush=True)
         if now.day == 1 and not dry_run:
             conn.execute("VACUUM")
             summary["vacuum"] = True

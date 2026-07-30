@@ -73,6 +73,41 @@ a fork needs lands here instead, stage by stage.
 └── incoming/       drop directory polled by the automation
 ```
 
+## Running a sensor (laptop today, Raspberry Pi 5 tomorrow)
+
+The capture agent (`sensor/capture_agent.py`) is Tier 0 - it records raw
+PCAP in a tshark ring buffer and uploads each closed chunk to the VM. It
+is the same code on a laptop and on a Pi 5 (decision IDX-01, stage J):
+only the environment differs.
+
+```bash
+export NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766
+export NETSEC_SENSOR_ID=laptop           # from deploy/create_sensor.py
+export NETSEC_SENSOR_SECRET=...           # from deploy/create_sensor.py
+export NETSEC_INFRA_DSTS=<vm-tailscale-ip>   # excluded from capture
+python3 sensor/capture_agent.py --interface wlan0
+```
+
+The `NETSEC_INFRA_DSTS` value is what keeps the agent's own uploads from
+being captured and later flagged as an anomaly or as beaconing (spec
+section 12.2 layer 0): the agent builds a capture filter that excludes
+exactly that destination on the upload port, and nothing else.
+
+**Pi 5 as a drop-in Tier 0 (stage J).** The Pi runs the identical agent;
+the architecture does not change. Two Pi-specific notes:
+
+- Give the Pi two paths so the upload never rides the monitored network:
+  capture on the Wi-Fi interface, upload over Ethernet. With that split
+  the telemetry leaves out-of-band and the capture filter is belt-and-
+  suspenders rather than load-bearing.
+- A 128GB card holds roughly nine days of raw at the measured rate, so
+  set `NETSEC_RING_FILES` to bound the local ring to what the card can
+  carry (`files:N x duration:S` seconds of history).
+
+Everything downstream - ingest, worker, history, baselines, reports - is
+unchanged: to the VM a Pi chunk and a laptop chunk are the same signed
+upload.
+
 ## Secrets
 
 `deploy/.env` is gitignored - it is the only place API keys, the n8n
