@@ -32,7 +32,7 @@ def conn(tmp_path):
 
 def test_schema_version_and_tables(conn):
     version, = conn.execute("PRAGMA user_version").fetchone()
-    assert version == db.SCHEMA_VERSION == 1
+    assert version == db.SCHEMA_VERSION == 2
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     expected = {"sensors", "pcap_files", "sessions", "ip_features",
@@ -187,7 +187,7 @@ def _upload_headers(sensor, payload):
 
 def test_api_upload_flow(api):
     client, sensor, token = api
-    assert client.get("/healthz").json() == {"status": "ok", "schema": 1}
+    assert client.get("/healthz").json() == {"status": "ok", "schema": 2}
 
     payload = b"\xd4\xc3\xb2\xa1" + b"x" * 4096
     digest, headers = _upload_headers(sensor, payload)

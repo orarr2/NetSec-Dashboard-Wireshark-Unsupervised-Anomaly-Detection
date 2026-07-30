@@ -251,6 +251,22 @@ The VM answers only on your private Tailscale network (nothing public
 but SSH). An external `tools/watchdog.py` on a separate always-on box
 watches the VM, because no machine should monitor itself.
 
+**Optional OSINT enrichment.** With your own free API keys the VM can
+add public context to what a capture saw, all off by default:
+
+- **Wigle** locates a captured Wi-Fi BSSID and the VM renders a geo map
+  of the access points (`report kind: map`), annotated with the RSSI and
+  path-loss distance the pipeline already computes.
+- **Shodan** rates the reputation of an external host a local device
+  talked to (known CVEs, malicious tags); this activates the judge's
+  reserved threat-intel weight, so "this device is talking to a flagged
+  host" lifts that candidate's priority.
+
+Set `WIGLE_API_NAME`/`WIGLE_API_TOKEN`, `SHODAN_API_KEY` and
+`NETSEC_ENABLE_SHODAN=1` in `deploy/.env`. Without keys the map stays
+empty and the threat-intel weight contributes nothing - identical to the
+base behavior.
+
 **Everything above is optional.** Ways A-C keep working exactly as
 before; the local dashboard notebook still analyzes a file with no VM
 and no network at all.

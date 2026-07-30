@@ -36,7 +36,8 @@ HMAC_WINDOW_S = int(os.environ.get("NETSEC_HMAC_WINDOW_S",
 _REPORT_MEDIA = {"json": "application/json",
                  "md": "text/markdown",
                  "html": "text/html",
-                 "pdf": "application/pdf"}
+                 "pdf": "application/pdf",
+                 "map": "text/html"}
 
 
 def create_app(db_path=None, data_root=None):

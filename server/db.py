@@ -10,11 +10,12 @@ Migrations run through ``PRAGMA user_version``: ``migrate()`` applies
 every version above the file's current one, so calling it on an
 existing database is a no-op.
 """
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sensors (
@@ -123,6 +124,32 @@ CREATE INDEX IF NOT EXISTS idx_sensors_token    ON sensors(token_hash);
 CREATE INDEX IF NOT EXISTS idx_reports_session  ON reports(session_id);
 """
 
+# v2: OSINT enrichment (stage YA). A cache of external lookups (Wigle by
+# BSSID, Shodan by IP) so a given key is queried once per TTL, and the
+# 'map' report kind. Purely additive - absent API keys, the table simply
+# stays empty and nothing else changes.
+_SCHEMA_V2 = """
+CREATE TABLE IF NOT EXISTS enrichment (
+    source TEXT NOT NULL,          -- 'wigle_bssid' | 'shodan_ip'
+    key TEXT NOT NULL,             -- the bssid or ip looked up
+    data_json TEXT,                -- provider response subset (NULL if none)
+    ok INTEGER NOT NULL DEFAULT 1, -- 0 = queried, no data / error
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (source, key));
+
+-- widen reports.kind to include 'map' (SQLite needs a table rebuild for a
+-- CHECK change; reports is small and this preserves every existing row)
+ALTER TABLE reports RENAME TO reports_v1;
+CREATE TABLE reports (
+    id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('json','md','html','pdf','map')),
+    path TEXT NOT NULL, sha256 TEXT, created_at TEXT NOT NULL);
+INSERT INTO reports (id, session_id, kind, path, sha256, created_at)
+    SELECT id, session_id, kind, path, sha256, created_at FROM reports_v1;
+DROP TABLE reports_v1;
+CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id);
+"""
+
 
 def default_db_path():
     root = os.environ.get("NETSEC_DATA_ROOT", "/srv/netsec")
@@ -153,7 +180,43 @@ def migrate(conn):
         conn.executescript(_SCHEMA_V1)
         conn.execute("PRAGMA user_version = 1")
         conn.commit()
+    if current < 2:
+        conn.executescript(_SCHEMA_V2)
+        conn.execute("PRAGMA user_version = 2")
+        conn.commit()
     return SCHEMA_VERSION
+
+
+# ---- enrichment cache (stage YA) -----------------------------------------
+
+def get_enrichment(conn, source, key, max_age_days=None):
+    """Cached lookup, or None when absent/stale. max_age_days=None never
+    expires."""
+    row = conn.execute(
+        "SELECT * FROM enrichment WHERE source=? AND key=?",
+        (source, key)).fetchone()
+    if row is None:
+        return None
+    if max_age_days is not None:
+        try:
+            age = (datetime.now(timezone.utc)
+                   - datetime.fromisoformat(row["updated_at"])).days
+            if age > max_age_days:
+                return None
+        except Exception:
+            pass
+    out = dict(row)
+    out["data"] = json.loads(row["data_json"]) if row["data_json"] else None
+    return out
+
+
+def put_enrichment(conn, source, key, data, ok=True):
+    conn.execute(
+        "INSERT OR REPLACE INTO enrichment (source, key, data_json, ok,"
+        " updated_at) VALUES (?,?,?,?,?)",
+        (source, key, json.dumps(data) if data is not None else None,
+         int(ok), _utcnow()))
+    conn.commit()
 
 
 # ---- sensors -------------------------------------------------------------

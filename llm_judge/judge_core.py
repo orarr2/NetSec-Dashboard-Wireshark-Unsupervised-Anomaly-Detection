@@ -413,11 +413,17 @@ def priority_score(candidate, verdict, iso_min, iso_max):
         norm_anom = (iso_max - float(iso)) / (iso_max - iso_min)  # lower = worse
     else:
         norm_anom = 0.0
+    # Threat-intel signal (stage YA): a candidate enriched with an
+    # external peer's Shodan reputation carries ti_signals.score in [0,1].
+    # Absent that key it is 0.0, so an un-enriched candidate scores exactly
+    # as before this weight was activated - which keeps every prior test
+    # and the kappa calibration unchanged.
+    ti = float((candidate.get("ti_signals") or {}).get("score", 0.0) or 0.0)
     return round(
         judge_config.W_ANOM * norm_anom
         + judge_config.W_JUDGE_CONF * verdict["confidence"]
         + judge_config.W_CAT * judge_config.CATEGORY_WEIGHT[verdict["category"]]
-        + judge_config.W_TI * 0.0,
+        + judge_config.W_TI * ti,
         4)
 
 

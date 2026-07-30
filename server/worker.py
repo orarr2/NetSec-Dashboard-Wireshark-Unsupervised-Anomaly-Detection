@@ -29,8 +29,91 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from . import baseline, db, reconcile, report_html, report_pdf, results
-from . import storage
+from . import baseline, db, enrich, reconcile, report_html, report_map
+from . import report_pdf, results, storage
+
+SHODAN_MAX_PEERS = int(os.environ.get("NETSEC_SHODAN_MAX_PEERS", "5"))
+
+
+def _shodan_enabled():
+    return os.environ.get("NETSEC_ENABLE_SHODAN", "").lower() \
+        not in ("", "0", "false")
+
+
+def enrich_threat_intel(conn, out, assembled, S, shodan_fn=None):
+    """Attach external-peer threat intel to judged candidates and re-rank
+    by the now-active W_TI weight (stage YA). Off unless NETSEC_ENABLE_
+    SHODAN is set - then, for each judged internal IP, its public peers
+    (from S['ip_pairs']) are looked up on Shodan and the worst reputation
+    becomes the candidate's ti_signals.score. Returns the count enriched."""
+    if not _shodan_enabled():
+        return 0
+    from llm_judge import judge_core, threat_intel
+    shodan_fn = shodan_fn or (lambda ip: enrich.shodan_ip(conn, ip))
+    cands = {c["candidate_id"]: c
+             for c in (assembled.get("candidates") or [])}
+    pairs = S.get("ip_pairs") or {}
+    iso_min, iso_max = judge_core._iso_bounds(list(cands.values())) \
+        if cands else (None, None)
+    n = 0
+    for r in out.get("results") or []:
+        cand = cands.get(r.get("candidate_id"))
+        if not cand:
+            continue
+        internal = r["candidate_id"]
+        peers = [dst for (src, dst), _ in pairs.items()
+                 if src == internal and enrich.is_public_ip(dst)]
+        best, best_info = 0.0, None
+        for peer in peers[:SHODAN_MAX_PEERS]:
+            info = threat_intel.classify(shodan_fn(peer))
+            if info["score"] > best:
+                best, best_info = info["score"], dict(info, peer=peer)
+        if best_info:
+            cand["ti_signals"] = {"score": best, "detail": best_info}
+            r["ti_signals"] = cand["ti_signals"]
+            r["priority"] = judge_core.priority_score(
+                cand, r["verdict"], iso_min, iso_max)
+            n += 1
+    if n:
+        out["results"].sort(key=lambda x: -x.get("priority", 0))
+    return n
+
+
+def _collect_bssids(S):
+    """Best-effort gather of (bssid, rssi, distance_m) the capture saw.
+    Defensive about the S-dict shape - a missing structure just yields
+    fewer points, never an error."""
+    points = []
+    top = S.get("wifi_bssid") if isinstance(S, dict) else None
+    if top:
+        points.append({"bssid": str(top).lower(), "ssid": S.get("wifi_ssid"),
+                       "rssi": None, "distance_m": None})
+    wlan = S.get("wlan_features") if isinstance(S, dict) else None
+    if isinstance(wlan, dict):
+        for mac, feat in wlan.items():
+            samples = (feat or {}).get("rssi_samples") or []
+            if not samples:
+                continue
+            mean = sum(samples) / len(samples)
+            points.append({"bssid": str(mac).lower(),
+                           "ssid": (feat or {}).get("ssid"),
+                           "rssi": round(mean, 1), "distance_m": None})
+    return points
+
+
+def build_map_report(conn, S, out_path, wigle_fn=None):
+    """Locate the session's BSSIDs via Wigle and render the geo map.
+    Returns out_path when at least one AP was located, else None."""
+    wigle_fn = wigle_fn or (lambda b: enrich.wigle_bssid(conn, b))
+    located = []
+    for p in _collect_bssids(S):
+        info = wigle_fn(p["bssid"])
+        if info and info.get("lat") is not None:
+            located.append(dict(p, ssid=p.get("ssid") or info.get("ssid"),
+                                lat=info["lat"], lon=info["lon"]))
+    if not located:
+        return None
+    return report_map.render(located, out_path)
 
 
 def _default_analyze(pcap_path, label):
@@ -110,6 +193,18 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
         if not isinstance(S, dict):
             S = {}
 
+        # OSINT threat-intel re-rank (stage YA) BEFORE persistence, so the
+        # stored priority reflects an external peer's reputation. Off
+        # without NETSEC_ENABLE_SHODAN - then a no-op, results unchanged.
+        try:
+            n_ti = enrich_threat_intel(conn, out, assembled, S)
+            if n_ti:
+                print(f"[worker] session {sid}: threat-intel enriched "
+                      f"{n_ti} candidate(s)", flush=True)
+        except Exception as e:
+            print(f"[worker] threat-intel enrichment skipped: {e}",
+                  flush=True)
+
         results.write_all(conn, sid, S, findings, assembled, out)
         recon = reconcile.reconcile(conn, sid, S)
         # score this session against each device's own history; a device
@@ -145,6 +240,15 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
             db.add_report(conn, sid, kind, paths[kind])
         if pdf:
             db.add_report(conn, sid, "pdf", pdf)
+        # geo map of located access points (stage YA) - only when Wigle
+        # locates at least one BSSID; otherwise skipped like the PDF
+        try:
+            map_path = build_map_report(
+                conn, S, os.path.join(rep_dir, "map.html"))
+            if map_path:
+                db.add_report(conn, sid, "map", map_path)
+        except Exception as e:
+            print(f"[worker] map report skipped: {e}", flush=True)
 
         stats = out.get("stats") or {}
         n_pkts = S.get("n_pkts") if isinstance(S, dict) else None
