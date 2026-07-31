@@ -1,4 +1,5 @@
-"""Deliver a completed analysis to whoever asked for it.
+"""Deliver a completed analysis to whoever asked for it, and validate
+the recipient at ingest time (see valid_address).
 
 The uploader picks the recipient at submit time (X-Notify-Email header
 on the ingest API, --email flag on tools/upload_pcap.py). That address
@@ -27,7 +28,29 @@ real use case and the header just makes it optional.
 """
 import json
 import os
+import re
 import urllib.request
+
+# Deliberately permissive: this only guards against obvious typos and
+# header injection, not against every address RFC 5321 permits. Kept in
+# this module (not llm_judge.send_report, which the ingest image does
+# NOT copy) so the ingest endpoint can validate X-Notify-Email before
+# storing it, without pulling llm_judge in as a runtime dependency.
+_ADDR_RE = re.compile(r"^[^@\s,;:<>]+@[^@\s,;:<>]+\.[A-Za-z]{2,}$")
+
+
+def valid_address(addr):
+    """True when `addr` looks like a single deliverable address.
+
+    Newlines are rejected explicitly: an address carrying CR/LF could
+    inject extra headers into the outgoing message.
+    """
+    if not isinstance(addr, str):
+        return False
+    addr = addr.strip()
+    if not addr or "\n" in addr or "\r" in addr:
+        return False
+    return bool(_ADDR_RE.match(addr))
 
 
 def resolve_recipient(session, env=None):

@@ -85,8 +85,9 @@ def create_app(db_path=None, data_root=None):
         if x_notify_email:
             # Validate but don't reject the upload on a bad address - the
             # analysis is more valuable than the notification, and a typo
-            # in a header should not lose a large PCAP.
-            from llm_judge.send_report import valid_address
+            # in a header should not lose a large PCAP. Uses the
+            # server/notify validator (llm_judge is not on ingest's PYTHONPATH).
+            from .notify import valid_address
             if valid_address(x_notify_email):
                 notify_email = x_notify_email.strip()
 
