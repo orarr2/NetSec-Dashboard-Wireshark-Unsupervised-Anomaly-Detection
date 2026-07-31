@@ -62,8 +62,29 @@ services:
       - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
     command: ["python", "-m", "server.retention"]
 
+  # Local zero-key LLM path - runs models on the VM's CPU (ARM 24GB
+  # handles llama3.1:8b, gemma2:9b, qwen2.5:7b at ~2-3 tokens/sec).
+  # Off by default; enable by uncommenting and running `docker compose
+  # --profile ollama up -d ollama` OR just `docker compose up -d ollama`.
+  # The worker reaches it at http://ollama:11434 (Docker internal DNS).
+  # Add `ollama:llama3.1,ollama:qwen2.5` to LLM_JUDGE_PANEL to activate
+  # in the panel. NOT exposed to Tailscale - only reachable inside the
+  # docker network, which is the correct blast radius for an LLM.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    # No 'ports:' block on purpose - keeps 11434 off Tailscale + off
+    # the public interface. Only sibling containers (worker) see it.
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      # Bind inside the container so the docker network can reach us.
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_models:/root/.ollama    # persist pulled models across restarts
+
   # judge_api:   # optional - HTTP wrapper around llm_judge/judge_cli.py
   #              # (:8765); the worker supersedes it for the queue path
 
 volumes:
   n8n_data:
+  ollama_models:
