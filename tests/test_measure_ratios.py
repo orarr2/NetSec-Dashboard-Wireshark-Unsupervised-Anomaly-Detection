@@ -50,18 +50,21 @@ def test_measure_ratios_end_to_end(tmp_path):
 def test_union_field_set_covers_both_loaders():
     """The measured export must stay the union of the two field sets the
     code actually uses - if either loader gains a field, this fails and
-    points at the tool to update."""
+    points at the tool to update. The advanced-engine loader moved to
+    app/advanced_engines.py in the extraction, so scan both files."""
     sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
     import measure_pipeline_ratios as mpr
 
-    dashboard = os.path.join(REPO_ROOT, "app", "dashboard_module.py")
-    with open(dashboard, encoding="utf-8") as f:
-        src = f.read()
+    combined = ""
+    for rel in ("app/dashboard_module.py", "app/advanced_engines.py"):
+        with open(os.path.join(REPO_ROOT, rel), encoding="utf-8") as f:
+            combined += f.read()
     union = set(mpr.UNION_FIELDS)
     # every tshark field literal referenced by the two loaders must be
     # covered (fields appear as quoted strings in the two lists).
     for field in ("frame.time_epoch", "tls.handshake.ja4",
                   "dhcp.option.dhcp_server_id", "arp.opcode",
                   "radiotap.dbm_antsignal", "dns.qry.type"):
-        assert field in src, f"{field} vanished from dashboard_module.py"
+        assert field in combined, (
+            f"{field} vanished from dashboard_module.py + advanced_engines.py")
         assert field in union, f"{field} missing from UNION_FIELDS"

@@ -15,11 +15,12 @@ notice a device on a capture whose declared attack is something else
 as FPs against this PCAP's ground truth, which is the honest way to
 measure per-capture false-positive floors.
 
-Cell 47 of the notebook is fully self-contained and depends on cells
-4 (imports + tshark path) and 37 (config loader). We extract those
-three cells and exec them in a fresh namespace instead of importing
-`app.dashboard_module`, because importing that module starts the Dash
-server (`app.run(...)` at the bottom of cell 48).
+The engines live in `app/advanced_engines.py`, a Dash-free module, so
+this harness simply imports them - the same code the dashboard and the
+VM worker run. (It used to exec three notebook cells in a scratch
+namespace, because importing `app.dashboard_module` starts the Dash
+server. That hack also silently under-reported on any host where tshark
+is not on PATH, since the cell that discovers it was not among the three.)
 
     python3 tools/measure_adv_engines.py
     python3 tools/measure_adv_engines.py --json > baseline.json
@@ -31,37 +32,22 @@ import contextlib
 import io
 import json
 import os
-import shutil
 import sys
-
-
-def _cell_containing(nb, marker: str) -> str:
-    for c in nb["cells"]:
-        if c["cell_type"] == "code" and marker in "".join(c["source"]):
-            return "".join(c["source"])
-    raise RuntimeError(f"no notebook cell contains marker {marker!r}")
 
 
 def load_advanced_engines(repo_root: str):
     """Return a namespace dict with `run_advanced_threats` (and the
     `_adv_*` helpers) usable without importing `app.dashboard_module`."""
-    nb_path = os.path.join(repo_root, "app",
-                           "Network_Security_Dashboard.ipynb")
-    nb = json.load(open(nb_path))
-    cell4 = _cell_containing(nb, "import subprocess, sys, os")
-    cell37 = _cell_containing(nb, "def _find_config")
-    cell47 = _cell_containing(nb, "def run_advanced_threats")
-    prelude = f"{cell4}\n{cell37}\n{cell47}\n"
-    ns = {"_TSHARK_PATH_FOR_LOADER": shutil.which("tshark"),
-          "__file__": os.path.join(repo_root, "app", "dashboard_module.py")}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(prelude, "<cells 4+37+47>", "exec"), ns)
-    return ns
+    app_dir = os.path.join(repo_root, "app")
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+    import advanced_engines
+    return vars(advanced_engines)
 
 
 def load_ground_truth(repo_root: str):
     gt = json.load(open(os.path.join(repo_root, "attack_tests",
-                                     "ground_truth.json")))
+                                     "ground_truth.json"), encoding="utf-8"))
     out = {}
     for k, entry in gt.items():
         if k == "_comment":

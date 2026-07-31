@@ -42,6 +42,11 @@ COLS = ["ts","len","eth_src","eth_dst","ip_src","ip_dst",
         "arp_psrc","arp_hwsrc","arp_opcode"]
 
 
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
+from advanced_engines import run_advanced_threats          # noqa: E402
+
+
 def analyze_pcap(path, label):
     cmd = [TSHARK, "-r", str(path), "-n", "-T", "fields",
            "-E", "header=n", "-E", "separator=|",
@@ -154,9 +159,23 @@ def analyze_pcap(path, label):
           f"{len(df):,} packets | {len(ips_src)} src-IPs | "
           f"{len(macs)} MACs | protos={dict(protocols.most_common(5))}")
 
+    # Second, wider tshark pass for the six MITRE-mapped engines - the
+    # same call the dashboard makes in _ingest_pcap_from_path. Without it
+    # the judge receives an all-null advanced_signals block and reasons
+    # with strictly less than the pipeline knows. Never raises: the module
+    # reports {"available": False, "reason": ...} on any failure.
+    threats = run_advanced_threats(path, label)
+    if threats.get("available"):
+        n_sig = sum(len(v) for v in (threats.get("per_engine") or {}).values())
+        print(f"[{label}] advanced engines: {n_sig} signal(s) across "
+              f"{len(threats.get('device_risk') or [])} device(s)")
+    else:
+        print(f"[{label}] advanced engines unavailable: "
+              f"{threats.get('reason')}")
+
     return {
         "label": label, "df": df, "df_pkts": timeline_df, "n_pkts": len(df),
-        "t0": t0, "t1": t1, "ip_agg": ip_agg,
+        "t0": t0, "t1": t1, "ip_agg": ip_agg, "threats": threats,
         "ips_src": ips_src, "bytes_src": bytes_src, "bytes_dst": bytes_dst,
         "protocols": protocols, "macs": macs,
         "ip_pairs": ip_pairs,

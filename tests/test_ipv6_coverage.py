@@ -46,35 +46,33 @@ def test_union_export_requests_ipv6_fields():
 
 
 def test_dashboard_loaders_request_ipv6_fields():
-    """Both dashboard loaders (fast path and advanced engines) and the
-    live worker must ask for the v6 fields."""
-    path = os.path.join(ROOT, "app", "dashboard_module.py")
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    # Three distinct field lists live in this module.
-    assert src.count('"ipv6.src"') >= 3, (
-        f'only {src.count(chr(34) + "ipv6.src" + chr(34))} of the 3 field '
-        "lists request ipv6.src")
-    assert src.count('"ipv6.dst"') >= 3
+    """All three tshark loaders (dashboard fast path, advanced engines,
+    live worker) must ask for the v6 fields. The advanced engines moved
+    to `app/advanced_engines.py` so the field lists now live across two
+    files; count occurrences in both, not the dashboard alone.
+    """
+    total = 0
+    for rel in ("app/dashboard_module.py", "app/advanced_engines.py"):
+        with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+            src = f.read()
+        total += src.count('"ipv6.src"')
+        assert src.count('"ipv6.src"') == src.count('"ipv6.dst"'), (
+            f"{rel}: ipv6.src count != ipv6.dst count")
+    assert total >= 3, (
+        f"only {total} of the 3 field lists request ipv6.src")
 
 
 def test_advanced_loader_columns_stay_aligned():
-    """_ADV_COLS names the columns of _ADV_TSHARK_FIELDS positionally."""
-    import importlib.util
-    path = os.path.join(ROOT, "app", "dashboard_module.py")
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    ns = {}
-    # Execute only the two list literals, not the whole module.
-    for name in ("_ADV_TSHARK_FIELDS", "_ADV_COLS"):
-        start = src.index(f"{name} = [")
-        end = src.index("]", start) + 1
-        exec(src[start:end], ns)
-    assert len(ns["_ADV_TSHARK_FIELDS"]) == len(ns["_ADV_COLS"]), (
-        f"{len(ns['_ADV_TSHARK_FIELDS'])} fields vs "
-        f"{len(ns['_ADV_COLS'])} column names - they must move together")
-    i = ns["_ADV_TSHARK_FIELDS"].index("ipv6.src")
-    assert ns["_ADV_COLS"][i] == "ip6_src"
+    """_ADV_COLS names the columns of _ADV_TSHARK_FIELDS positionally.
+    The lists moved to app/advanced_engines.py in the extraction; import
+    them directly (the module is Dash-free)."""
+    sys.path.insert(0, os.path.join(ROOT, "app"))
+    import advanced_engines as ae
+    assert len(ae._ADV_TSHARK_FIELDS) == len(ae._ADV_COLS), (
+        f"{len(ae._ADV_TSHARK_FIELDS)} fields vs "
+        f"{len(ae._ADV_COLS)} column names - they must move together")
+    i = ae._ADV_TSHARK_FIELDS.index("ipv6.src")
+    assert ae._ADV_COLS[i] == "ip6_src"
 
 
 # --------------------------------------------------------------------------
