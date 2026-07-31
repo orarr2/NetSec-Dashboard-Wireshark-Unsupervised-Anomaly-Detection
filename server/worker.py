@@ -16,8 +16,10 @@ Environment:
     NETSEC_DB             history DB path override
     NETSEC_POLL_S         queue poll interval (default 10)
     NETSEC_INFRA_DSTS     declared infra destinations for reconciliation
-    NETSEC_NOTIFY_EMAIL   optional: mail each report (send_report env)
-    N8N_WEBHOOK_URL       optional: POST a JSON summary per session
+    NETSEC_NOTIFY_EMAIL   fallback recipient when the upload had no
+                          X-Notify-Email header (solo-operator setup)
+    N8N_WEBHOOK_URL       fallback delivery when SMTP fails, or the sole
+                          channel when no recipient is configured
 """
 import json
 import os
@@ -25,12 +27,11 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from . import baseline, db, enrich, reconcile, report_html, report_map
-from . import report_pdf, results, storage
+from . import baseline, db, enrich, notify, reconcile, report_html
+from . import report_map, report_pdf, results, storage
 
 SHODAN_MAX_PEERS = int(os.environ.get("NETSEC_SHODAN_MAX_PEERS", "5"))
 
@@ -147,37 +148,19 @@ def _tshark_version():
 
 
 def _notify(session, out, report_paths):
-    """Best-effort email + webhook. A broken mailbox must never lose an
-    analysis that already cost minutes of compute (send_report's rule)."""
-    email = os.environ.get("NETSEC_NOTIFY_EMAIL", "").strip()
-    if email:
-        try:
-            from llm_judge import send_report
-            with open(report_paths["md"], encoding="utf-8") as f:
-                md = f.read()
-            ok, msg = send_report.send_report(
-                email, md,
-                subject=f"NetSec verdicts - session {session['id']} "
-                        f"({session.get('label')})")
-            print(f"[worker] email: {msg}", flush=True)
-        except Exception as e:
-            print(f"[worker] email failed (continuing): {e}", flush=True)
-    hook = os.environ.get("N8N_WEBHOOK_URL", "").strip()
-    if hook:
-        try:
-            summary = {
-                "session_id": session["id"], "label": session.get("label"),
-                "kind": session.get("kind"), "sha256": session.get("sha256"),
-                "results": len(out.get("results") or []),
-                "worst": (out.get("results") or [{}])[0].get(
-                    "verdict", {}).get("verdict"),
-            }
-            req = urllib.request.Request(
-                hook, data=json.dumps(summary).encode("utf-8"),
-                headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=15).read()
-        except Exception as e:
-            print(f"[worker] webhook failed (continuing): {e}", flush=True)
+    """Delegate to server.notify.deliver, which walks the SMTP -> n8n
+    fallback chain and returns one log entry per attempted mechanism.
+    Never raises: a broken mailbox must not lose an analysis that
+    already cost minutes of compute."""
+    try:
+        log = notify.deliver(session, out, report_paths)
+    except Exception as e:
+        print(f"[worker] notify pipeline crashed (continuing): {e}",
+              flush=True)
+        return
+    for mode, ok, msg in log:
+        tag = "" if ok else "FAILED "
+        print(f"[worker] notify {tag}[{mode}]: {msg}", flush=True)
 
 
 def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):

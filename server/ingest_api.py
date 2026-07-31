@@ -14,6 +14,9 @@ Upload protocol (see server/auth.py for the signature):
     X-Signature       HMAC-SHA256 over "<sha256>:<sensor>:<timestamp>"
     X-Session-Kind    optional: prod (default) | test   (decision IDX-11)
     X-Session-Label   optional: display label, defaults to the filename
+    X-Notify-Email    optional: mail the report here when analysis is done
+                      (silently ignored if not a plausible address so a bad
+                      value never blocks the upload)
 
 Duplicate uploads (same sha256) are idempotent: the existing session is
 returned with 200 and {"duplicate": true} instead of a new 202.
@@ -69,13 +72,23 @@ def create_app(db_path=None, data_root=None):
                           x_signature: str = Header(...),
                           x_session_kind: str = Header("prod"),
                           x_session_label: str = Header(None),
-                          x_filename: str = Header("capture.pcap")):
+                          x_filename: str = Header("capture.pcap"),
+                          x_notify_email: str = Header(None)):
         started = time.time()
         sha = x_sha256.strip().lower()
         if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
             raise HTTPException(400, "X-Sha256 must be a hex sha256")
         if x_session_kind not in ("prod", "test"):
             raise HTTPException(400, "X-Session-Kind must be prod|test")
+
+        notify_email = None
+        if x_notify_email:
+            # Validate but don't reject the upload on a bad address - the
+            # analysis is more valuable than the notification, and a typo
+            # in a header should not lose a large PCAP.
+            from llm_judge.send_report import valid_address
+            if valid_address(x_notify_email):
+                notify_email = x_notify_email.strip()
 
         conn = _conn()
         try:
@@ -123,13 +136,23 @@ def create_app(db_path=None, data_root=None):
                         conn, sensor["id"], started, time.time(),
                         request.url.hostname or "", request.url.port or 0,
                         size, sha, existing)
+                    # If the original session had no notify_email and this
+                    # duplicate upload carries one, adopt it - the requester
+                    # who typed a real address still gets their mail. The
+                    # first-writer-wins rule inside set_session_notify_email
+                    # protects against a re-upload with a DIFFERENT address
+                    # silently hijacking the delivery.
+                    if notify_email:
+                        db.set_session_notify_email(conn, existing,
+                                                    notify_email)
                     db.touch_sensor(conn, sensor["id"])
                     return JSONResponse(
                         {"session_id": existing, "pcap_id": pcap_id,
                          "duplicate": True}, status_code=200)
 
             session_id = db.create_session(conn, pcap_id, label,
-                                           x_session_kind)
+                                           x_session_kind,
+                                           notify_email=notify_email)
             db.log_ingest_telemetry(
                 conn, sensor["id"], started, time.time(),
                 request.url.hostname or "", request.url.port or 0,

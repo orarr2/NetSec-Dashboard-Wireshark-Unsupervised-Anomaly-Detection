@@ -15,7 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sensors (
@@ -150,6 +150,15 @@ DROP TABLE reports_v1;
 CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id);
 """
 
+# v3: per-session email delivery. The uploader can carry an address
+# through the ingest header X-Notify-Email; the worker mails the report
+# to it when the run finishes. Absent the column the worker fell back to
+# a single NETSEC_NOTIFY_EMAIL env var - fine for a solo operator, not
+# fine when different people upload against the same VM.
+_SCHEMA_V3 = """
+ALTER TABLE sessions ADD COLUMN notify_email TEXT;
+"""
+
 
 def default_db_path():
     """Resolve the history DB path. Treats NETSEC_DB set to an EMPTY
@@ -192,6 +201,10 @@ def migrate(conn):
     if current < 2:
         conn.executescript(_SCHEMA_V2)
         conn.execute("PRAGMA user_version = 2")
+        conn.commit()
+    if current < 3:
+        conn.executescript(_SCHEMA_V3)
+        conn.execute("PRAGMA user_version = 3")
         conn.commit()
     return SCHEMA_VERSION
 
@@ -291,14 +304,30 @@ def register_pcap(conn, sha256, orig_name, size_bytes, sensor_id,
     return cur.lastrowid, True
 
 
-def create_session(conn, pcap_id, label, kind="prod"):
+def create_session(conn, pcap_id, label, kind="prod", notify_email=None):
     if kind not in ("prod", "test"):
         raise ValueError(f"kind must be prod|test, got {kind!r}")
     cur = conn.execute(
-        "INSERT INTO sessions (pcap_id, label, status, kind, queued_at) "
-        "VALUES (?, ?, 'queued', ?, ?)", (pcap_id, label, kind, _utcnow()))
+        "INSERT INTO sessions (pcap_id, label, status, kind, queued_at,"
+        " notify_email) VALUES (?, ?, 'queued', ?, ?, ?)",
+        (pcap_id, label, kind, _utcnow(), notify_email))
     conn.commit()
     return cur.lastrowid
+
+
+def set_session_notify_email(conn, session_id, notify_email):
+    """Set a session's notify_email if currently null. Called on a
+    duplicate upload that carries an address while the original had none
+    - so the requester still gets their mail even when the second upload
+    is deduped to the first session. Never overwrites an existing address:
+    the first requester's inbox wins."""
+    if not notify_email:
+        return False
+    cur = conn.execute(
+        "UPDATE sessions SET notify_email=? WHERE id=? AND notify_email IS NULL",
+        (notify_email, session_id))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def latest_session_for_pcap(conn, pcap_id):

@@ -26,7 +26,10 @@ def conn(tmp_path):
 # ---- migration v2 --------------------------------------------------------
 
 def test_schema_v2_migrated(conn):
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    # v2 was the enrichment table + reports.kind widened to include 'map'.
+    # Later migrations (v3 added sessions.notify_email) preserve the v2
+    # artefacts, which is what this test still guards.
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 2
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     assert "enrichment" in tables

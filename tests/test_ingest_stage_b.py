@@ -32,7 +32,7 @@ def conn(tmp_path):
 
 def test_schema_version_and_tables(conn):
     version, = conn.execute("PRAGMA user_version").fetchone()
-    assert version == db.SCHEMA_VERSION == 2
+    assert version == db.SCHEMA_VERSION == 3
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     expected = {"sensors", "pcap_files", "sessions", "ip_features",
@@ -40,6 +40,11 @@ def test_schema_version_and_tables(conn):
                 "verdicts", "panel_audit", "reports", "device_baselines",
                 "gaps", "llm_quota", "telemetry_log"}
     assert expected <= tables
+    # v3 adds sessions.notify_email so the ingest header can survive
+    # into the worker's fallback chain.
+    session_cols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(sessions)")}
+    assert "notify_email" in session_cols
 
 
 def test_migrate_is_idempotent(conn):
@@ -187,7 +192,7 @@ def _upload_headers(sensor, payload):
 
 def test_api_upload_flow(api):
     client, sensor, token = api
-    assert client.get("/healthz").json() == {"status": "ok", "schema": 2}
+    assert client.get("/healthz").json() == {"status": "ok", "schema": 3}
 
     payload = b"\xd4\xc3\xb2\xa1" + b"x" * 4096
     digest, headers = _upload_headers(sensor, payload)

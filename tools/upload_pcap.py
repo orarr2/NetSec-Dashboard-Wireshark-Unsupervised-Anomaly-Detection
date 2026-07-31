@@ -82,13 +82,18 @@ def _append_manifest(manifest_path, record):
 
 
 def upload_file(path, url, sensor, secret, kind="prod", label=None,
-                manifest=None, timeout=600.0, retries=4, sleep_fn=time.sleep):
+                manifest=None, timeout=600.0, retries=4, sleep_fn=time.sleep,
+                notify_email=None):
     """Sign and stream one PCAP to the ingest API. Shared by the CLI and
     the capture agent. Returns a dict:
         {"ok": bool, "status": int|None, "session_id": ..., "duplicate":
          bool, "error": str|None}
     On success (and only then) appends a telemetry-manifest line when a
-    manifest path is given. Raises nothing - callers branch on ok."""
+    manifest path is given. Raises nothing - callers branch on ok.
+
+    notify_email, when set, becomes the X-Notify-Email header so the
+    worker mails the finished report to that address. Invalid addresses
+    are silently dropped by the server (a typo must not cost the run)."""
     digest = sha256_of(path)
     started_at = time.time()
     u = urllib.parse.urlsplit(url)
@@ -108,6 +113,8 @@ def upload_file(path, url, sensor, secret, kind="prod", label=None,
         }
         if label:
             headers["X-Session-Label"] = label
+        if notify_email:
+            headers["X-Notify-Email"] = notify_email
         try:
             status, body = _post_stream(url, path, headers, timeout)
         except OSError as e:
@@ -159,6 +166,11 @@ def main(argv=None):
                         os.path.expanduser("~/.netsec/telemetry.jsonl")))
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--retries", type=int, default=4)
+    ap.add_argument("--email",
+                    default=os.environ.get("NETSEC_NOTIFY_EMAIL"),
+                    help="mail the finished report to this address "
+                         "(X-Notify-Email header). Overrides the VM's "
+                         "NETSEC_NOTIFY_EMAIL fallback for this upload.")
     args = ap.parse_args(argv)
 
     if not args.url or not args.sensor or not args.secret:
@@ -173,7 +185,8 @@ def main(argv=None):
     result = upload_file(args.pcap, args.url, args.sensor, args.secret,
                          kind=args.kind, label=args.label,
                          manifest=args.manifest, timeout=args.timeout,
-                         retries=args.retries)
+                         retries=args.retries,
+                         notify_email=args.email)
     if not result["ok"]:
         print(f"error: {result['error']}", file=sys.stderr)
         return 1

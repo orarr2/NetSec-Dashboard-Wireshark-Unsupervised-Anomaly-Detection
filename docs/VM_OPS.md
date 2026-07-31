@@ -90,31 +90,25 @@ Key markers to look for:
 
 ## Redeploy after a `git pull`
 
-Two scopes: code-only (fast, no image rebuild) and dependency change
-(needs a rebuild).
+Both the ingest_api and worker Dockerfiles `COPY` the repo into the
+image at BUILD time - **not** at runtime - so `git pull` on the host is
+invisible to the running containers until the image is rebuilt. Always
+rebuild, then force-recreate. `force-recreate` alone reuses the same
+image, so your new Python code stays outside the container.
 
 ```bash
 ssh -i <key> ubuntu@<vm> '
 cd ~/netsec
 git pull --ff-only origin main
 cd deploy
-# Code-only change (server/*.py, app/*.py, tools/*.py): re-create picks
-# up the new files from the bind mount / rebuilt layer cache.
+docker compose build ingest_api worker retention
 docker compose up -d --force-recreate ingest_api worker retention
 docker compose ps
 '
 ```
 
-If you edited `requirements.txt`, `server/requirements.txt` or the
-`Dockerfile.*` files, add a `build` step first:
-
-```bash
-ssh -i <key> ubuntu@<vm> '
-cd ~/netsec/deploy
-docker compose build ingest_api worker retention
-docker compose up -d --force-recreate ingest_api worker retention
-'
-```
+The build is fast on a code-only change: torch, tshark, and every apt
+layer are cached; only the final `COPY . .` layer re-runs.
 
 ---
 
@@ -210,6 +204,76 @@ Then update the client (dashboard, `tools/upload_pcap.py`, capture agent)
 with the new `NETSEC_SENSOR_ID` and `NETSEC_SENSOR_SECRET`.
 
 ---
+
+## Email delivery on completion
+
+The worker walks a fallback chain: **SMTP first, n8n webhook as backup**
+when SMTP fails. Recipient priority: the `X-Notify-Email` on the upload
+wins over `NETSEC_NOTIFY_EMAIL` in `.env` (the solo-operator default).
+
+Fill these lines in `~/netsec/deploy/.env` on the VM:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=<your gmail address>
+SMTP_PASS=<gmail app-password, 16 chars, NOT the account password>
+SMTP_FROM=NetSec Analyzer <your gmail address>
+NETSEC_NOTIFY_EMAIL=<optional fallback recipient>
+N8N_WEBHOOK_URL=<optional; used only when SMTP itself fails>
+```
+
+Generate a Gmail app-password once at
+`https://myaccount.google.com/apppasswords` (needs 2-Step Verification
+enabled). Then rebuild + force-recreate the worker so the new env is
+picked up - `docker compose restart` reuses the old baked-in values:
+
+```bash
+ssh -i <key> ubuntu@<vm> '
+cd ~/netsec/deploy
+docker compose up -d --force-recreate worker
+'
+```
+
+Trigger a fresh upload with the address on the wire:
+
+```bash
+python3 tools/upload_pcap.py <capture.pcap> --email you@example.com
+```
+
+Confirm delivery from the worker log - one line per attempted mechanism:
+
+```
+[worker] notify [smtp]: report sent to you@example.com
+```
+
+or on failure with fallback:
+
+```
+[worker] notify FAILED [smtp]: SMTP authentication failed (535)...
+[worker] notify [n8n_fallback]: n8n accepted (200)
+```
+
+## Activate the judge panel (multi-model deliberation)
+
+`LLM_JUDGE_PANEL` in `.env` controls which models judge each capture.
+Empty = single-judge mode (only `OPENAI_COMPAT_MODEL` runs). Two or
+more judges gives you a real "committee discussion" - each model votes
+independently, disagreements trigger a debate round, and the panel
+transcript lands in the markdown report the email sends.
+
+A safe Groq-only two-judge panel that survives one model's daily 429:
+
+```
+LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,openai_compat:openai/gpt-oss-20b
+```
+
+Each model has its own 100k-token/day free quota, so one model burning
+out does not block the other. Force-recreate the worker after editing:
+
+```bash
+ssh -i <key> ubuntu@<vm> 'cd ~/netsec/deploy && docker compose up -d --force-recreate worker'
+```
 
 ## Free-tier LLM quota watch
 
