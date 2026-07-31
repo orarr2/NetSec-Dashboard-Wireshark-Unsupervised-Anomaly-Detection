@@ -283,6 +283,20 @@ def test_duplicate_upload_is_idempotent(stack):
     assert len(stored) == 1, f"duplicate left extra files: {stored}"
 
 
+def test_duplicate_upload_still_logs_ingest_telemetry(stack):
+    """A duplicate upload is a real sensor->VM flow too. It must be recorded
+    in telemetry_log, or the reconciler later flags the sensor's own
+    re-uploaded chunk (spool drain / ring replay) as a rogue
+    undeclared_infra_flow. Before the fix the dup path skipped logging."""
+    _upload(stack, PCAP)
+    _upload(stack, PCAP)
+    conn = stack["conn"]
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM telemetry_log WHERE source='ingest_log'"
+    ).fetchone()["c"]
+    assert n == 2, f"expected an ingest_log row per upload, got {n}"
+
+
 def test_worker_failure_marks_the_session_and_frees_the_queue(stack):
     """A crash inside analysis must land in sessions.error, not wedge the
     queue - the failure mode the stale-job requeue also guards."""

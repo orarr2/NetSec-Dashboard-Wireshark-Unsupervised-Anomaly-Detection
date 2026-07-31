@@ -286,3 +286,42 @@ def test_default_host_still_uses_the_global_model(monkeypatch):
                         "https://api.groq.com/openai/v1")
     c = llm_clients.OpenAICompatClient()
     assert c.model_id == "some-model"
+
+
+# --------------------------------------------------------------------------
+# 9. re-upload after retention purge must reactivate the row, not orphan
+#    the new file (permanent disk leak) and skip re-analysis.
+# --------------------------------------------------------------------------
+def test_reupload_after_purge_reactivates_pcap_row(tmp_path):
+    conn = _conn(tmp_path)
+    sensor_id = db.create_sensor(conn, "s1", "tokenhash", "secret")
+    sha = "cc" * 32
+    pid, created = db.register_pcap(conn, sha, "c.pcap", 100, sensor_id,
+                                    "/data/pcap/2026/01/01/cc_c.pcap")
+    assert created is True
+    db.create_session(conn, pid, label="S1", kind="prod")
+
+    # retention purged the raw file: deleted_at stamped, storage_path stale
+    conn.execute("UPDATE pcap_files SET deleted_at=? WHERE id=?",
+                 (datetime.now(timezone.utc).isoformat(), pid))
+    conn.commit()
+
+    # the same capture is uploaded again; it lands at a fresh path
+    new_path = "/data/pcap/2026/03/03/cc_c.pcap"
+    pid2, created2 = db.register_pcap(conn, sha, "c.pcap", 100, sensor_id,
+                                      new_path)
+    # same row, but reactivated -> created True so the API queues analysis
+    assert pid2 == pid
+    assert created2 is True
+    row = conn.execute(
+        "SELECT storage_path, deleted_at FROM pcap_files WHERE id=?",
+        (pid,)).fetchone()
+    # deleted_at cleared (retention can manage it again) and repointed at
+    # the new file (no orphan on disk)
+    assert row["deleted_at"] is None
+    assert row["storage_path"] == new_path
+    # a still-live duplicate (no deleted_at) is NOT reactivated
+    pid3, created3 = db.register_pcap(conn, sha, "c.pcap", 100, sensor_id,
+                                      "/somewhere/else.pcap")
+    assert pid3 == pid and created3 is False
+    conn.close()

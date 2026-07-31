@@ -114,6 +114,15 @@ def create_app(db_path=None, data_root=None):
             if not created:
                 existing = db.latest_session_for_pcap(conn, pcap_id)
                 if existing is not None:
+                    # A duplicate upload is still a real sensor->VM flow. Log
+                    # it so the reconciler recognises the sensor's own
+                    # (frequently re-uploaded, e.g. spool drain / ring
+                    # replay) traffic as declared infra telemetry instead of
+                    # emitting a false undeclared_infra_flow finding.
+                    db.log_ingest_telemetry(
+                        conn, sensor["id"], started, time.time(),
+                        request.url.hostname or "", request.url.port or 0,
+                        size, sha, existing)
                     db.touch_sensor(conn, sensor["id"])
                     return JSONResponse(
                         {"session_id": existing, "pcap_id": pcap_id,
@@ -154,7 +163,8 @@ def create_app(db_path=None, data_root=None):
     def get_report(session_id: int, kind: str,
                    authorization: str = Header(None)):
         if kind not in _REPORT_MEDIA:
-            raise HTTPException(404, "kind must be json|md|html|pdf")
+            raise HTTPException(
+                404, "kind must be " + "|".join(_REPORT_MEDIA))
         conn = _conn()
         try:
             _bearer(conn, authorization)

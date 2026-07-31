@@ -253,10 +253,26 @@ def touch_sensor(conn, sensor_id):
 
 def register_pcap(conn, sha256, orig_name, size_bytes, sensor_id,
                   storage_path):
-    """Idempotent by sha256. Returns (pcap_id, created)."""
-    row = conn.execute("SELECT id FROM pcap_files WHERE sha256 = ?",
-                       (sha256,)).fetchone()
+    """Idempotent by sha256. Returns (pcap_id, created).
+
+    A row whose raw file was already purged (deleted_at set) is REACTIVATED,
+    not treated as a duplicate: its storage_path is repointed at the freshly
+    uploaded copy and deleted_at is cleared, and created=True is returned so
+    the caller queues a new analysis. Without this, a re-upload after
+    retention purged the raw would leave the new file on disk with no live
+    DB row - invisible to retention (WHERE deleted_at IS NULL) and never
+    re-analysed."""
+    row = conn.execute(
+        "SELECT id, deleted_at FROM pcap_files WHERE sha256 = ?",
+        (sha256,)).fetchone()
     if row:
+        if row["deleted_at"] is not None:
+            conn.execute(
+                "UPDATE pcap_files SET storage_path = ?, size_bytes = ?,"
+                " received_at = ?, deleted_at = NULL WHERE id = ?",
+                (storage_path, size_bytes, _utcnow(), row["id"]))
+            conn.commit()
+            return row["id"], True
         return row["id"], False
     cur = conn.execute(
         "INSERT INTO pcap_files (sha256, orig_name, size_bytes, sensor_id,"

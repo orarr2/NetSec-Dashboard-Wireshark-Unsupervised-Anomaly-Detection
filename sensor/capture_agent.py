@@ -190,9 +190,11 @@ class CaptureAgent:
             "NETSEC_RING_FILES", "96"))
         if not interface:
             raise SystemExit("NETSEC_CAPTURE_IFACE (or --interface) required")
-        for key in ("url", "sensor", "secret"):
-            if not getattr(self, key):
-                raise SystemExit(f"NETSEC_{key.upper()} is required")
+        required = {"url": "NETSEC_INGEST_URL", "sensor": "NETSEC_SENSOR_ID",
+                    "secret": "NETSEC_SENSOR_SECRET"}
+        for attr, env_name in required.items():
+            if not getattr(self, attr):
+                raise SystemExit(f"{env_name} is required")
         cmd = self.tshark_cmd(interface, chunk_seconds, ring_files)
         print(f"[agent] {' '.join(cmd)}", flush=True)
         proc = subprocess.Popen(cmd)
