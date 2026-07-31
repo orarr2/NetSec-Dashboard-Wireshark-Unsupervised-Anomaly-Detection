@@ -530,7 +530,18 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
 
     if verbose:
         print("[cli] assembling candidates...", flush=True)
-    assembled = judge_core.assemble_candidates(S, findings)
+    # If the caller (typically the dashboard) already ran the advanced
+    # engines and built a local device inventory, pass them through so
+    # the judge sees them per candidate. run_pipeline itself does not
+    # compute either (it is a slim CLI fork of the notebook's ML +
+    # rules), so on the CI / VM path these stay empty and the schema's
+    # default all-null block is what the model receives - exactly the
+    # pre-Stage-3 behaviour.
+    adv_signals = judge_core.threats_to_advanced_signals(S.get("threats"))
+    device_ctx = judge_core.local_inv_to_device_context(
+        S.get("_local_inv") or S.get("local_inv"))
+    assembled = judge_core.assemble_candidates(
+        S, findings, advanced_signals=adv_signals, device_context=device_ctx)
     context = build_context(S, findings, assembled)
     if verbose:
         print(f"[cli] provider={judge_config.LLM_JUDGE_PROVIDER} "
