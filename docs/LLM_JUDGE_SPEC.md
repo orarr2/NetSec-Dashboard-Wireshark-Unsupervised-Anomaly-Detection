@@ -1,20 +1,38 @@
 # LLM-as-Judge Triage Layer - Specification & Design
 
-**Status:** Design draft, not yet implemented.
-**Audience:** Whoever picks this up for implementation.
-**Scope:** A triage layer that sits between the existing detection engines
-and the analyst. Ranks candidates, produces natural-language reasoning,
-and is calibrated against the labeled ground truth already in the repo.
+**Status:** **Implemented and shipping.** This document is preserved as
+the design record - the design decisions that landed, the trade-offs that
+were made, and (in the *Deviations* section) the small set of choices
+where the shipped code intentionally differs from the original plan. The
+authoritative implementation lives in `llm_judge/` and is exercised end
+to end by `tests/test_llm_judge_*.py` and the `.github/workflows/analyze-pcap.yml`
+autonomous run.
+**Audience:** Anyone extending the judge layer or wanting the design
+rationale behind the current code.
+**Scope:** A triage layer between the existing detection engines and the
+analyst. Ranks candidates, produces natural-language reasoning, and is
+calibrated against the labeled ground truth in `attack_tests/`.
+
+Path notes for readers: everywhere this document says `app/llm_judge.py`,
+`app/llm_judge_config.py`, `app/llm_clients/`, `attack_tests/calibrate_judge.py`,
+`attack_tests/calibration/`, `docs/schemas/`, `docs/PROMPT_CHANGELOG.md`,
+`data/judge_cache.sqlite` or `data/analyst_verdicts.jsonl`, the shipped
+code lives under `llm_judge/` (with the analogous file names -
+`judge_core.py`, `judge_config.py`, `llm_clients.py`, `calibration.py`,
+`calibration/`, `schemas/`, `PROMPT_CHANGELOG.md`, `cache/judge_cache.sqlite`).
+The rename is intentional: the judge is a standalone layer, not part of
+`app/`, and lives beside its own tests, cache and CI gate.
 
 ---
 
 ## 1. Executive summary
 
 The dashboard already runs three unsupervised ML models (IsolationForest,
-DBSCAN, LSTM), two deterministic rule layers, and six advanced threat
-engines. Each produces its own signal. Nothing fuses them into a single
-per-candidate verdict, and nothing produces a natural-language rationale.
-The analyst pays the full cognitive cost of every false positive.
+DBSCAN, LSTM), two deterministic rule layers, and five advanced threat
+engines plus a fusion scorer on top of them. Each produces its own
+signal. Nothing fuses them into a single per-candidate verdict, and
+nothing produces a natural-language rationale. The analyst pays the full
+cognitive cost of every false positive.
 
 This spec adds one component: an **LLM-as-Judge** that receives one
 candidate at a time (one IP, or one flow), sees every relevant signal in a
@@ -47,7 +65,7 @@ work except at the integration points named in §11.
 | DBSCAN | cell 12 / `run_ml_on_session` | `cluster` column (`-1` = noise) |
 | LSTM temporal | cells 22-26 | per-bin error, threshold `val_mean + 2σ` |
 | Deterministic rules | cell 16 / `run_security_scans` | `scan_alerts`, `flood_alerts`, `amp_alerts`, `arp_spoofing_ips`, `arp_spoofing_macs` |
-| Advanced threat engines | dedicated cell in `Network_Security_Dashboard.ipynb` | beaconing, DNS tunneling, DGA, ARP/DHCP, TLS, fusion |
+| Advanced threat engines | cell 47 of `Network_Security_Dashboard.ipynb` | five engines - beaconing, DNS tunneling, DGA, ARP/DHCP, TLS - and a per-device fusion scorer on top of them in a 15-minute window (not a sixth engine) |
 | Device classification | 3-tier engine (hostname/OUI/port → DNS fingerprints → heuristics) | 12 categories |
 
 ### 2.2 Feature vector (per IP)
@@ -326,7 +344,10 @@ Key properties:
 ### 6.1 Candidate context schema (input to LLM)
 
 `docs/schemas/candidate_context.schema.json` - JSON Schema draft-2020-12,
-validated with `jsonschema.Draft202012Validator`. See §4.2 for the shape.
+validated with `judge_core.validate_verdict` (hand-rolled - the
+`jsonschema` dependency the plan added never landed because the checks
+are simpler as explicit code and one less dependency to pin). See §4.2
+for the shape.
 `required`: `candidate_id`, `kind`, `features`, `ml_signals`.
 
 ### 6.2 Judge verdict schema (output from LLM)
@@ -587,7 +608,10 @@ Report both:
   coarse gauge.
 - **Category kappa** (7-way) - the strict gauge.
 
-The CI gate uses **category kappa**, threshold `0.65` (draft; see §8.4).
+The CI gate uses **category kappa**, threshold `0.60` in the current
+`judge_config.KAPPA_THRESHOLD` (rollout §14 opened at 0.60; the shipped
+v0.3.0 measurement is 0.7911 on `openai/gpt-oss-120b`, well over the
+draft target of 0.65 the earlier plan set as a stretch goal).
 
 ### 8.3 File - `attack_tests/calibrate_judge.py`
 
@@ -745,7 +769,8 @@ Category cheat sheet:
   pattern in the signals. Prefer this over "malicious" when in doubt.
 ```
 
-Prompt versioning: `v0.1.0` for the first draft. Bumped by
+Prompt versioning: currently `v0.3.0` (see `llm_judge/PROMPT_CHANGELOG.md`
+for the version history and kappa per version). Bumped by
 `docs/PROMPT_CHANGELOG.md`.
 
 ### 10.2 User prompt

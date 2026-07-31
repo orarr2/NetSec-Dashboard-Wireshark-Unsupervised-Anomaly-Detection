@@ -137,25 +137,46 @@ This document summarises the substantive design decisions, what options were con
 
 ---
 
-## 7. IsolationForest contamination: 20-point sweep vs fixed value
+## 7. IsolationForest contamination: fixed 0.10 (sweep retired)
 
-**The decision:** Sweep contamination from 0.02 to 0.30 (20 values), pick the value whose flagged group has the lowest mean anomaly score.
+**The decision:** Fixed `contamination = 0.10` (Scikit-learn default),
+`n_estimators = 200`, `random_state = 42`.
 
-**What was considered:**
-- **Fixed contamination = 0.10** (Scikit-learn default) - works but arbitrary; some networks have 1% anomalies, others 25%.
-- **Manual tuning per dataset** - accurate but requires expertise; defeats the purpose of an automated pipeline.
-- **Data-driven sweep** ← chosen.
+**What was considered and retired:**
+- **Data-driven sweep** [0.02, 0.30] over 20 values, self-scored by mean
+  anomaly score of the flagged group. Was implemented for a while;
+  retired after an empirical run against labelled ground truth showed no
+  benefit.
+- **Sweep [0.05, 0.10, 0.15] × 5 seeds** with F1 measured against the
+  attack_tests ground truth. Mean F1 was 0.247, vs 0.250 for fixed 0.10 -
+  a fitting cost 15× higher for a worse score. See the calibration
+  fixture in `attack_tests/`.
 
-**Advantages:**
-- The notebook adapts to each network's actual anomaly density.
-- The sensitivity sweep chart visualises *why* the chosen contamination is reasonable.
-- Removes a hardcoded value with no justification.
+**Why the "adaptive" version was worse in practice:**
+- Both variants use a self-scored heuristic (the model's own anomaly
+  score) as the objective. Optimizing that objective is not the same as
+  optimising detection quality; sometimes it drifts toward higher
+  contamination that catches noisy tails without adding true positives.
+- The rules layer is the workhorse (100% recall on labelled attackers);
+  IsolationForest exists to find *what the rules missed*, and its output
+  is dominated by the choice of feature set, not by ±0.05 in
+  contamination.
+
+**Advantages of fixed 0.10:**
+- Fully reproducible: identical output byte-for-byte on the same PCAP.
+- 15× cheaper to fit; the sensitivity chart still exists for visualisation.
 
 **Disadvantages:**
-- 20× the contamination-related training time.
-- Self-referential: uses the model's own output to evaluate its parameter. Without ground truth labels, this is a heuristic, not a proof.
+- One less knob to point at when explaining the pipeline.
 
-**When to consider an alternative:** If real labels become available (e.g. via threat intelligence), use precision-at-k to choose contamination.
+**When to reconsider:** If real labelled traffic from a new deployment
+diverges systematically from the attack_tests distribution - re-run the
+seed-stability measurement with the new labels, and adopt the value that
+wins if it wins by more than the seed noise.
+
+The **Contamination Sensitivity** chart still fits 20 forests across
+`[0.02, 0.30]` and draws a vertical line at 0.10, so a reader can eyeball
+the trade-off without changing the production value.
 
 ---
 

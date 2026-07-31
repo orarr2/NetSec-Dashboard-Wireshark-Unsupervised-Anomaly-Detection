@@ -161,9 +161,9 @@ A: k-means requires specifying the number of clusters k in advance - which is un
 
 ---
 
-**Q: You chose contamination via a sensitivity sweep. Is that a valid method?**
+**Q: Why is contamination fixed at 0.10, and how was that value chosen?**
 
-A: It is a data-driven heuristic, not a theoretically proven criterion. The logic: the "correct" contamination should flag the IPs that are most statistically anomalous - furthest from the majority in the feature space. The IsolationForest anomaly score measures this directly: a lower score means the point was isolated faster by more trees. So the contamination whose flagged group has the lowest mean score flags the most extreme group. The limitation: this is self-referential - we use the model's own output to evaluate its parameter. Without external labels or ground truth, this is better than an arbitrary fixed value but not a substitute for proper validation.
+A: An adaptive sweep used to pick it per-capture. It was retired because a seed-stability measurement against the labelled attack_tests ground truth showed the sweep's mean F1 (0.247, [0.05, 0.10, 0.15] × 5 seeds) matched fixed 0.10 (F1 = 0.250) while doing 15× more forest fits. The rules layer catches 100% of labelled attackers; IsolationForest is there to find *what the rules missed*, and its output is dominated by the feature set, not by ±0.05 in contamination. Fixing the value also makes the pipeline byte-for-byte reproducible on the same PCAP. The Contamination Sensitivity chart still fits 20 forests across [0.02, 0.30] and marks 0.10 on it, so the trade-off is visible without changing the production value. See `docs/TRADEOFFS_EN.md` §7 for the numbers.
 
 ---
 
@@ -201,7 +201,7 @@ A: Network traffic is a time series. Random splitting would allow the model to s
 
 **Q: The anomaly threshold is `mean + 2·std`. Why 2 standard deviations?**
 
-A: Under a normal distribution, ~95% of values fall within 2 standard deviations of the mean. The remaining ~5% are in the tails - statistically unusual events. Using 2σ as the threshold means roughly 5% of sequences will be flagged as anomalous, which is consistent with a `contamination=0.05` assumption. A lower multiplier (e.g. 1σ) flags ~32% of sequences (too many false positives); a higher multiplier (3σ) flags ~0.3% (may miss real anomalies). The threshold is derived from validation errors - not training errors - so it reflects generalisation rather than memorisation.
+A: Under a normal distribution, ~95% of values fall within 2 standard deviations of the mean. The remaining ~5% are in the tails - statistically unusual events. Using 2σ as the threshold means roughly 5% of *validation* sequences will be flagged as anomalous. A lower multiplier (e.g. 1σ) flags ~32% of sequences (too many false positives); a higher multiplier (3σ) flags ~0.3% (may miss real anomalies). The threshold is derived from validation errors - not training errors - so it reflects generalisation rather than memorisation. It is intentionally not tied to IsolationForest's `contamination = 0.10`: the LSTM lives on a different signal (per-second packet-size bins) and rewards its own error distribution.
 
 ---
 
@@ -289,4 +289,4 @@ A: `confidence: low`. The behavioural fallback fires when neither the rule engin
 
 **Q: The model flagged X IPs as anomalies. How do you know which are true positives?**
 
-A: Without ground truth labels, we cannot compute precision or recall. We use three proxies for confidence: (1) **model agreement** - IPs flagged by both IsolationForest and DBSCAN are more credible; (2) **anomaly score magnitude** - IPs with very low iso_score are more extreme; (3) **corroborating signals** - an IP flagged by ML AND appearing in the security scan results (high SYN count, ARP anomaly, DNS long queries) is a stronger finding. The sensitivity sweep chart shows the trade-off between flagging more IPs (higher recall) and keeping the flagged group extreme (higher precision proxy).
+A: Without ground truth labels, we cannot compute precision or recall on a live capture. We use three proxies for confidence: (1) **model agreement** - IPs flagged by both IsolationForest and DBSCAN are more credible; (2) **anomaly score magnitude** - IPs with very low iso_score are more extreme; (3) **corroborating signals** - an IP flagged by ML AND appearing in the security scan results (high SYN count, ARP anomaly, DNS long queries) is a stronger finding. The Contamination Sensitivity chart shows what would be flagged at other contamination values, so the reader can see the trade-off between flagging more IPs and keeping the flagged group extreme. For actual measurement we rely on the labelled `attack_tests/` fixtures, `attack_tests/evaluate.py` and the CI regression suite.

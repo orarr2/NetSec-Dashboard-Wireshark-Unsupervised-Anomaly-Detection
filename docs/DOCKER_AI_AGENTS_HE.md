@@ -185,17 +185,20 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       Host (Windows / Linux)                        │
+│                       VM (Ubuntu 22.04+, ARM/x86-64)                │
 │                                                                     │
-│   Wireshark / tshark ── captures ──► ./incoming/*.pcapng            │
+│   Sensor (‏laptop / Pi 5) ── HMAC over Tailscale ──► ingest_api      │
 │                                                                     │
-│   ┌─────────────────  Docker network: netsec_ai  ──────────────┐   │
+│   ┌─────────────────  Docker network: deploy_default  ───────────┐  │
 │   │                                                              │   │
-│   │   [n8n]   ──file trigger──►  [judge_runner]                  │   │
-│   │     │                        (mini python container          │   │
-│   │     │                         שמריץ judge_cli.py)            │   │
+│   │   [ingest_api]  → SQLite queue → [worker]                   │   │
+│   │        :8766          |            (מריץ analyze_and_judge   │   │
+│   │                       |             + WeasyPrint report)     │   │
+│   │                       ▼                                      │   │
+│   │   [n8n] ← webhook ← [worker]                                 │   │
+│   │     :5678                                                    │   │
 │   │     │                                                        │   │
-│   │     ├──HTTP──► [Dify API]  ──► [Dify Agent + RAG + Tools]    │   │
+│   │     ├──HTTP──► [Dify API] (‏אופציונלי; RAG על verdicts)      │   │
 │   │     │              │                    │                    │   │
 │   │     │              ▼                    ▼                    │   │
 │   │     │         [Postgres] [Weaviate] [Sandbox] [Redis]        │   │
@@ -206,8 +209,8 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 │   │                                                              │   │
 │   └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│   פלטים: ./llm_judge/output/verdicts.json / verdicts.md             │
-│           ./automation/db/audit.sqlite                              │
+│   פלטים: /srv/netsec/reports/<sid>/verdicts.json / verdicts.md      │
+│           /srv/netsec/db/netsec.db (SQLite היסטוריה)                │
 │           GitHub Issue / Slack / Telegram / Email                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -276,35 +279,47 @@ docker compose version
 
 ### 7.1 מבנה תיקיות
 
+התשתית עברה מ־`automation/` המקומית שהוצאה משימוש אל `deploy/` המוגדרת בריפו:
+
 ```
 NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
 ├─ ... (הפרויקט הקיים)
-└─ automation/
+└─ deploy/
    ├─ .env                       ← לא ב־git (יש להוסיף ל־.gitignore)
-   ├─ docker-compose.yml
-   ├─ n8n_data/                  ← volume ל־n8n
-   ├─ judge_runner/
-   │   ├─ Dockerfile
-   │   └─ entrypoint.sh
-   └─ db/
-       └─ audit.sqlite           ← נוצר בזמן ריצה
+   ├─ .env.example               ← כל משתני הסביבה שהמערכת קוראת + ברירות מחדל
+   ├─ docker-compose.yml         ← n8n + ingest_api + worker + retention
+   ├─ Dockerfile.ingest          ← ה־image של ה־ingest API
+   ├─ Dockerfile.worker          ← ה־image של ה־worker (מריץ גם את retention)
+   ├─ n8n_workflows/
+   │   └─ mvp_triage_email.json  ← ה־workflow ל־n8n (בריפו, ניתן ל־import)
+   └─ create_sensor.py           ← רישום חיישן חדש והדפסת credentials פעם אחת
 ```
+
+תוצרי ריצה נשמרים ב־`${NETSEC_DATA_ROOT}` (ברירת מחדל `/srv/netsec`):
+`data/pcap/YYYY/MM/DD/*.pcap` (‏גולמי, 7 ימים), `data/fields/*.tsv.gz`
+(‏אינדקס לתמיד), `reports/<session_id>/{verdicts.json,verdicts.md,report.html,report.pdf}`,
+`db/netsec.db`.
 
 ### 7.2 קובץ `.env`
 
+מבוסס על `deploy/.env.example` שכולל את כל המשתנים והברירות שהקוד באמת קורא.
+מכתובת ה־Tailscale ועד תצורת ה־LLM - הכל שם, מתועד, וזה המקום היחיד שבו חיים
+סודות:
+
 ```dotenv
+# Core
+TS_BIND=<vm-tailscale-ip>              # כתובת ה-Tailscale של ה-VM
+NETSEC_DATA_ROOT=/srv/netsec
+TZ=UTC
+
 # n8n
-N8N_BASIC_AUTH_USER=admin
-N8N_BASIC_AUTH_PASSWORD=CHANGE_ME_STRONG_PASSWORD
 N8N_ENCRYPTION_KEY=CHANGE_ME_32_CHAR_RANDOM_STRING
-N8N_HOST=localhost
-N8N_PORT=5678
-TZ=Asia/Jerusalem
+# הערה: N8N_BASIC_AUTH_* לא נתמכים ב-n8n המודרני - יוצרים owner account בדפדפן
 
 # LLM providers (בחר את מה שרלוונטי לך)
-LLM_JUDGE_PROVIDER=ollama            # ollama | openai_compat | ...
-OLLAMA_HOST=http://ollama:11434
-OLLAMA_MODEL=llama3.2
+LLM_JUDGE_PROVIDER=ollama              # claude | ollama | openai_compat
+OLLAMA_HOST=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen2.5:14b
 OPENAI_COMPAT_BASE_URL=
 OPENAI_COMPAT_MODEL=
 OPENAI_COMPAT_API_KEY=
@@ -314,128 +329,142 @@ DIFY_API_BASE=http://dify-api/v1
 DIFY_API_KEY=
 ```
 
-### 7.3 `docker-compose.yml` - סטאק בסיסי (n8n + Ollama + judge runner)
+### 7.3 `docker-compose.yml` - הסטאק שנשלח בריפו
+
+הקובץ החי הוא `deploy/docker-compose.yml`. ארבע השירותים - `n8n`,
+`ingest_api`, `worker`, `retention` - כולם קשורים ל־`${TS_BIND}` כך שרק
+Tailscale-peers רואים אותם, ותצורתם נקבעת ב־`deploy/.env`:
 
 ```yaml
-name: netsec-ai
-
-networks:
-  netsec_ai:
-    driver: bridge
-
-volumes:
-  n8n_data:
-  ollama_data:
-
 services:
   n8n:
     image: n8nio/n8n:latest
     restart: unless-stopped
     ports:
-      - "5678:5678"
+      - "${TS_BIND:-127.0.0.1}:5678:5678"
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_HOST=${TS_BIND:-127.0.0.1}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-      - N8N_HOST=${N8N_HOST}
-      - N8N_PORT=${N8N_PORT}
-      - GENERIC_TIMEZONE=${TZ}
-      - TZ=${TZ}
+      - GENERIC_TIMEZONE=${TZ:-UTC}
     volumes:
       - n8n_data:/home/node/.n8n
-      # חשיפת תיקיות הפרויקט לצורך trigger וקריאת פלטים
-      - ../incoming:/data/incoming:ro
-      - ../llm_judge/output:/data/output:rw
-      - ./db:/data/db:rw
-    networks: [netsec_ai]
+      # תבניות ה־workflow ניתנות ל־import מה־UI או דרך ה־CLI:
+      #   docker compose exec n8n n8n import:workflow \
+      #     --input=/workflows/mvp_triage_email.json
+      - ./n8n_workflows:/workflows:ro
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"          # אפשר להסיר לחשיפה פנימית בלבד
-    networks: [netsec_ai]
-    # ל־GPU:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - capabilities: [gpu]
-
-  judge_runner:
+  ingest_api:
     build:
-      context: ./judge_runner
-    image: netsec/judge-runner:latest
-    restart: "no"              # מופעל on-demand על ידי n8n
+      context: ..
+      dockerfile: deploy/Dockerfile.ingest
+    restart: unless-stopped
+    ports:
+      - "${TS_BIND:-127.0.0.1}:8766:8766"
     environment:
-      - LLM_JUDGE_PROVIDER=${LLM_JUDGE_PROVIDER}
-      - OLLAMA_HOST=${OLLAMA_HOST}
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-      - OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL}
-      - OPENAI_COMPAT_MODEL=${OPENAI_COMPAT_MODEL}
-      - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY}
+      - NETSEC_DATA_ROOT=/srv/netsec
+      - NETSEC_MAX_UPLOAD_GB=${NETSEC_MAX_UPLOAD_GB:-10}
     volumes:
-      - ../:/workspace:rw       # כל הפרויקט (ל־judge_cli.py + PCAPs)
-    networks: [netsec_ai]
-    entrypoint: ["sleep", "infinity"]  # להשאיר בחיים כדי ש־n8n יריץ docker exec
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NETSEC_DATA_ROOT=/srv/netsec
+    volumes:
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+
+  retention:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NETSEC_DATA_ROOT=/srv/netsec
+    volumes:
+      - ${NETSEC_DATA_ROOT:-/srv/netsec}:/srv/netsec
+    command: ["python", "-m", "server.retention"]
+
+volumes:
+  n8n_data:
 ```
 
-### 7.4 `automation/judge_runner/Dockerfile`
+`ingest_api` מכיל את `server/ingest_api.py` (FastAPI, פורט 8766) +
+`server/{auth,db,storage}.py`; `worker` מכיל את `server/worker.py` שקורא
+מהתור, מריץ את הצינור המלא (‏`llm_judge/judge_cli.analyze_and_judge`),
+כותב `verdicts.json` / `.md` + `report.html` (‏WeasyPrint) לדיסק וגם שולח
+webhook אל n8n אם `N8N_WEBHOOK_URL` מוגדר. `retention` הוא אותו image
+עם `command: server.retention` (‏ניקוי יומי + גיבוי DB).
+
+Ollama לא רץ בקונטיינר משלו כי הוא רץ טוב יותר על ה־host (‏גישה ישירה
+ל־RAM/GPU). קונטיינר `worker` פונה אליו דרך `host.docker.internal:11434`.
+אין `judge_runner` נפרד - כל הצינור חי בתוך `worker`, נגיש דרך התור, וללא
+`docker exec` בזמן ריצה.
+
+### 7.4 בניית ה־image של ה־worker
+
+הקובץ הוא `deploy/Dockerfile.worker` בריפו. הוא מתקין tshark, WeasyPrint
+(‏Pango + Cairo כדי לרנדר PDF), ואת כל תלויות הצינור והשופט. מוצג כאן
+כמראה מקום, המקור בריפו:
 
 ```dockerfile
 FROM python:3.11-slim
 
-# tshark ומינימום כלים
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tshark \
-    ca-certificates \
-    curl \
+    tshark ca-certificates curl \
+    libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+WORKDIR /netsec
+COPY requirements.txt server/requirements.txt llm_judge/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+      -r server/requirements.txt -r llm_judge/requirements.txt \
+      weasyprint
 
-# יותקן בזמן build פעם אחת; מוצג רק כדוגמה
-# ההתקנה תרוץ ב־entrypoint אם תרצה, כדי לתפוס עדכונים ל־requirements
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY server/ server/
+COPY llm_judge/ llm_judge/
+COPY app/ app/
+COPY attack_tests/ attack_tests/
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["python", "-m", "server.worker"]
 ```
 
-`entrypoint.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-cd /workspace
-pip install --no-cache-dir -r requirements.txt
-pip install --no-cache-dir -r llm_judge/requirements.txt || true
-# n8n יבצע docker exec לפקודה בפועל; כאן נשארים בחיים
-exec "$@"
-```
+אין `entrypoint.sh` שמריץ `pip install` על כל הפעלה - הכל בונים לתוך
+ה־image, ‏`docker compose up -d` עולה תוך שניות בפעם השנייה.
 
 ### 7.5 הרמה ראשונה
 
 ```bash
-cd automation
+cd deploy
+cp .env.example .env      # מלא את TS_BIND ו־N8N_ENCRYPTION_KEY לפחות
 docker compose up -d
 docker compose logs -f n8n
 ```
 
-- כתובת ה־UI: <http://localhost:5678>
-- מומלץ מיד: פתיחת workflow חדש, שמירת credentials, יצוא תקופתי של
-  ה־workflows (זמין ב־Settings → Import/Export).
+- כתובת ה־UI של n8n: `http://${TS_BIND}:5678` (הביקור הראשון פותח
+  אשף יצירת owner account - שמור את פרטי ההתחברות).
+- מומלץ מיד: יצירת חשבון owner, ‏import של `n8n_workflows/mvp_triage_email.json`
+  דרך ה־UI או ה־CLI (‏`docker compose exec n8n n8n import:workflow --input=/workflows/mvp_triage_email.json`),
+  הצמדת credential SMTP לצומת המייל, ואקטיבציה של ה־workflow.
 
-### 7.6 טעינת מודל ל־Ollama
+### 7.6 טעינת מודל ל־Ollama (על ה־host, לא בקונטיינר)
 
 ```bash
-docker exec -it netsec-ai-ollama-1 ollama pull llama3.2
-docker exec -it netsec-ai-ollama-1 ollama pull qwen2.5:7b     # אלטרנטיבה
-docker exec -it netsec-ai-ollama-1 ollama pull gemma3:4b      # קטן ומהיר
+# על ה־VM עצמה (או ה־host שמריץ את worker):
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable --now ollama
+ollama pull qwen2.5:14b   # ברירת מחדל של OLLAMA_MODEL ב־deploy/.env.example
+ollama pull phi4:14b      # אלטרנטיבה
+ollama pull llama3.1:8b   # קטן ומהיר
 ```
+
+הקונטיינר של ה־worker פונה ל־`http://host.docker.internal:11434` על
+Linux בזכות ה־`extra_hosts` שיתווסף בעת הצורך; ב־macOS/Windows זה עובד
+כברירת מחדל של Docker Desktop.
 
 ---
 
@@ -477,8 +506,8 @@ docker compose up -d
 - הוסף Knowledge (RAG): העלה את `docs/*.md`, `llm_judge/README.md`,
   `PROMPT_CHANGELOG.md`. Dify יבצע chunking + embedding.
 - Tools לדוגמה:
-  - **HTTP** - קריאה ל־`judge_runner` דרך n8n webhook, או ישירות
-    לשירות Python חשוף.
+  - **HTTP** - קריאה ל־`ingest_api` (‏`POST http://ingest_api:8766/v1/pcap`)
+    להפעלת ניתוח חדש, או ל־n8n webhook להזרמת אירוע נגזר.
   - **Function** - כלי מוגדר משתמש שכותב שורה ל־SQLite של audit.
   - **Web Search** - אם רלוונטי.
 - **System Prompt** לדוגמה:
@@ -559,72 +588,37 @@ rule-based pipeline over Wireshark captures, and you must:
 
 ## 10. חשיפת ה־PCAP והפרויקט לסוכן
 
-### 10.1 גישות מומלצות
+### 10.1 המנגנון היחיד שנשלח היום
 
-1. **Read-only mount** - ה־container של n8n רואה `incoming/` ב־`ro`
-   (קריאה בלבד). כתיבה רק ל־`llm_judge/output/` ול־`db/`.
-2. **API עטיפה** - הרם שירות Flask/FastAPI קטן ("judge_api") שנחשף רק
-   בתוך רשת ה־Compose. הסוכן קורא לו במקום להריץ `docker exec`.
-3. **File watcher בתוך container** - אלטרנטיבה ל־n8n Local File
-   Trigger: script שרץ בתוך `judge_runner` וקורא ל־webhook של n8n.
+הסוכן (‏n8n או Dify) **אינו** קורא PCAP מדיסק ואינו מריץ `docker exec`.
+במקומו הצינור עצמו יוזם את הצעד הבא:
 
-### 10.2 דוגמת עטיפת API (אופציונלית)
+1. הסנסור מעלה PCAP ל־`ingest_api` (‏HMAC + Tailscale) - הצינור
+   רץ אוטומטית על ה־worker.
+2. עם סיום הצינור, ה־worker שולח POST ל־`N8N_WEBHOOK_URL` עם
+   `{session_id, label, kind, sha256, results, worst}` (‏ראו
+   `server/worker.py::_notify`).
+3. ה־workflow ב־n8n מפעיל לוגיקה על ה־payload (סינון malicious/
+   suspicious, שליחת מייל, בקשת RAG מ־Dify, וכו').
+4. כאשר צריך את ה־HTML/PDF/JSON המלא, ה־workflow קורא ל־
+   `GET /v1/reports/{session_id}.{html|pdf|json|map}` על ה־`ingest_api`
+   ‏(‏עם bearer token של החיישן שיצר את הסשן; ראו `server/ingest_api.py`).
 
-```python
-# automation/judge_api/app.py
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import subprocess, json, os, tempfile
+### 10.2 הרשאות ובידוד
 
-app = FastAPI()
+- `n8n` יושב על אותה רשת פרטית של `deploy/docker-compose.yml`, אז הוא
+  ניגש ל־`ingest_api` בשם ה־service (‏`http://ingest_api:8766`) בלי לצאת
+  לרשת. אינו רואה את `/srv/netsec` ישירות בכלל.
+- `worker` הוא היחיד שכותב ל־`/srv/netsec/reports/` ול־DB. אין `docker
+  exec` שיוצא מהסוכן פנימה.
+- ‏Bearer tokens נשמרים כ־hash ב־DB; ‏HMAC secrets בשל הגנת המערכת נשמרים
+  בפורמט גלוי ומוגנים דרך הרשאות קובץ ה־DB.
 
-class Job(BaseModel):
-    pcap_path: str        # תוך /workspace/incoming/
-    provider: str | None = None
-    model: str | None = None
+### 10.3 שילוב Dify (אופציונלי)
 
-@app.post("/analyze")
-def analyze(job: Job):
-    env = os.environ.copy()
-    if job.provider: env["LLM_JUDGE_PROVIDER"] = job.provider
-    if job.model:    env["LLM_JUDGE_MODEL"]    = job.model
-
-    out_json = tempfile.NamedTemporaryFile(delete=False, suffix=".json").name
-    out_md   = tempfile.NamedTemporaryFile(delete=False, suffix=".md").name
-    cmd = [
-        "python", "llm_judge/judge_cli.py", job.pcap_path,
-        "--output", out_json, "--markdown", out_md,
-    ]
-    r = subprocess.run(cmd, cwd="/workspace", env=env,
-                       capture_output=True, text=True, timeout=1800)
-    if r.returncode != 0:
-        raise HTTPException(500, f"judge_cli failed: {r.stderr[:500]}")
-    with open(out_json) as f: verdict = json.load(f)
-    with open(out_md) as f: md = f.read()
-    return {"verdict": verdict, "report_md": md}
-```
-
-הוספה ל־compose:
-
-```yaml
-  judge_api:
-    build:
-      context: ./judge_runner
-    working_dir: /workspace
-    volumes:
-      - ../:/workspace:rw
-    environment:
-      - LLM_JUDGE_PROVIDER=${LLM_JUDGE_PROVIDER}
-      - OLLAMA_HOST=${OLLAMA_HOST}
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-    command: >
-      bash -lc "pip install fastapi uvicorn && \
-                uvicorn automation.judge_api.app:app --host 0.0.0.0 --port 8000"
-    networks: [netsec_ai]
-    # לא חושפים ל־host - רק ברשת הפנימית
-```
-
-מכאן, n8n או Dify Tool פונים ל־`http://judge_api:8000/analyze`.
+כדי לתת ל־Dify RAG על ה־verdicts, ‏cron ב־n8n מייצא כל `verdicts.md`
+חדש ל־Knowledge Base של Dify דרך ה־API שלו. Dify עצמו לא צריך גישה
+ישירה ל־PCAP או ל־DB.
 
 ---
 
@@ -632,18 +626,21 @@ def analyze(job: Job):
 
 ### 11.1 Workflow #1 - "Auto-triage of new PCAP"
 
-צעדים ב־n8n:
+הצעדים ב־n8n מסתדרים מסביב ל־webhook שה־worker כבר שולח (אין file
+trigger, כי הצינור רץ אוטומטית ברגע ש־PCAP מגיע ל־`ingest_api`):
 
-1. **Local File Trigger** על `/data/incoming` בפילטר `*.pcap*`.
-2. **Function** - מוציא את שם הקובץ ואת המסלול המלא בתוך הקונטיינר.
-3. **HTTP Request** → `POST http://judge_api:8000/analyze` עם המסלול.
-4. **IF** - אם `stats.malicious + stats.suspicious > 0`:
-   - **HTTP Request** → `POST /v1/chat-messages` של Dify עם ה־JSON
-     המלא ובקשה לסיכום מקוצר בעברית.
-   - **Slack / Telegram / Email** - שליחת הסיכום + לינק לקובץ ה־MD.
+1. **Webhook** על `/webhook/netsec-alert` (מקבל את payload ה־worker).
+2. **IF** - אם `body.worst ∈ {malicious, suspicious}`:
+   - **HTTP Request** → `GET http://ingest_api:8766/v1/reports/{body.session_id}.md`
+     עם ה־bearer token של החיישן, לקבלת הדוח בפורמט Markdown.
+   - **HTTP Request** → `POST /v1/chat-messages` של Dify (אופציונלי)
+     עם ה־MD המלא ובקשה לסיכום מקוצר בעברית.
+   - **Slack / Telegram / Email** - שליחת הסיכום + לינק ל־`report.html`.
    - **GitHub** node - פתיחת Issue אם ה־PCAP הועלה מ־fork ציבורי.
-5. תמיד: **SQLite** node שכותב שורת audit
-   (`ts, pcap, provider, model, verdict_counts, hash`).
+3. **PostgreSQL / SQLite** node אופציונלי לרישום audit
+   (`ts, session_id, sha256, worst, results_count`). לפעולות אלה
+   ה־worker כבר כותב ל־`sessions/verdicts/candidates` ב־`netsec.db`.
+   ה־audit הנוסף רלוונטי רק אם רוצים לשמר לוג נפרד ב־n8n.
 
 ### 11.2 Workflow #2 - "Second opinion" (ועדת שופטים)
 
@@ -657,9 +654,9 @@ def analyze(job: Job):
 ### 11.3 Workflow #3 - "Chat with the analyst"
 
 בצד Dify:
-- Chatflow עם RAG על מסמכי הפרויקט.
-- כלי מובנה שמפעיל את `judge_api` אם המשתמש שואל
-  "רוץ שוב על ה־PCAP האחרון".
+- Chatflow עם RAG על מסמכי הפרויקט + `verdicts.md` שהוזרמו אליו מ־n8n.
+- כלי מובנה שמפעיל את `ingest_api` (‏`POST /v1/pcap`) אם המשתמש שואל
+  "רוץ שוב על ה־PCAP האחרון" - זהה למסלול העלאה רגיל.
 - Memory לשיחה שנשמר ב־Postgres של Dify.
 
 ### 11.4 Workflow #4 - "Threat Intel enrichment"
@@ -728,7 +725,8 @@ def analyze(job: Job):
   (`5678` ל־n8n, `80` ל־Dify).
 - שים Reverse Proxy (Caddy / Nginx / Traefik) עם TLS ומגן BasicAuth
   אם רוצים לגשת מבחוץ.
-- **אל תחשוף** את `judge_api`, את `postgres` או את `ollama` לאינטרנט.
+- **אל תחשוף** את `ingest_api`, את `postgres` של Dify או את `ollama`
+  לאינטרנט. הפרויקט קובע Tailscale-only כברירת מחדל (‏decision IDX-08).
 - אם משתמשים ב־ngrok/Cloudflare Tunnel, הגדר Access Rules לפחות
   ברמת email/OAuth.
 
@@ -762,9 +760,13 @@ def analyze(job: Job):
 
 ```bash
 docker compose logs -f n8n
-docker compose logs -f dify-api dify-worker
-docker compose logs -f judge_api
-docker compose logs -f ollama
+docker compose logs -f ingest_api
+docker compose logs -f worker
+docker compose logs -f retention
+# Ollama רץ על ה־host, לא בקונטיינר:
+sudo journalctl -u ollama -f
+# Dify (אם מותקן בנפרד):
+docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worker
 ```
 
 ### 14.2 מדדים
@@ -798,36 +800,57 @@ docker compose logs -f ollama
 ## 16. Checklist להשקה - מה חייב להיות מוכן
 
 - [ ] Docker + Compose מותקנים ורצים (`docker run hello-world`).
-- [ ] `automation/.env` מלא (`N8N_ENCRYPTION_KEY` ייחודי; לא ברירת מחדל).
-- [ ] `.gitignore` כולל `automation/.env`, `automation/db/`, `automation/n8n_data/`,
-      `dify/docker/volumes/`, ו־`llm_judge/output/`, `llm_judge/cache/`
-      (חלק כבר קיים).
-- [ ] Ollama עלה, מודל אחד לפחות נמשך (`ollama pull llama3.2`).
-- [ ] n8n עולה ב־`http://localhost:5678`, יצרת משתמש/סיסמה.
-- [ ] Workflow #1 (Auto-triage) עלה, נבדק על PCAP קיים.
-- [ ] `judge_api` (או `docker exec`) מחזיר `verdicts.json` תקין.
-- [ ] Dify עלה, App מסוג Agent הוגדר, RAG טעון עם `docs/*.md`.
-- [ ] מפתחות ספק LLM (אם רלוונטי) נשמרים רק ב־`.env`, לא בגיט.
-- [ ] Backup לשני ה־Stacks הוגדר.
+- [ ] `deploy/.env` מלא (`TS_BIND` = ה־IP של Tailscale, `N8N_ENCRYPTION_KEY`
+      ייחודי; לא ברירת מחדל).
+- [ ] `.gitignore` כולל `deploy/.env`, `llm_judge/cache/`,
+      `llm_judge/output/`, ‏`dify/docker/volumes/`.
+- [ ] Ollama רץ על ה־host, מודל אחד לפחות נמשך (`ollama pull qwen2.5:14b`).
+- [ ] `docker compose up -d` ב־`deploy/` הפעיל את 4 השירותים
+      (n8n, ingest_api, worker, retention).
+- [ ] `curl -s http://${TS_BIND}:8766/healthz` מחזיר
+      `{"status":"ok","schema":<n>}`.
+- [ ] n8n עולה ב־`http://${TS_BIND}:5678`, יצרת owner account.
+- [ ] ‏`n8n_workflows/mvp_triage_email.json` יובא ומופעל; ‏credential
+      SMTP מצומד לצומת המייל; ‏`N8N_WEBHOOK_URL` ב־`.env` מצביע ל־
+      Production URL של ה־Webhook, ו־`docker compose restart worker`
+      רוענן את ה־worker.
+- [ ] `python deploy/create_sensor.py <שם>` הריץ בהצלחה והדפיס
+      את ה־credentials פעם אחת; שמרת אותם בסביבת החיישן.
+- [ ] העלאת PCAP לדוגמה מסנסור אמיתי:
+      `python3 tools/upload_pcap.py capture.pcapng` מחזירה
+      `session_id`, ו־`GET /v1/sessions/{id}` מגיע ל־`status:"done"`
+      עם `verdicts.json`/`.md`/`report.html` בדיסק.
+- [ ] Dify (אופציונלי) עלה, App מסוג Agent הוגדר, RAG טעון עם
+      `docs/*.md`.
+- [ ] מפתחות ספק LLM (אם רלוונטי) נשמרים רק ב־`deploy/.env`, לא בגיט.
+- [ ] Backup ל־`${NETSEC_DATA_ROOT}/db/` ול־`n8n_data` volume הוגדר.
 - [ ] Notifications (Slack / Telegram / Email / GitHub) נבדקו קצה לקצה.
-- [ ] קליברציה: `python llm_judge/calibration.py` עברה עם kappa ≥ סף.
+- [ ] קליברציה: הרצה של הנוטבוק `llm_judge/LLM_Judge_Notebook.ipynb`
+      בסקציית ה־calibration (או שימוש ב־`llm_judge/calibration.py`
+      מתוך קוד) עברה עם `kappa ≥ LLM_JUDGE_KAPPA_THRESHOLD` (ברירת
+      מחדל 0.60).
 
 ---
 
 ## 17. שאלות נפוצות ותקלות מוכרות
 
-### 17.1 "n8n לא רואה קבצים חדשים ב־incoming/"
+### 17.1 "n8n לא מקבל אירוע webhook"
 
-- ודא שה־mount הוא `../incoming:/data/incoming:ro` וה־Trigger מצביע
-  על `/data/incoming`.
-- ב־Windows יש לפעמים בעיות inotify - הגדר את ה־trigger כ־poller
-  (ב־n8n: node "Read Binary Files" עם Cron).
+- ודא שה־workflow פעיל (Active מלמעלה-ימין) ושה־Webhook הוא מסוג
+  Production, לא Test - ה־Test URL תקף לביקור ידני יחיד ואז נעלם.
+- ודא ש־`N8N_WEBHOOK_URL` ב־`deploy/.env` מצביע לאותה כתובת של
+  ה־Webhook, ושה־worker רוענן (`docker compose restart worker`).
+- בדוק דרך `docker compose logs -f worker` שהוא באמת עושה POST ולא
+  זורק חריגה.
 
 ### 17.2 "Ollama מחזיר timeout"
 
-- הגדל `LLM_JUDGE_TIMEOUT_S=600` בסביבה של judge_runner.
+- הגדל `LLM_JUDGE_TIMEOUT_S=600` ב־`deploy/.env` (ברירת מחדל 300).
 - ודא שהמודל **נמשך** (`ollama pull`) - הפעם הראשונה מורידה גיגה־בייטים.
-- למחשב חלש: החלף ל־`gemma3:4b` או `phi3:mini`.
+- למחשב חלש: החלף ל־`gemma3:4b` או `phi4:14b` (הפחות תלוי-חומרה).
+- ב־Docker Compose ה־worker פונה ל־`host.docker.internal:11434`; בדוק
+  ש־Ollama מאזין על כל הממשקים (ברירת המחדל היא רק loopback):
+  `OLLAMA_HOST=0.0.0.0 systemctl restart ollama` (או `-e` דומה).
 
 ### 17.3 "Dify לא מוצא את Ollama"
 
@@ -856,16 +879,26 @@ docker compose logs -f ollama
 
 ## 18. מפת דרכים להמשך
 
-שלבים המוצעים ליישום, מסודרים לפי סדר:
+שלבים המוצעים ליישום, מסודרים לפי סדר. שלבים 1-3 כבר יצאו לפועל
+בגרסה הנוכחית של הפרויקט; שלבים 4-8 עדיין לפניכם.
 
-1. **פיילוט מקומי** - n8n + Ollama + `judge_api` בלבד. workflow יחיד.
-2. **חיבור Dify** - הוספת Agent עם RAG על המסמכים.
-3. **Second-opinion Committee** - ולידציה של פסיקה על ידי שני מודלים.
-4. **Threat-Intel Enrichment** - WHOIS / GeoIP / ASN לפני החלטה.
-5. **התראות + Ticketing** - Slack/Telegram + GitHub Issue אוטומטי.
-6. **Observability** - Prometheus/Grafana לצד המדדים של הפרויקט.
-7. **Multi-tenant** - הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
-8. **CI Gate** - הרחבת `tests/test_judge_kappa_regression.py` שיריץ
+1. ✅ **פיילוט מקומי** - `deploy/` על VM (Oracle Always Free ARM
+   או כל Ubuntu 22.04+) עם n8n + `ingest_api` + `worker` + `retention`,
+   Ollama על ה־host, workflow אחד (`mvp_triage_email.json`) שנשלח
+   בריפו.
+2. ✅ **פאנל שופטים הטרוגני** (‏במקום הקומיטה הישנה של שני שופטים):
+   Groq + Gemini + Ollama, ‏panel debate עם צד fail-safe והצבעה
+   ל־human review. מיושם ב־`llm_judge/judge_core.judge_candidates_panel`.
+3. ✅ **חיבור OSINT** (‏Wigle + Shodan) - stage YA, ‏`W_TI` מופעל וה־
+   priority score משוקלל מחדש.
+4. **חיבור Dify** (‏אופציונלי) - הוספת Agent עם RAG על המסמכים.
+5. **Threat-Intel Enrichment נוסף** - WHOIS / GeoIP / ASN לפני החלטה
+   על מועמדים חיצוניים.
+6. **התראות מובנות** - Slack / Telegram חיבורים מובנים ב־n8n מעבר
+   ל־Email.
+7. **Observability** - Prometheus/Grafana לצד המדדים של הפרויקט.
+8. **Multi-tenant** - הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
+9. **הרחבת CI Gate** - `tests/test_judge_kappa_regression.py` שיריץ
    גם את הזרימה החדשה על PCAP סינטטי כחלק מ־regression.
 
 ---

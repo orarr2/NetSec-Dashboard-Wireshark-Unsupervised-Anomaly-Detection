@@ -23,10 +23,10 @@ Mermaid formats and one Graphviz format.
 ## Decisions captured
 
 1. Supervised vs unsupervised → unsupervised (no labels; RF/XGBoost/SVM rejected)
-2. Single model vs ensemble → IsolationForest + DBSCAN + LSTM
-3. IsolationForest contamination → sensitivity sweep [0.05, 0.10, 0.15]
-4. DBSCAN eps → auto k-distance elbow (S1=0.78, S2=4.86), not hard-coded
-5. DBSCAN min_samples → 2 (not ≥3, which collapses to noise in 7-D)
+2. Single model vs ensemble → IsolationForest + DBSCAN + LSTM + deterministic rules
+3. IsolationForest contamination → fixed 0.10 (seed-stability sweep matched fixed 0.10 F1 at 15× the cost; retired). See `docs/TRADEOFFS_EN.md` §7.
+4. DBSCAN eps → auto k-distance elbow, per-capture (illustrative measurements varied 0.78 / 4.86 on two real captures); fallbacks documented in `docs/MODEL_DIAGNOSTICS.md`
+5. DBSCAN min_samples → 2 (raising it collapses the 10-D feature space to noise)
 6. LSTM sequence sampling → contiguous (not step-sampling)
 7. LSTM error baseline → held-out validation (not training set), flag > mean+2σ
-8. Evaluation without labels → Silhouette + Hopkins + model-agreement matrix
+8. Evaluation with labelled ground truth → `attack_tests/` fixtures + regression suite

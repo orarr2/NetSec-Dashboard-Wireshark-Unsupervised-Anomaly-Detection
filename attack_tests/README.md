@@ -13,10 +13,12 @@ python3 attack_tests/run_pipeline.py \
 ```
 
 `run_pipeline.py` is a faithful subset of the notebook - tshark feature
-extraction, IsolationForest contamination sweep, k-NN-elbow DBSCAN with
-the spoofed-flood guards, the FTP / SMTP / SYN / FIN / NULL / Xmas /
-RST / ARP / DNS rule set, the DNS-response amp rule, and the per-second
-mean-packet-size LSTM. No Dash UI; everything else is identical.
+extraction, IsolationForest at the fixed `contamination = 0.10`
+(seed-stability sweep retired, see `docs/TRADEOFFS_EN.md` §7),
+k-NN-elbow DBSCAN with the spoofed-flood guards, the FTP / SMTP / SYN /
+FIN / NULL / Xmas / RST / ARP / DNS rule set, the DNS-response amp
+rule, and the per-second mean-packet-size LSTM. No Dash UI; everything
+else is identical.
 
 ## Bundled PCAPs
 

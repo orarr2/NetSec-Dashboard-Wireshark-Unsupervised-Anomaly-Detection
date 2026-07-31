@@ -20,16 +20,22 @@ a human, wired to nothing.
 
 ## Providers - bring your own model
 
-Three interchangeable providers; pick with `LLM_JUDGE_PROVIDER`:
+Three built-in providers plus arbitrarily many **named endpoint
+profiles**. Pick a single-judge run with `LLM_JUDGE_PROVIDER`, or a
+multi-provider panel with `LLM_JUDGE_PANEL`:
 
 | Provider | What it is | Setup | Cost |
 |---|---|---|---|
 | `claude` (default) | Anthropic API - best JSON quality | `pip install -r llm_judge/requirements.txt` + set `ANTHROPIC_API_KEY` with **your own** key | your key, cents per PCAP |
-| `ollama` | Local model via the Ollama daemon | install from <https://ollama.com>, `ollama pull llama3.2` | free, offline |
+| `ollama` | Local model via the Ollama daemon | install from <https://ollama.com>, `ollama pull qwen2.5:14b` (or any other model) | free, offline |
 | `openai_compat` | Any OpenAI-style chat-completions endpoint: LM Studio / llamafile / vLLM locally, or hosted services that expose the OpenAI protocol | set `OPENAI_COMPAT_BASE_URL` + `OPENAI_COMPAT_MODEL` (+ `OPENAI_COMPAT_API_KEY` if the endpoint needs one) | free locally; hosted per its own terms |
+| **Endpoint profile** | A named OpenAI-compatible host, so one panel can mix several providers (Groq + Gemini + …) without editing code | Define three env vars per profile: `LLM_JUDGE_EP_<NAME>_BASE_URL`, `LLM_JUDGE_EP_<NAME>_MODEL`, `LLM_JUDGE_EP_<NAME>_KEY_ENV=<env-var-holding-the-key>`. `deploy/.env.example` ships five ready-to-go profiles: `GROQ`, `GEMINI`, `CEREBRAS`, `OPENROUTER`, `GITHUB`. Reference them in a panel as `groq:<model>`, `gemini:<model>`, ... | per provider's free-tier terms |
 
 **No API key is ever stored in this repo.** Keys are read from the
 environment at call time; each user pays (or doesn't) for their own usage.
+The endpoint-profile mechanism deliberately does not borrow the global
+`OPENAI_COMPAT_API_KEY` or `OPENAI_COMPAT_MODEL`: a profile's key and
+model must be its own, so a wrong key never leaks across providers.
 
 ## Quick start
 
@@ -130,6 +136,10 @@ toggling the guardrail never needs a cache reset.
 | `benchmark.py` | Model qualification: judge the labeled fixtures, score accuracy/latency |
 | `benchmark_fixtures.json` | 11 labeled candidates extracted from the attack PCAPs (committed) |
 | `calibration.py` | Cohen's-kappa calibration against `attack_tests/ground_truth.json` |
+| `send_report.py` | Standalone SMTP delivery (used by `judge_cli --email`, by the GitHub Actions workflow, and importable from anywhere in the project - Gmail App Password default, any SMTP host works) |
+| `threat_intel.py` | Merges Shodan reputation into a candidate's TI signal + ranking weight (`W_TI`); loaded by the VM worker's re-rank pass |
+| `quota.py` | `QuotaStore` - a small SQLite counter for per-provider daily request / token counts, wired to the `usage` field the OpenAI-compatible clients return. Informational; nothing auto-skips a provider that hits its limit |
+| `requirements.txt` | Optional judge-only deps (`anthropic`) on top of the project root `requirements.txt` |
 | `schemas/*.schema.json` | The input/output JSON contracts |
 | `PROMPT_CHANGELOG.md` | Prompt version history + kappa per version |
 | `calibration/results/` | Committed calibration reports (CI gate reads the newest) |
@@ -188,12 +198,18 @@ result; skips until the first one exists).
 | `OPENAI_COMPAT_BASE_URL` | `http://localhost:1234/v1` | OpenAI-style endpoint (default: LM Studio local server) |
 | `OPENAI_COMPAT_MODEL` | - | Model name at that endpoint (required for this provider) |
 | `OPENAI_COMPAT_API_KEY` | - | Bearer key, only if the endpoint needs one |
-| `LLM_JUDGE_PANEL` | - | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off |
+| `LLM_JUDGE_EP_<NAME>_BASE_URL` / `_MODEL` / `_KEY_ENV` | - | Named endpoint profile (see the Providers section). Any number of profiles; referenced in a panel as `<name>:<model>`. |
+| `LLM_JUDGE_PANEL` | - | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off. Wins over `LLM_JUDGE_PROVIDER` for the run |
 | `LLM_JUDGE_DEBATE` | `1` | `0` skips the debate round (plain N-way vote) |
+| `LLM_JUDGE_COMMITTEE` | `0` | Legacy two-judge committee mode. Superseded by `LLM_JUDGE_PANEL` |
+| `LLM_JUDGE_COMMITTEE_MODEL_B` | `llama-3.1-8b-instant` | Second model for the legacy committee |
 | `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` disables the benign-override guardrail |
 | `LLM_JUDGE_EFFORT` | `medium` | Claude reasoning effort (`low`/`medium`/`high`) |
 | `LLM_JUDGE_TIMEOUT_S` | `300` | Per-request timeout (local models can need minutes on first load) |
+| `LLM_JUDGE_MAX_TOKENS` | `8192` | Max output tokens per verdict |
 | `LLM_JUDGE_MAX_CANDIDATES` | `40` | Per-batch cap; rule-triggered candidates always survive |
+| `LLM_JUDGE_KAPPA_THRESHOLD` | `0.60` | CI regression gate on category-kappa (`tests/test_judge_kappa_regression.py`) |
+| `LLM_JUDGE_QUOTA_DB` | `llm_judge/cache/llm_quota.sqlite` | Where `QuotaStore` writes per-provider daily usage counters |
 | `LLM_JUDGE_ENABLED` | `1` | `0` turns the judge into a no-op |
 | `SMTP_USER` | - | Mailbox to send the report from (enables `--email`) |
 | `SMTP_PASS` | - | App password for that mailbox |

@@ -1,232 +1,304 @@
 # NetSec Automation Quickstart
 
-> **This document describes running the stack on your own machine.** The
-> reference deployment no longer does that - it runs on a free Oracle
-> Cloud ARM VM reached over Tailscale, and the dashboard's button uploads
-> there rather than writing to a local folder. See
-> [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md) for that setup, which is what
-> the default configuration in `app/dashboard_module.py` points at.
->
-> Everything below still applies if you want the stack local: the compose
-> file, the workflow, and the `.env` are identical. Only the host differs.
-> To use a local stack, set `NETSEC_REMOTE_HOST=localhost`.
+The reference deployment runs on a small VM you control (Oracle Always
+Free ARM is the recommended $0 path) reached over Tailscale. The
+dashboard, the notebook and the CLI can all send a PCAP into it; the
+worker analyses each capture, writes verdicts + HTML/PDF reports, and an
+n8n workflow emails an alert when the verdict is malicious or suspicious.
 
-The dashboard has a **Send S1 / S2 to n8n Alert** button in its sidebar
-that ships the session's PCAP through a judge (via Groq by default) and
-emails you an HTML alert if any verdict is `malicious` or `suspicious`.
+Everything the VM needs is in `deploy/`. This file walks through the
+common questions people hit when standing that up. For the reference
+deployment steps, see [deploy/README.md](../deploy/README.md); for the
+firewall / Oracle Security-List / iptables details, see
+[VM_DEPLOYMENT.md](VM_DEPLOYMENT.md).
 
-The automation is fully containerised. Everything runs inside Docker -
-Windows, Mac, and Linux use the exact same commands. Nothing has to be
-installed on the host beyond Docker itself and (for the dashboard side)
-Python + Wireshark. The dashboard notebook works without any of this -
-the button just refuses to copy the file, with a clear warning, when
-the stack isn't up.
+The dashboard notebook works without any of this - the VM path is the
+"always-on" mode, not a required dependency.
 
 ---
 
-## What it is
+## What ships in `deploy/`
 
-Two containers, one docker-compose file:
+Four docker-compose services + one Dockerfile per app image, all bound
+to `TS_BIND` (your VM's Tailscale IP) so nothing listens on a public
+interface:
 
-| service    | port  | what it does                                             |
-|------------|-------|----------------------------------------------------------|
-| n8n        | 5678  | polls `incoming/` every 60 s, orchestrates, sends emails |
-| judge_api  | 8765  | HTTP wrapper around `llm_judge/judge_cli.py`             |
+| service     | port | what it does                                                    |
+|-------------|------|-----------------------------------------------------------------|
+| `ingest_api`| 8766 | signed streaming HMAC upload endpoint (`/v1/pcap`), health + reports |
+| `worker`    | -    | claims queued sessions, runs the detection pipeline, writes reports |
+| `retention` | -    | daily housekeeping (7-day raw purge, 85% watermark, DB backup, VACUUM) |
+| `n8n`       | 5678 | receives the worker's alert webhook and sends the email        |
 
-Data flow when you click the button:
+Storage layout under `NETSEC_DATA_ROOT` (default `/srv/netsec`):
 
 ```
-dashboard button  →  incoming/{SESSION}_{TS}_{name}.pcap
-                                   │
-                       n8n poll (60 s)
-                                   ▼
-                     judge_api /analyze
-                                   │
-                LLM provider (Groq by default)
-                                   │
-                    HTML email via Gmail
-                                   │
-                 PCAP moves to processed/
+data/pcap/YYYY/MM/DD/<sha8>_<orig>.pcap    raw captures - 7 days, then purged
+data/fields/YYYY/MM/<sha8>.tsv.gz          gzipped field export - kept forever
+reports/<session_id>/{verdicts.json,verdicts.md,report.html,report.pdf}
+db/netsec.db (+ dated backups)             SQLite history
 ```
 
-Everything under `automation/` is gitignored - secrets, DB volumes,
-workflow templates, logs. Nothing there gets committed.
+Sensor upload → ingest API queues a session → worker analyses → verdicts
++ reports on disk → webhook to n8n → email out.
 
 ---
 
 ## Prerequisites
 
-Install once:
+Install on the VM:
 
-1. **Docker Desktop** (Windows / Mac) or **Docker Engine + Compose plugin**
-   (Linux). <https://www.docker.com/products/docker-desktop/>
-2. **Wireshark** - only needed for the dashboard notebook side, to capture
-   PCAPs. Not needed by the containers. <https://www.wireshark.org/>
-3. **A Groq API key** - free tier, no credit card. Sign up at
-   <https://console.groq.com>, create an API key that starts with `gsk_`.
-4. **A Gmail App Password** - 16 characters. Requires 2FA on your Google
-   account first, then generate at
-   <https://myaccount.google.com/apppasswords>.
+1. **Docker Engine + Compose plugin** (Ubuntu 22.04+, x86-64 or ARM).
+   `sudo apt-get install docker.io docker-compose-plugin`.
+2. **Tailscale**. `curl -fsSL https://tailscale.com/install.sh | sh &&
+   sudo tailscale up --hostname=<name>`.
+3. **chrony** (NTP - required by the telemetry-reconciliation protocol,
+   `docs/ARCHITECTURE_HE.md` §12).
 
-You do **not** need to install Python, Node.js, tshark, or any Python
-package on the host to run the automation stack - all of that lives
-inside the `judge_api` container.
+Install on any machine that needs to talk to the VM:
+
+- **Tailscale** (join the same tailnet as the VM).
+- **Wireshark** including `tshark` - needed only where you capture
+  PCAPs, not on the VM itself.
+
+Free-tier LLM API keys are optional. The zero-key path is
+`LLM_JUDGE_PROVIDER=ollama` with a local Ollama daemon; every provider
+in `deploy/.env.example` is off by default and only turns on when you
+paste a key.
 
 ---
 
 ## Configure once
 
-From the repo root:
-
 ```bash
-cd automation
+git clone <your-fork>
+cd <repo>/deploy
 cp .env.example .env
 ```
 
-Open `.env` in an editor and fill in:
+Open `.env` and set at minimum:
 
-- `N8N_BASIC_AUTH_PASSWORD` - pick anything strong. This is the n8n admin
-  login.
+- `TS_BIND` - your VM's Tailscale IP (`tailscale ip -4`).
 - `N8N_ENCRYPTION_KEY` - 32 random characters. Any of these work:
-  - Linux / Mac: `openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 32`
+  - Linux / Mac:
+    `openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 32`
   - Windows PowerShell:
     `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 32 | ForEach-Object {[char]$_})`
-  - **Losing this key wipes every credential you save inside n8n.** Back
-    it up outside the repo (a password manager, encrypted file, etc.).
-- `OPENAI_COMPAT_API_KEY` - paste the `gsk_...` Groq key.
+  - **Losing this key wipes every credential you save inside n8n.**
+    Back it up outside the repo (a password manager, encrypted file).
 
-Do NOT commit `.env`. It's gitignored, but double-check with `git status`
-before pushing.
+Everything else in `.env.example` ships with a working default from the
+code. See the file itself for what every variable does; the highlights:
+
+- `NETSEC_DATA_ROOT` - where PCAPs, reports and the DB live
+  (`/srv/netsec` default). `retention` keeps this bounded, so it never
+  spills onto a paid volume.
+- `LLM_JUDGE_PANEL` - the default panel needs Groq + Gemini + local
+  Ollama keys. For a zero-key run, use just
+  `LLM_JUDGE_PANEL=ollama:qwen2.5:14b,ollama:phi4:14b` or drop the
+  panel entirely and set `LLM_JUDGE_PROVIDER=ollama`.
+- `NETSEC_NOTIFY_EMAIL` and `N8N_WEBHOOK_URL` - optional per-session
+  delivery. Set the one you use; leave the other blank.
+- `SMTP_USER` / `SMTP_PASS` - only if you use the direct-email path
+  (`llm_judge/send_report.py`) or `NETSEC_NOTIFY_EMAIL`. Gmail App
+  Passwords: enable 2FA first, then generate at
+  <https://myaccount.google.com/apppasswords>.
+
+`deploy/.env` is gitignored; double-check with `git status` before
+pushing.
 
 ---
 
 ## Bring the stack up
 
-One command, same on every OS:
+From `deploy/`:
 
 ```bash
+sudo mkdir -p /srv/netsec && sudo chown $USER /srv/netsec
 docker compose up -d
 ```
 
-**What happens on first run (5-10 min):**
+**First run** (2-6 min): Docker builds the `ingest_api` and `worker`
+images (installs `fastapi`, `numpy`, `pandas`, `scikit-learn`, `torch`,
+`scapy`, `weasyprint`), pulls `n8nio/n8n:latest`, and initialises the
+n8n SQLite DB.
 
-1. Docker builds the `judge_api` image (~1 min).
-2. `judge_api` container starts. Its entrypoint installs the project's
-   Python dependencies (numpy, pandas, sklearn, torch, scapy, etc.) into
-   a named volume so subsequent restarts skip this step.
-3. `n8n` container starts and reaches port 5678.
+**Subsequent runs**: seconds - all four services come back up in place.
 
-**What happens on every subsequent run (few seconds):**
-
-- Both containers restart in place. The pip install is cached in the
-  named volume, so `judge_api` is ready almost immediately.
-
-Verify:
+Verify from any machine on your tailnet:
 
 ```bash
-docker compose ps
-# both containers should read "Up ... (healthy)"
+# ingest API - should return {"status":"ok","schema":<n>}
+curl -s http://<vm-tailscale-ip>:8766/healthz
 
-curl http://localhost:8765/health
-# {"status":"ok", ...}
+# n8n UI answers (302 to /setup on first visit, 200 after)
+curl -s -o /dev/null -w "%{http_code}\n" http://<vm-tailscale-ip>:5678/
 ```
+
+Confirm from the public internet that neither port answers - only
+Tailscale peers should reach them.
 
 ---
 
-## Two manual steps in the n8n UI (one-time)
+## Register a sensor
 
-Open <http://localhost:5678> and log in with `admin` + the password from
-`.env`.
+Every uploader needs its own HMAC secret. Sensor names identify one
+uploader (a laptop, a Pi, a CI runner):
 
-### 1. Import and activate the workflow
+```bash
+# from deploy/, as the same user that owns /srv/netsec
+sudo NETSEC_DATA_ROOT=/srv/netsec python3 create_sensor.py laptop
+```
 
-- **Workflows** → **⋮** → **Import from File** → select
-  `automation/n8n_workflows/mvp_triage_email.json`.
-- Open the imported workflow. Toggle **Active** (top-right, next to
-  Publish). This is what makes the 60-second schedule trigger actually
-  fire - without it, the workflow only runs when you click "Execute
-  workflow" by hand.
+Output (printed once, not recoverable - the token is stored hashed, the
+HMAC secret is stored plain because HMAC verification needs the secret
+itself):
 
-### 2. Add the Gmail SMTP credential
+```
+# sensor 'laptop' registered - shown ONCE, store safely
+NETSEC_SENSOR_ID=laptop
+NETSEC_SENSOR_SECRET=<64 hex chars>
+NETSEC_API_TOKEN=<44-char urlsafe>
+```
 
-Sidebar → **Credentials** → **+ Add Credential** → search for **SMTP**.
+Paste those three lines into the environment of whatever machine will
+upload PCAPs. Revoking a compromised sensor is one SQL statement:
 
-| field    | value                                          |
-|----------|------------------------------------------------|
-| Name     | `Gmail SMTP` (any name, but be consistent)     |
-| User     | your full Gmail address                        |
-| Password | the 16-char App Password (spaces are ignored)  |
-| Host     | `smtp.gmail.com`                               |
-| Port     | `587`                                          |
-| SSL/TLS  | **off** (STARTTLS on port 587)                 |
+```sql
+UPDATE sensors SET revoked_at = datetime('now') WHERE name = 'laptop';
+```
 
-Save. Then open the workflow, click the **Send Gmail alert** node, and
-set **Credential to connect with** to `Gmail SMTP`. Save the workflow.
+Cross-sensor authorisation is enforced: a bearer token can read only
+its own sessions and reports. Set `NETSEC_ADMIN_SENSOR=<name>` (the
+sensor name your central dashboard registers under) if you want that
+one sensor's token to read every sensor's sessions.
 
-That's it. Everything downstream is automated. Credentials only need to
-be re-entered if the `n8n_data` volume is destroyed
-(`docker compose down -v`).
+---
+
+## Wire up the n8n alert workflow
+
+Open `http://<vm-tailscale-ip>:5678` in a browser (the first visit walks
+you through creating an owner account - keep that credential safe;
+`N8N_BASIC_AUTH_*` is not supported in modern n8n).
+
+1. **Workflows** → **⋮ (import)** → **Import from File** → select
+   `deploy/n8n_workflows/mvp_triage_email.json`. This ships as a
+   volume mount at `/workflows` inside the container, so you can also
+   run:
+   ```bash
+   docker compose exec n8n n8n import:workflow \
+     --input=/workflows/mvp_triage_email.json
+   ```
+2. Open the imported workflow (**NetSec Triage Alert**). Click the
+   **Send Email Alert** node and attach an SMTP credential - **+ Add
+   Credential** → **SMTP**:
+
+   | field    | value                                          |
+   |----------|------------------------------------------------|
+   | Name     | `NetSec SMTP` (any name, but be consistent)    |
+   | User     | your full mailbox                              |
+   | Password | app password or account password (per provider) |
+   | Host     | your SMTP host (e.g. `smtp.gmail.com`)         |
+   | Port     | `587`                                          |
+   | SSL/TLS  | **off** (STARTTLS on port 587)                 |
+
+3. Set the `fromEmail` and `toEmail` fields on the node to your
+   addresses. Toggle **Active** (top-right) so the webhook is live.
+4. Copy the **Production URL** of the `Worker Webhook` node (looks like
+   `http://<vm-ip>:5678/webhook/netsec-alert`) and paste it into
+   `N8N_WEBHOOK_URL` in `deploy/.env`, then
+   `docker compose restart worker`.
+
+That's it. The worker POSTs `{session_id, label, kind, sha256, results,
+worst}` to the webhook after every session; the workflow's IF node
+gates on `worst` matching `malicious|suspicious`; matching sessions
+email out.
+
+Credentials only need to be re-entered if the `n8n_data` named volume
+is destroyed (`docker compose down -v`) or if you lose the
+`N8N_ENCRYPTION_KEY`.
 
 ---
 
 ## Auto-start on host boot
 
-Both containers use `restart: unless-stopped`, so as long as the Docker
-daemon is running they come back up on their own. To make Docker itself
-start automatically:
+All four services use `restart: unless-stopped`, so the Docker daemon
+brings them back automatically. Enable the daemon itself:
 
-- **Windows / Mac**: Docker Desktop → Settings → General → check
-  "Start Docker Desktop when you sign in".
-- **Linux**: `sudo systemctl enable docker`.
+```bash
+sudo systemctl enable docker
+```
 
-After that, you never need to run any command to bring the stack up. It
-just is up.
+There is one race worth knowing about: `${TS_BIND}` is a `tailscale0`
+address, so Docker can start before `tailscaled` assigns the IP and
+fail to bind. `restart: unless-stopped` retries with backoff, so it
+converges within a minute; add an `After=tailscaled.service`
+docker.service drop-in if the delay bothers you.
 
 ---
 
-## Verify it works end-to-end
+## Verify end-to-end
 
-Two independent ways:
+Three independent ways:
 
-**A. From the dashboard button** (the whole point of the stack).
-
-1. Open the dashboard notebook, load any PCAP, click
-   **Send S1 to n8n Alert** in the sidebar.
-2. Watch the status message under the button. If the stack is up you'll
-   see `✅ Copied to incoming/S1_<timestamp>_<filename>`. If it isn't,
-   you'll see a `⚠️` block telling you exactly what's missing.
-3. Wait ≈90 seconds. If any verdict is malicious or suspicious, an
-   HTML alert lands in your inbox.
-
-**B. By dropping a file directly.**
+**A. Upload with the CLI** (the simplest smoke test):
 
 ```bash
-cp attack_tests/pcaps/xmas_scan.pcap incoming/
+export NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766
+export NETSEC_SENSOR_ID=laptop
+export NETSEC_SENSOR_SECRET=<from create_sensor>
+python3 tools/upload_pcap.py attack_tests/pcaps/tcp_syn_scan.pcap
+# Prints {"session_id": N, ...}. Wait a moment for the worker.
+curl -s -H "Authorization: Bearer <token>" \
+  http://<vm-tailscale-ip>:8766/v1/sessions/N
+# {..., "status":"done", "n_pkts":2020, ...}
+open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
 ```
 
-The workflow's next poll picks it up. Same ~90-second wait. The file
-moves to `processed/{ts}_xmas_scan.pcap` on success so the same filename
-can be re-analysed later.
+If `N8N_WEBHOOK_URL` is configured, an email lands within a few seconds
+of the worker finishing.
+
+**B. From the dashboard button.** Load a PCAP in the notebook. In the
+sidebar, click **Send S1 to n8n Alert**. Today that button uses `scp`
+over Tailscale to drop the file into `NETSEC_REMOTE_INCOMING` on the
+VM. Set `NETSEC_REMOTE_HOST` / `NETSEC_REMOTE_USER` / `NETSEC_SSH_KEY`
+before clicking - the button reports "set NETSEC_REMOTE_HOST" until
+they are configured, and refuses to send until the stack responds on
+`:5678` and `:8765`. (The dashboard's HTTP-through-ingest path is
+scaffolded in `server/dashboard_client.py` but not yet wired to a
+callback; the scp button is the working path today.)
+
+**C. From GitHub Actions.** Fork the repo and drop a PCAP into
+`incoming/`. The `analyze-pcap.yml` workflow runs the full pipeline
+against a local Ollama and opens a GitHub Issue with the verdict table.
+This is completely independent of your VM.
 
 ---
 
 ## Tuning
 
-Everything is env-driven. Change these in `automation/.env`, then
-`docker compose restart judge_api`:
+Change these in `deploy/.env`, then `docker compose restart worker`
+(or `n8n` if the change touches that service):
 
-- `OPENAI_COMPAT_MODEL` - swap Groq models. `llama-3.3-70b-versatile` is
-  strong but hits Groq's 12 000 tokens-per-minute free-tier limit at
-  ≥5 candidates. `llama-3.1-8b-instant` is fast and cheap on tokens.
-- `LLM_JUDGE_MAX_CANDIDATES` - how many flagged candidates to send to
-  the LLM per PCAP. Default `3` keeps well under the Groq free-tier
-  TPM ceiling. Raise it if you moved to a paid tier or a self-hosted
-  model.
-- `LLM_JUDGE_TIMEOUT_S` - per-request timeout in seconds. Default `600`.
-- `LLM_JUDGE_PROVIDER` - set to `ollama` to use a local model instead of
-  Groq. Requires Ollama running on the host with a pulled model, and
-  the `judge_api` container reaches it via `host.docker.internal:11434`
-  (already wired in the compose file).
+- `LLM_JUDGE_PANEL` - which judges vote. Every judge you list runs and
+  every verdict comes back (there is no automatic fallback that swaps
+  models silently; a failing judge is reported).
+- `LLM_JUDGE_MAX_CANDIDATES` - flagged candidates judged per PCAP.
+  **Default `40`**. Free tiers with tight per-minute token budgets
+  (Groq: ~12 000 TPM) may need this lower - drop to `10` on a bursty
+  key.
+- `LLM_JUDGE_TIMEOUT_S` - per-request timeout in seconds. **Default
+  `300`** in code; the Actions workflow overrides to `600` for cold
+  local models.
+- `NETSEC_MAX_UPLOAD_GB` - single-file ceiling on the ingest endpoint.
+  Default `10`.
+- `NETSEC_ENABLE_SHODAN=1` (plus `SHODAN_API_KEY`) - external-peer
+  reputation lookups. Off by default; when on, activates the judge's
+  threat-intel weight (`W_TI`).
+
+Sensor-side tuning lives in the sensor's environment
+(`NETSEC_CHUNK_SECONDS`, `NETSEC_RING_FILES`, `NETSEC_SPOOL_CAP_GB`);
+see `sensor/capture_agent.py`.
 
 ---
 
@@ -234,62 +306,71 @@ Everything is env-driven. Change these in `automation/.env`, then
 
 **What's persistent:**
 
-- `automation/.env` - your secrets. Back it up outside the repo (a
-  password manager, or an encrypted file in your personal cloud drive).
+- `deploy/.env` - your secrets. Back it up outside the repo (password
+  manager, encrypted file in personal storage).
+- `${NETSEC_DATA_ROOT}/db/` - the SQLite history + the nightly backups
+  the retention service writes. Copy the whole directory to keep
+  history.
+- `${NETSEC_DATA_ROOT}/reports/` - HTML/PDF/JSON, kept forever.
 - Docker named volume `n8n_data` - n8n's SQLite DB, holds the workflow
-  and credentials. Back up by exporting the DB from the container:
-
-```bash
-docker cp netsec-n8n:/home/node/.n8n/.n8n/database.sqlite \
-  ./n8n_backup_$(date +%Y%m%d).sqlite
-```
-
-- Docker named volume `judge_api_deps` - the installed Python packages.
-  Nothing to back up; if it goes, the next `docker compose up -d`
-  re-installs from `requirements.txt` (5-10 min).
+  and credentials. Back up by exporting from the container:
+  ```bash
+  docker compose exec n8n \
+    tar -czf - -C /home/node/.n8n . > n8n_backup_$(date +%Y%m%d).tgz
+  ```
 
 **If the n8n DB is lost** (`docker compose down -v`, disk failure,
-Docker volume corruption): re-import `mvp_triage_email.json` and
-re-create the Gmail SMTP credential in the UI. The workflow file ships
-with the repo so it's always recoverable; the credential is
-encrypted with `N8N_ENCRYPTION_KEY` and can't ship in the workflow.
+volume corruption): re-import `mvp_triage_email.json` and re-create the
+SMTP credential. The workflow file ships with the repo so it is always
+recoverable; the credential is encrypted with `N8N_ENCRYPTION_KEY` and
+cannot ship inside the workflow.
+
+**Nothing to back up:** the built Docker images (`docker compose build`
+recreates them), the sensor's local capture ring buffer (source of
+truth is the VM once the sensor uploaded), and the LLM judge cache
+(`llm_judge/cache/` - regenerates itself on demand).
 
 ---
 
 ## Troubleshooting
 
-- **`⚠️ n8n automation stack is not running` under the button.** The
-  dashboard's health probe couldn't reach `:8765` and/or `:5678`. Run
-  `docker compose up -d` in `automation/` and try again.
+- **`Cannot reach the automation stack on set NETSEC_REMOTE_HOST`
+  under the dashboard button.** The button probe couldn't reach
+  `:8765` and/or `:5678` because `NETSEC_REMOTE_HOST` is empty. Set
+  the three `NETSEC_REMOTE_*` variables plus `NETSEC_SSH_KEY` in the
+  environment that starts the dashboard.
+- **`sqlite3.OperationalError: unable to open database file` when
+  running `create_sensor.py`.** The `ingest_api` container created
+  `db/netsec.db` as root; run `create_sensor.py` via `sudo`, or use
+  `docker compose exec` to run it as the same user the container uses.
 - **First `docker compose up -d` seems stuck for minutes.** Normal -
-  `judge_api` is downloading and installing torch, pandas, sklearn, and
-  friends into its named volume. Watch it with
-  `docker compose logs -f judge_api`. Only happens once per volume.
-- **Email says `Judged: X (dropped: N)` and commentary is a `429` error.**
-  You hit Groq's 12 000 TPM free-tier limit. Lower
-  `LLM_JUDGE_MAX_CANDIDATES` in `.env` (default `3` is safe) or switch
-  to `llama-3.1-8b-instant`.
-- **Email arrives with `HTTP Error 403 - error code: 1010`.** Cloudflare
-  is blocking Python's default `User-Agent`. `llm_judge/llm_clients.py`
-  already sets a custom one; if you edited that file, restore the
-  `User-Agent` header.
-- **n8n workflow ran but no email.** Open the workflow's Executions tab
-  in n8n. The failure is almost always the SMTP credential (wrong
-  password, 2FA not enabled, wrong port).
-- **Dashboard shows `[Errno 22] Invalid argument` on load.** Not
-  related to the automation stack - the dashboard's figure builder
-  can't handle PCAPs with pre-1970 timestamps. Use a PCAP captured
+  the `worker` image is installing torch, pandas, sklearn, weasyprint
+  and friends into the built image. Watch it with
+  `docker compose logs -f worker`. Only happens on rebuild.
+- **Email arrives with `429 Too Many Requests` in the commentary.**
+  Free-tier LLM key hit its per-minute limit. Lower
+  `LLM_JUDGE_MAX_CANDIDATES` in `.env` or switch to a smaller / local
+  model.
+- **`HTTP 403 - error code: 1010`.** Cloudflare is blocking Python's
+  default User-Agent. `llm_judge/llm_clients.py` already sends a
+  custom one; if you patched that file, restore the User-Agent header.
+- **The n8n workflow ran but no email.** Open the workflow's
+  Executions tab in n8n. The failure is almost always the SMTP
+  credential (wrong password, 2FA not enabled, wrong port).
+- **Dashboard shows `[Errno 22] Invalid argument` on load.** The
+  loader hit a PCAP with a pre-1970 timestamp. Use a capture recorded
   after 1970.
 
 ---
 
-## What's NOT automated
+## What's out of scope for this quickstart
 
-- **Dify** (RAG + chat agent). Deferred - the 7-container Dify stack
-  needs more RAM than an 8 GB laptop can spare alongside n8n and
-  `judge_api`. Revisit on a VPS or a bigger machine.
-- **Multi-user Gmail routing.** Everything currently goes to whoever
-  owns the SMTP credential.
-- **Real-time capture triggers.** The workflow polls `incoming/` on a
-  60 s schedule; if you need instantaneous alerting, add a webhook
-  trigger and have the dashboard POST to it.
+- **Dify** (RAG + chat agent). Not part of the ecosystem; you can run
+  it separately on the same VM if you have RAM to spare (Dify's own
+  stack is another 7 containers).
+- **Multi-user routing.** Everything currently goes to whoever owns
+  the SMTP credential. Add per-sensor routing in the n8n workflow if
+  needed - the webhook payload includes `sha256`, `label` and `kind`.
+- **Real-time capture triggers.** The design is: sensor pushes on
+  every closed ring-buffer chunk; the ingest queue latency is
+  seconds, not the 60 s poll cycle the earlier local-only stack used.
