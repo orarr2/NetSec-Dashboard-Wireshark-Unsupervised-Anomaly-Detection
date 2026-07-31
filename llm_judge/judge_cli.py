@@ -248,21 +248,36 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         lines += [
             "## Triaged queue (ranked by ensemble priority)",
             "",
-            "| # | Candidate | Verdict | Category | Confidence | Priority | ⚑ | Action | Reasoning |",
-            "|--:|---|---|---|--:|--:|:-:|---|---|",
+            "| # | Candidate | Verdict | Category | Confidence | Priority | ⚑ | Action |",
+            "|--:|---|---|---|--:|--:|:-:|---|",
         ]
         for i, r in enumerate(out["results"], 1):
             v = r["verdict"]
             flags = ("⚑" if r.get("guardrail") else "") \
                 + ("⚖" if ((r.get("committee") or r.get("panel") or {})
                            .get("needs_human_review")) else "")
-            reasoning = v["reasoning"].replace("|", "\\|")
             lines.append(
                 f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
                 f"{v['category']} | {v['confidence']:.2f} | {r['priority']:.3f} | "
-                f"{flags} | {v['recommended_action']} | {reasoning} |"
+                f"{flags} | {v['recommended_action']} |"
             )
         lines.append("")
+
+        # Reasoning gets its own section - a long free-text field turns
+        # the 8-column table into a horizontal-scrolling mess on PDF /
+        # phone email clients. The queue stays scannable; the reasoning
+        # per candidate stays fully readable right below it.
+        lines += ["### Reasoning per candidate", ""]
+        for i, r in enumerate(out["results"], 1):
+            v = r["verdict"]
+            reasoning = v["reasoning"].strip()
+            lines += [
+                f"**#{i} `{r['candidate_id']}` - "
+                f"{v['verdict']}** ({v['category']})",
+                "",
+                f"> {reasoning}",
+                "",
+            ]
         if any(r.get("guardrail") for r in out["results"]):
             lines += [
                 "> ⚑ = rule guardrail overrode a benign model verdict "
@@ -453,12 +468,6 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         "debate round (or too few judges answered), so the fail-safe "
         "verdict is shown and a human should make the final call. ↺ marks "
         "a judge that changed its position during the debate.",
-        "",
-        "---",
-        "",
-        "*Full machine-readable batch: `verdicts.json` in the run's "
-        "artifacts. Design: [docs/LLM_JUDGE_SPEC.md]"
-        "(../blob/main/docs/LLM_JUDGE_SPEC.md).*",
     ]
     return "\n".join(lines) + "\n"
 

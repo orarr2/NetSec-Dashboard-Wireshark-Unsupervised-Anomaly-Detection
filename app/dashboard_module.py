@@ -6773,13 +6773,13 @@ def _render_ai_judge_link(session, session_key):
 
 
 def _render_n8n_send_button(session, session_key):
-    """Render the '📧 Send to n8n Alert' button for one session card.
+    """Render the 'Send to VM' block for one session card.
 
-    Clicking uploads the session's source PCAP over Tailscale into the
-    incoming/ folder on the cloud VM, which the automation/ n8n workflow
-    polls every 60s. The judge then runs there against Groq (or whatever
-    provider is configured in automation/.env), and an HTML alert lands in
-    the user's inbox if any verdict comes back malicious/suspicious.
+    Uses the HTTP ingest API (spec 5.1): the click signs the PCAP with
+    the sensor's HMAC secret, streams it to /v1/pcap on the VM, and the
+    worker mails the finished report to whatever address the user typed
+    into the email field. n8n is no longer in the path - the VM's own
+    worker sends the email directly via SMTP.
 
     Silent no-op if the session is not loaded, so S2 shows nothing until
     a second capture exists.
@@ -6789,17 +6789,36 @@ def _render_n8n_send_button(session, session_key):
         return html.Div()
     src_pcap = session.get("_source_pcap") or ""
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
-    _host_label = N8N_REMOTE_HOST or "set NETSEC_REMOTE_HOST"
-    caption = (f"Upload `{src_name}` to the incoming/ folder on the cloud "
-               f"VM ({_host_label}). The n8n workflow will pick it up "
-               f"within 60 seconds, run the judge against Groq, and email "
-               f"an HTML alert if any verdict is malicious or suspicious. "
-               f"Requires Tailscale to be connected.")
+    _host_label = N8N_REMOTE_HOST or "set NETSEC_INGEST_URL"
+    caption = (f"Upload `{src_name}` to the VM ({_host_label}) over "
+               f"Tailscale. The worker analyzes it end to end and mails "
+               f"the finished report (PDF) to the address you enter here. "
+               f"Nothing runs on this machine.")
+    default_email = _os.environ.get("NETSEC_NOTIFY_EMAIL", "")
     return html.Div([
+        html.Div([
+            html.Div("Email for the report",
+                style={"fontSize":"9.5px","color":INK_MUTE,
+                       "letterSpacing":"0.14em","textTransform":"uppercase",
+                       "fontWeight":"600","marginBottom":"4px",
+                       "fontFamily":"'JetBrains Mono', monospace"}),
+            dcc.Input(
+                id={"type":"n8n-email","session":session_key},
+                type="email",
+                value=default_email,
+                placeholder="you@example.com",
+                debounce=False,
+                style={"width":"100%","padding":"6px 8px",
+                       "background":"rgba(255,255,255,0.05)",
+                       "border":f"1px solid {GLASS_BORDER}",
+                       "borderRadius":"8px","color":INK,"fontSize":"11.5px",
+                       "fontFamily":"'JetBrains Mono', monospace",
+                       "outline":"none"}),
+        ], style={"marginBottom":"8px"}),
         html.Button(
             [html.Span("\U0001F4E7", style={"marginRight":"8px",
                                              "fontSize":"1.05rem"}),
-             html.Span(f"Send {session_key.upper()} to n8n Alert",
+             html.Span(f"Send {session_key.upper()} to VM (mail report)",
                        style={"fontWeight":"600"})],
             id={"type":"n8n-send-btn","session":session_key},
             n_clicks=0,
@@ -8964,80 +8983,54 @@ def update_sidebar(active_chart, active_tab, active_session, _rebuild, _tick):
 
 import os as _os_n8n
 
-# Where the automation stack lives. It runs on the Oracle ARM VM, reachable
-# over Tailscale - not on this machine. Every value is overridable by env
-# var so a fork can point at its own host without editing code.
+# Where the analyzer VM lives. The dashboard talks to /v1/pcap on it
+# (spec 5.1) - not to any local Docker daemon. NETSEC_REMOTE_HOST is kept
+# as the human-facing hostname/IP for messages; NETSEC_INGEST_URL is the
+# actual HTTP endpoint (defaults to :8766 on that host).
 # See docs/VM_DEPLOYMENT.md.
 N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "")
-N8N_REMOTE_USER = _os_n8n.environ.get("NETSEC_REMOTE_USER", "ubuntu")
-N8N_REMOTE_INCOMING = _os_n8n.environ.get(
-    "NETSEC_REMOTE_INCOMING", "/srv/netsec/incoming")
-N8N_SSH_KEY = _os_n8n.environ.get(
-    "NETSEC_SSH_KEY",
-    _os_n8n.path.expanduser(
-        "~/.ssh/netsec-agent"))
+N8N_INGEST_URL = _os_n8n.environ.get(
+    "NETSEC_INGEST_URL",
+    (f"http://{N8N_REMOTE_HOST}:8766" if N8N_REMOTE_HOST else ""))
+N8N_SENSOR_ID = _os_n8n.environ.get("NETSEC_SENSOR_ID", "")
+N8N_SENSOR_SECRET = _os_n8n.environ.get("NETSEC_SENSOR_SECRET", "")
 
 
 def _n8n_stack_status():
-    """Best-effort probe of the remote n8n + judge_api stack. Returns a dict
-    {judge_api: bool, n8n: bool, detail: str}. Never raises.
-
-    The stack is on the cloud VM, so this only succeeds while Tailscale is
-    connected. Nothing here touches a local Docker daemon.
-    """
-    import socket as _socket
+    """Best-effort probe of the ingest API on the VM. Returns
+    {ingest: bool, detail: str}. Never raises. Only succeeds while
+    Tailscale is up on this machine (or a public route exists)."""
     import urllib.request as _urlreq
-    out = {"judge_api": False, "n8n": False, "detail": ""}
-    if not N8N_REMOTE_HOST:
-        out["detail"] = "NETSEC_REMOTE_HOST is not set"
+    out = {"ingest": False, "detail": ""}
+    if not N8N_INGEST_URL:
+        out["detail"] = ("NETSEC_INGEST_URL not set "
+                         "(and NETSEC_REMOTE_HOST unset)")
         return out
     try:
         with _urlreq.urlopen(
-                f"http://{N8N_REMOTE_HOST}:8765/health", timeout=4) as r:
-            out["judge_api"] = (r.status == 200)
+                f"{N8N_INGEST_URL.rstrip('/')}/healthz", timeout=4) as r:
+            out["ingest"] = (r.status == 200)
     except Exception as exc:
-        out["detail"] = f"judge_api /health: {exc}"
-    try:
-        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        s.settimeout(3)
-        s.connect((N8N_REMOTE_HOST, 5678))
-        s.close()
-        out["n8n"] = True
-    except Exception as exc:
-        out["detail"] = (out["detail"] + " | " if out["detail"] else "") \
-            + f"n8n :5678: {exc}"
+        out["detail"] = f"{N8N_INGEST_URL}/healthz: {exc}"
     return out
 
 
 def _n8n_stack_down_message(status):
-    """Render the ⚠️ block shown when the button is clicked but the local
-    n8n stack isn't reachable. Explains what to run instead of pretending
-    the copy succeeded.
-    """
-    missing = []
-    if not status["judge_api"]:
-        missing.append("judge_api (:8765)")
-    if not status["n8n"]:
-        missing.append("n8n (:5678)")
+    """Rendered when the button is clicked but ingest is not reachable."""
     return html.Div([
         html.Div([
-            html.Span("⚠️", style={"marginRight":"6px"}),
-            html.Span("Cannot reach the automation stack on "
-                      f"{N8N_REMOTE_HOST or 'the VM (NETSEC_REMOTE_HOST unset)'}",
+            html.Span("\u26a0\ufe0f", style={"marginRight":"6px"}),
+            html.Span(f"Cannot reach the analyzer VM at "
+                      f"{N8N_INGEST_URL or 'NETSEC_INGEST_URL unset'}",
                       style={"color":"#f59e0b","fontWeight":"600"}),
         ]),
         html.Div(
-            f"Missing: {', '.join(missing)}. Not sending the file - you "
-            "would not get an email. The stack runs on the cloud VM and is "
-            "only reachable while Tailscale is connected on this machine. "
-            "Check that first, then click again:",
+            status.get("detail") or "Not sending - the report would never "
+            "arrive. Check Tailscale + the VM before clicking again:",
             style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
         html.Pre(
             "tailscale status         # this machine must be connected\n"
-            f"curl http://{N8N_REMOTE_HOST or '<vm-tailscale-ip>'}:8765/health\n"
-            "\n"
-            "# only if the VM itself is down:\n"
-            "ssh <user>@<vm> 'cd ~/netsec/deploy && docker compose up -d'",
+            f"curl {N8N_INGEST_URL or '<url>'}/healthz",
             style={"marginTop":"6px","padding":"6px 8px",
                    "background":"#1e1e2e","color":"#e5e7eb",
                    "fontSize":"10px","borderRadius":"6px",
@@ -9051,89 +9044,104 @@ def _n8n_stack_down_message(status):
     Output({"type":"n8n-send-status","session":MATCH}, "children"),
     Input({"type":"n8n-send-btn","session":MATCH}, "n_clicks"),
     State({"type":"n8n-send-btn","session":MATCH}, "id"),
+    State({"type":"n8n-email","session":MATCH}, "value"),
     prevent_initial_call=True,
 )
-def send_session_to_n8n(n_clicks, btn_id):
-    """Upload the session's source PCAP to the VM's incoming/ so the n8n
-    workflow picks it up on its next 60s poll. Prefixed with session key
-    and a timestamp so each click is treated as a fresh capture even
-    when the same session is re-sent.
-
-    The file goes over Tailscale via scp - nothing is analysed on this
-    machine and no local Docker daemon is involved.
-
-    Probes the stack via /health first so a click while the tunnel is down
-    gives an actionable warning instead of a misleading "Sent" that goes
-    nowhere.
-    """
+def send_session_to_n8n(n_clicks, btn_id, email):
+    """Sign and stream the session's PCAP to /v1/pcap on the VM, with
+    X-Notify-Email so the worker mails the finished report to whatever
+    address the user typed. Never scp's a file anywhere - the HTTP ingest
+    path replaces the older folder-poll flow."""
     import os as _os
-    import subprocess as _sp
+    import re as _re
     if not n_clicks:
         return dash.no_update
     session_key = (btn_id or {}).get("session")
     S_obj = S1 if session_key == "s1" else (S2 if session_key == "s2" else None)
     if S_obj is None:
         return html.Div([
-            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span("\u274c", style={"marginRight":"6px"}),
             html.Span(f"No {(session_key or '').upper()} session loaded",
                       style={"color":"#ef4444"})
         ])
     src_pcap = S_obj.get("_source_pcap") or ""
     if not src_pcap or not _os.path.isfile(src_pcap):
         return html.Div([
-            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span("\u274c", style={"marginRight":"6px"}),
             html.Span(
                 f"Source PCAP not on disk anymore ({src_pcap or 'unknown'})",
                 style={"color":"#ef4444"})
         ])
 
-    # Gate: don't copy if nothing is going to consume the file.
-    stack = _n8n_stack_status()
-    if not (stack["judge_api"] and stack["n8n"]):
-        return _n8n_stack_down_message(stack)
-
-    if not _os.path.isfile(N8N_SSH_KEY):
+    # Email is optional - without it the worker falls back to
+    # NETSEC_NOTIFY_EMAIL on the VM, or logs 'no recipient' and skips.
+    # But if the user typed *something* that is not a valid address,
+    # tell them - a typo is silent otherwise.
+    addr = (email or "").strip()
+    if addr and not _re.match(r"^[^@\s,;:<>]+@[^@\s,;:<>]+\.[A-Za-z]{2,}$", addr):
         return html.Div([
-            html.Span("❌", style={"marginRight":"6px"}),
-            html.Span(f"SSH key not found at {N8N_SSH_KEY}. Set "
-                      "NETSEC_SSH_KEY to the private key that opens the VM.",
+            html.Span("\u274c", style={"marginRight":"6px"}),
+            html.Span(f"That does not look like an email: {addr!r}",
                       style={"color":"#ef4444"})
         ])
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dst_name = f"{session_key.upper()}_{ts}_{_os.path.basename(src_pcap)}"
-    target = (f"{N8N_REMOTE_USER}@{N8N_REMOTE_HOST}:"
-              f"{N8N_REMOTE_INCOMING}/{dst_name}")
-    try:
-        r = _sp.run(
-            ["scp", "-q", "-o", "BatchMode=yes",
-             "-o", "StrictHostKeyChecking=accept-new",
-             "-o", "ConnectTimeout=15",
-             "-i", N8N_SSH_KEY, src_pcap, target],
-            capture_output=True, text=True, timeout=300)
-    except Exception as exc:
+
+    if not (N8N_INGEST_URL and N8N_SENSOR_ID and N8N_SENSOR_SECRET):
         return html.Div([
-            html.Span("❌", style={"marginRight":"6px"}),
-            html.Span(f"Upload failed: {exc}", style={"color":"#ef4444"})
-        ])
-    if r.returncode != 0:
-        return html.Div([
-            html.Span("❌", style={"marginRight":"6px"}),
+            html.Span("\u274c", style={"marginRight":"6px"}),
             html.Span(
-                f"scp exited {r.returncode}: "
-                f"{(r.stderr or '').strip()[:200] or 'no stderr'}",
+                "Set NETSEC_INGEST_URL, NETSEC_SENSOR_ID and "
+                "NETSEC_SENSOR_SECRET (see docs/VM_OPS.md). Without them "
+                "the dashboard cannot sign the upload.",
                 style={"color":"#ef4444"})
         ])
+
+    stack = _n8n_stack_status()
+    if not stack["ingest"]:
+        return _n8n_stack_down_message(stack)
+
+    # tools/upload_pcap.upload_file is the same signing + streaming code
+    # the CLI uses, so the dashboard path is byte-identical over the wire.
+    import sys as _sys
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _tools = _os.path.abspath(_os.path.join(_here, "..", "tools"))
+    if _tools not in _sys.path:
+        _sys.path.insert(0, _tools)
+    from upload_pcap import upload_file as _upload_file
+
+    result = _upload_file(
+        src_pcap, N8N_INGEST_URL, N8N_SENSOR_ID, N8N_SENSOR_SECRET,
+        kind="prod",
+        label=f"{session_key.upper()}_{_os.path.basename(src_pcap)}",
+        notify_email=addr or None,
+        timeout=300.0, retries=2)
+
+    if not result.get("ok"):
+        return html.Div([
+            html.Span("\u274c", style={"marginRight":"6px"}),
+            html.Span(f"Upload failed: {result.get('error') or 'unknown'}",
+                      style={"color":"#ef4444"})
+        ])
+
+    sid = result.get("session_id")
+    dup = " (duplicate - existing session returned)" if result.get(
+        "duplicate") else ""
+    mail_line = (f"Report will be mailed to {addr}." if addr
+                 else "No email provided - the report stays on the VM at "
+                      f"{N8N_INGEST_URL}/v1/reports/{sid}.html")
     return html.Div([
         html.Div([
-            html.Span("✅", style={"marginRight":"6px"}),
-            html.Span(f"Uploaded to {N8N_REMOTE_HOST}:incoming/{dst_name}",
+            html.Span("\u2705", style={"marginRight":"6px"}),
+            html.Span(f"Uploaded as session {sid}{dup}",
                       style={"color":"#22c55e","fontWeight":"600"}),
         ]),
         html.Div(
-            "Stack reachable (judge_api + n8n up). If the workflow is "
-            "Active, an HTML alert lands in your inbox within ~90 seconds "
-            "when verdicts are malicious/suspicious. Silent otherwise.",
-            style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"})
+            mail_line,
+            style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
+        html.Div(
+            "The worker picks the queued job within ~10 seconds and takes "
+            "roughly one minute per 20k packets. Silent otherwise; check "
+            "the worker log on the VM if nothing arrives.",
+            style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
     ])
 
 

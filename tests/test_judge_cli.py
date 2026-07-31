@@ -227,8 +227,12 @@ def test_render_markdown_how_to_interpret_included():
     assert "Rule guardrail" in md
 
 
-def test_render_markdown_escapes_pipe_in_reasoning():
-    """A `|` inside reasoning must not break the markdown table."""
+def test_render_markdown_reasoning_lives_in_its_own_section():
+    """Reasoning was moved out of the triaged-queue table because the
+    long free-text field overflowed the 9-column layout in PDF / phone
+    email clients. It now renders as a `> quote` under its own heading -
+    so a `|` in the reasoning survives verbatim (no escaping needed) and
+    the queue table stays 8 compact columns."""
     out = {
         "stats": {"total": 1, "judged": 1, "cache_hits": 0, "dropped": 0,
                   "prompt_version": "v", "model": "fake"},
@@ -245,11 +249,17 @@ def test_render_markdown_escapes_pipe_in_reasoning():
     assembled = {"candidates": [{}], "capped": []}
     md = judge_cli._render_markdown("x.pcap", out, assembled,
                                     _fake_client(), context=_fake_context())
+
+    # Queue table row has exactly 8 columns (# candidate verdict category
+    # confidence priority flag action), no reasoning column.
     table_row = [ln for ln in md.splitlines()
                  if "`1.2.3.4`" in ln and ln.startswith("|")][0]
-    assert table_row.count("|") >= 8
-    assert "before \\| after pipe" in md
-    assert "before | after pipe" not in table_row
+    assert table_row.count("|") == 9  # 8 columns + trailing edge
+    assert "before" not in table_row  # reasoning NOT in the queue row
+
+    # Reasoning shows under its own heading, as a blockquote.
+    assert "### Reasoning per candidate" in md
+    assert "> before | after pipe" in md
 
 
 def test_render_markdown_empty_batch():
