@@ -441,8 +441,8 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         "- **Category**: the attack shape - `port_scan`, `syn_flood`, "
         "`dns_amp`, `arp_mitm`, `beaconing_c2`, `dns_tunnel`, or "
         "`benign_anomaly` (statistical outlier that isn't an attack).",
-        "- **Priority**: ensemble rank score, "
-        "`0.20·anomaly + 0.40·confidence + 0.30·category_severity`. "
+        "- **Priority**: ensemble rank score, `0.20·anomaly + "
+        "0.40·confidence + 0.30·category_severity + 0.10·threat_intel`. "
         "Higher = more urgent for the analyst.",
         "- **⚑ Rule guardrail**: a candidate whose deterministic rule fired "
         "(scan / flood / amp / ARP) can never be judged `benign` by the "
