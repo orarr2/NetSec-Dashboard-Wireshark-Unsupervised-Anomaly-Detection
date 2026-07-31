@@ -81,7 +81,10 @@ jobs:
       - name: Install Python deps (CPU torch, then requirements.txt)
         run: |
           python -m pip install --upgrade pip
-          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          # Pin the CPU wheel to the same version requirements.txt pins, so
+          # the next line finds it already satisfied instead of pulling the
+          # multi-GB CUDA wheel from PyPI.
+          pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
       - name: Compute Ollama cache key
@@ -159,6 +162,9 @@ jobs:
 
       - name: Run judge (analyze + judge)
         run: |
+          # pipefail: without it, `tee`'s exit 0 masks a judge crash and the
+          # email/Issue steps would run against a partial verdicts.md.
+          set -o pipefail
           python llm_judge/judge_cli.py \
             "${{ steps.pcap.outputs.path }}" \
             --output verdicts.json \

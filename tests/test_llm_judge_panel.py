@@ -92,9 +92,15 @@ class PanelFake:
         self.round1_calls = 0
         self.debate_calls = 0
 
-    def judge(self, system_prompt, user_content):
+    def judge(self, system_prompt, user_content, schema=None):
         if system_prompt == judge_core.DEBATE_SYSTEM_PROMPT:
             self.debate_calls += 1
+            # Faithful to the real clients: a debate turn must arrive with
+            # the debate schema, or a strict provider could not emit
+            # 'stance'/'rebuttal'. Enforcing it here means this fake can no
+            # longer pass a debate the real (schema-bound) path would fail.
+            assert schema is judge_core.DEBATE_SCHEMA, (
+                "debate turn must pass DEBATE_SCHEMA to the client")
             if isinstance(self._debate, Exception):
                 raise self._debate
             if self._debate is None:  # maintain the previous position

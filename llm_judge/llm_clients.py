@@ -68,7 +68,7 @@ class ClaudeClient:
         self._client = anthropic.Anthropic(
             timeout=timeout_s or judge_config.JUDGE_TIMEOUT_S)
 
-    def _create(self, system_prompt, user_content, minimal):
+    def _create(self, system_prompt, user_content, minimal, active_schema):
         kwargs = {
             "model": self.model_id,
             "max_tokens": self.max_tokens,
@@ -79,25 +79,29 @@ class ClaudeClient:
         if not minimal:
             kwargs["thinking"] = {"type": "adaptive"}
             output_config["effort"] = self.effort
-        if self.verdict_schema is not None:
+        if active_schema is not None:
             output_config["format"] = {"type": "json_schema",
-                                       "schema": self.verdict_schema}
+                                       "schema": active_schema}
         if output_config:
             kwargs["output_config"] = output_config
         return self._client.messages.create(**kwargs)
 
-    def judge(self, system_prompt, user_content):
+    def judge(self, system_prompt, user_content, schema=None):
+        # A per-call schema (e.g. the debate schema) overrides the one the
+        # client was built with; None means "use the constructor schema".
+        active = schema if schema is not None else self.verdict_schema
         try:
             try:
                 response = self._create(system_prompt, user_content,
-                                        self._minimal_params)
+                                        self._minimal_params, active)
             except self._anthropic.BadRequestError:
                 if self._minimal_params:
                     raise
                 # Older Claude generations reject adaptive thinking and/or
                 # the effort parameter - degrade to a plain call once, then
                 # remember the downgrade for the rest of the batch.
-                response = self._create(system_prompt, user_content, True)
+                response = self._create(system_prompt, user_content, True,
+                                        active)
                 self._minimal_params = True
         except self._anthropic.APIError as e:
             raise JudgeClientError(f"Anthropic API error: {e}") from e
@@ -127,7 +131,8 @@ class OllamaClient:
         self.verdict_schema = verdict_schema
         self.last_usage = None
 
-    def judge(self, system_prompt, user_content):
+    def judge(self, system_prompt, user_content, schema=None):
+        active = schema if schema is not None else self.verdict_schema
         payload = {
             "model": self.model_id,
             "messages": [
@@ -140,8 +145,8 @@ class OllamaClient:
             "keep_alive": "30m",
             "options": {"temperature": 0.0},
         }
-        if self.verdict_schema is not None:
-            payload["format"] = self.verdict_schema
+        if active is not None:
+            payload["format"] = active
         req = urllib.request.Request(
             self.host + "/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -278,15 +283,16 @@ class OpenAICompatClient:
             payload["response_format"] = response_format
         return payload
 
-    def judge(self, system_prompt, user_content):
+    def judge(self, system_prompt, user_content, schema=None):
+        active = schema if schema is not None else self.verdict_schema
         plain = ({"type": "json_object"}
-                 if self.verdict_schema is not None else None)
+                 if active is not None else None)
         strict = None
-        if self.verdict_schema is not None and not self._schema_unsupported:
+        if active is not None and not self._schema_unsupported:
             strict = {"type": "json_schema",
                       "json_schema": {"name": "judge_verdict",
                                       "strict": True,
-                                      "schema": self.verdict_schema}}
+                                      "schema": active}}
         try:
             if strict is not None:
                 try:

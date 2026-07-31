@@ -362,3 +362,80 @@ def test_benchmark_dropped_fixtures_count_as_wrong():
     err_rows = [r for r in report["rows"] if r["error"]]
     assert len(err_rows) == n_flaky
     assert all(r["latency_ms"] is None for r in err_rows)
+
+
+# --- real-client panel debate (schema-bound provider) ---------------------
+
+class _SchemaHonoringHandler(BaseHTTPRequestHandler):
+    """Mock OpenAI endpoint that, like a real structured-output provider,
+    emits ONLY the keys the request's json_schema allows. A verdict-schema
+    request therefore cannot carry 'stance'; a debate-schema request can.
+    Round-1 verdicts differ by model id so the panel debates."""
+
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        req = json.loads(self.rfile.read(n).decode())
+        rf = req.get("response_format") or {}
+        schema = (rf.get("json_schema") or {}).get("schema") or {}
+        props = set(schema.get("properties", {}).keys())
+        model = req.get("model", "")
+        if "stance" in props:                       # debate schema
+            content = {"stance": "maintain", "verdict": "malicious",
+                       "category": "port_scan", "confidence": 0.8,
+                       "evidence_features": ["rule_signals.scan_alerts"],
+                       "reasoning": "Scan signature holds post-debate.",
+                       "recommended_action": "investigate",
+                       "rebuttal": "The port fan-out is the scan tell."}
+        elif model.endswith("-b"):                  # round-1, disagree
+            content = {"verdict": "benign", "category": "benign_anomaly",
+                       "confidence": 0.7, "evidence_features": ["features.count"],
+                       "reasoning": "Looks like normal low-volume noise.",
+                       "recommended_action": "monitor"}
+        else:                                        # round-1
+            content = {"verdict": "malicious", "category": "port_scan",
+                       "confidence": 0.75,
+                       "evidence_features": ["rule_signals.scan_alerts"],
+                       "reasoning": "Sequential SYNs across many ports.",
+                       "recommended_action": "investigate"}
+        body = json.dumps({"choices": [{"finish_reason": "stop",
+                          "message": {"content": json.dumps(content)}}],
+                          "usage": {"prompt_tokens": 10, "completion_tokens": 20}})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+
+def test_panel_debate_works_against_schema_bound_provider(tmp_path):
+    """End-to-end guard for the debate fix: with REAL OpenAICompatClients
+    against a provider that strictly honors the response schema, the debate
+    round must succeed (no 'bad stance' failures) - which is only possible
+    when the debate turn is sent with the debate schema, not the verdict
+    schema the client was built with."""
+    srv = HTTPServer(("127.0.0.1", 0), _SchemaHonoringHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}/v1"
+        ca = OpenAICompatClient(model="judge-a", base_url=base, api_key="k",
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+        cb = OpenAICompatClient(model="judge-b", base_url=base, api_key="k",
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+        cand = scan_candidate()
+        out = judge_core.judge_candidates_panel(
+            [cand], [ca, cb], cache_db=str(tmp_path / "c.sqlite"),
+            verbose=False, debate=True)
+    finally:
+        srv.shutdown()
+    rep = out["stats"]["panel_report"]
+    total_debates = sum(r["debates"] for r in rep.values())
+    total_failures = sum(r["failures"] for r in rep.values())
+    total_revised = sum(r["revised"] for r in rep.values())
+    assert total_debates >= 2, "both judges should take a debate turn"
+    assert total_failures == 0, f"debate failed on a real client: {rep}"
+    # the benign judge should revise toward the scan verdict after debate
+    assert total_revised >= 1
+    # and the panel converges to a single (malicious) verdict
+    assert out["results"][0]["verdict"]["verdict"] == "malicious"

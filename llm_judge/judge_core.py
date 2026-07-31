@@ -969,8 +969,12 @@ def _debate_from_client(cand, own_verdict, peers, client, cache,
     for _attempt in (1, 2):
         try:
             t0 = time.perf_counter()
+            # The debate turn needs the debate schema (stance + rebuttal),
+            # not the verdict schema the client was built with - a strict
+            # provider constrained to VERDICT_SCHEMA cannot emit 'stance'.
             raw = client.judge(DEBATE_SYSTEM_PROMPT,
-                               json.dumps(payload, indent=2))
+                               json.dumps(payload, indent=2),
+                               schema=DEBATE_SCHEMA)
             latency_ms = int((time.perf_counter() - t0) * 1000)
             verdict, stance, rebuttal = validate_debate_response(
                 json.loads(raw))
