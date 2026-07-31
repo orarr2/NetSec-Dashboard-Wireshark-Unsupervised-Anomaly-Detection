@@ -6700,78 +6700,6 @@ def _session_info_cards():
         "border":f"1px solid {GLASS_BORDER}"})
 
 
-def _github_upload_url():
-    """Best-effort: derive the GitHub 'upload files' URL for incoming/ from
-    the current fork's `git remote get-url origin`. Falls back to the
-    upstream repo if detection fails."""
-    import os as _os, subprocess as _sp
-    _default = ("https://github.com/orarr2/"
-                "NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection"
-                "/upload/main/incoming")
-    try:
-        _here = _os.path.dirname(_os.path.abspath(
-            _os.environ.get("NETSEC_APP_DIR") or __file__)) \
-                if "__file__" in globals() else _os.getcwd()
-    except Exception:
-        _here = _os.getcwd()
-    try:
-        url = _sp.check_output(
-            ["git", "-C", _here, "config", "--get", "remote.origin.url"],
-            encoding="utf-8", stderr=_sp.DEVNULL, timeout=3).strip()
-    except Exception:
-        return _default
-    if url.startswith("https://github.com/"):
-        path = url[len("https://github.com/"):]
-    elif url.startswith("git@github.com:"):
-        path = url[len("git@github.com:"):]
-    else:
-        return _default
-    if path.endswith(".git"):
-        path = path[:-4]
-    return f"https://github.com/{path}/upload/main/incoming"
-
-
-def _render_ai_judge_link(session, session_key):
-    """Render the '🦙 Send to AI Judge' link for one session card. Returns
-    an html.A that opens the fork's `incoming/` upload page in a new tab
-    (Option B - drag-and-drop, no token required). If the session isn't
-    loaded, returns an empty Div so nothing shows."""
-    import os as _os
-    if session is None:
-        return html.Div()
-    src_pcap = session.get("_source_pcap") or ""
-    src_name = _os.path.basename(src_pcap) if src_pcap else ""
-    caption = (f"Drag `{src_name}` into the page and click Commit - the "
-               f"GitHub Actions judge runs automatically, and a new "
-               f"Issue with the verdict and analyst commentary is opened.")
-    return html.Div([
-        html.A(
-            [html.Span("\U0001F999", style={"marginRight":"8px",
-                                             "fontSize":"1.05rem"}),
-             html.Span(f"Send {session_key.upper()} to AI Judge",
-                       style={"fontWeight":"600"})],
-            href=_github_upload_url(),
-            target="_blank", rel="noopener",
-            id={"type":"ai-judge-link","session":session_key},
-            style={
-                "display":"flex","alignItems":"center","width":"100%",
-                "padding":"8px 10px","borderRadius":"10px",
-                "background":"rgba(59,130,246,0.10)",
-                "border":"1px solid rgba(59,130,246,0.30)",
-                "color":CYAN,
-                "textDecoration":"none",
-                "fontSize":"11.5px",
-                "fontFamily":"'Inter Tight', sans-serif",
-                "cursor":"pointer",
-                "marginTop":"6px",
-            }),
-        html.Div(caption,
-            style={"fontSize":"10px","color":INK_MUTE,"marginTop":"6px",
-                   "padding":"0 4px","lineHeight":"1.5",
-                   "fontFamily":"'Inter Tight', sans-serif"}),
-    ], style={"marginTop":"8px"})
-
-
 def _render_n8n_send_button(session, session_key):
     """Render the 'Send to VM' block for one session card.
 
@@ -6908,7 +6836,6 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
                             "fontFamily":"'Inter Tight', sans-serif"}),
         ], style={"marginBottom":"16px","paddingBottom":"12px",
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
-        children.append(_render_ai_judge_link(S1, "s1"))
         children.append(_render_n8n_send_button(S1, "s1"))
 
         # Header + button labels swap based on whether S2 is already loaded;
@@ -6969,7 +6896,6 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
         ], style={"marginBottom":"16px","paddingBottom":"12px",
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
         if has_s2:
-            children.append(_render_ai_judge_link(S2, "s2"))
             children.append(_render_n8n_send_button(S2, "s2"))
 
     # Chart navigation moved to build_chart_picker_strip (the horizontal

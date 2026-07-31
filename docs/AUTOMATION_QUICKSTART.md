@@ -3,8 +3,10 @@
 The reference deployment runs on a small VM you control (Oracle Always
 Free ARM is the recommended $0 path) reached over Tailscale. The
 dashboard, the notebook and the CLI can all send a PCAP into it; the
-worker analyses each capture, writes verdicts + HTML/PDF reports, and an
-n8n workflow emails an alert when the verdict is malicious or suspicious.
+worker analyses each capture, writes verdicts + HTML/PDF reports, and
+mails the finished report directly (SMTP) to the address the uploader
+provided. An n8n workflow can be wired as a fallback delivery channel
+when SMTP fails - see [VM_OPS.md](VM_OPS.md#email-delivery-on-completion).
 
 Everything the VM needs is in `deploy/`. This file walks through the
 common questions people hit when standing that up. For the reference
@@ -26,9 +28,9 @@ interface:
 | service     | port | what it does                                                    |
 |-------------|------|-----------------------------------------------------------------|
 | `ingest_api`| 8766 | signed streaming HMAC upload endpoint (`/v1/pcap`), health + reports |
-| `worker`    | -    | claims queued sessions, runs the detection pipeline, writes reports |
+| `worker`    | -    | claims queued sessions, runs the detection pipeline, writes reports, mails the finished PDF via SMTP |
 | `retention` | -    | daily housekeeping (7-day raw purge, 85% watermark, DB backup, VACUUM) |
-| `n8n`       | 5678 | receives the worker's alert webhook and sends the email        |
+| `n8n`       | 5678 | *optional* - receives the worker's fallback webhook when SMTP itself fails |
 
 Storage layout under `NETSEC_DATA_ROOT` (default `/srv/netsec`):
 
@@ -40,7 +42,9 @@ db/netsec.db (+ dated backups)             SQLite history
 ```
 
 Sensor upload → ingest API queues a session → worker analyses → verdicts
-+ reports on disk → webhook to n8n → email out.
++ reports on disk → worker's SMTP delivers the PDF to the address that
+was on `X-Notify-Email` (falling back to `NETSEC_NOTIFY_EMAIL`, then to
+the n8n webhook, then to a log-only entry).
 
 ---
 

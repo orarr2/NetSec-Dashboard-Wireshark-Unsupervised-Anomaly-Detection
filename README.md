@@ -53,11 +53,13 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
 | `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
-| `.github/workflows/analyze-pcap.yml` | **Autonomous agent** - GitHub Actions workflow that runs the full pipeline + LLM Judge on any PCAP pushed to `incoming/`, or on manual trigger. Opens a GitHub Issue with the verdict table. Free, no VM, no key. See "Run on your own PCAPs" below |
-| `incoming/` | Watched directory - drop `.pcap`/`.pcapng` files here in your fork to trigger the agent |
+| `server/` | Analyzer VM stack - signed ingest API, worker, retention, notify. Runs the exact detection pipeline of the dashboard on a small VM you control |
+| `deploy/` | Docker Compose + Dockerfiles for the VM stack, plus `create_sensor.py` |
+| `tools/upload_pcap.py` | Signed HMAC upload CLI - streams a PCAP to the VM's `/v1/pcap` with `--email <address>` for the report |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
-| `docs/VM_DEPLOYMENT.md` | Running the n8n + judge automation 24/7 on a free Oracle ARM VM over Tailscale, instead of on your own machine |
+| `docs/VM_DEPLOYMENT.md` | Standing up the analyzer VM 24/7 on a free Oracle ARM box over Tailscale |
+| `docs/VM_OPS.md` | Day-to-day operations on the VM (health snapshot, redeploy, backups, email + panel activation, sensor rotation) |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
 
 ## How to run on a laptop
@@ -112,100 +114,60 @@ move anything to run it.
 
 ## Run on your own PCAPs (three ways)
 
-The project ships with three interchangeable ways to analyze a capture -
-pick the one that matches your comfort level.
+Pick the one that matches your comfort level. All three run the same
+detection pipeline; the difference is *where* the analysis executes and
+how you get the report.
 
-### A. Fork this repo and let GitHub run it for you (recommended)
+### A. Interactive dashboard + "Send to VM" (recommended)
 
-Zero setup on your machine. Any PCAP you push to `incoming/` in your fork
-triggers the autonomous agent workflow, and you get a GitHub Issue with a
-ranked, explained verdict table - visible from mobile.
+Open the notebook, drop a PCAP, and click **Send S1 to VM (mail
+report)** on the session card. The dashboard signs the file, streams it
+to your analyzer VM, and the worker mails the finished PDF report to
+the address you typed - no GitHub, no size cap, no local LLM.
 
-1. Click the **Fork** button at the top-right of this page → creates your
-   own copy of the repo under your account.
-2. In your fork, upload a `.pcap`/`.pcapng` to `incoming/`:
-   - via browser: **Add file → Upload files** in the `incoming/` folder;
-   - or with git: `git add incoming/mycapture.pcap && git commit -m "..." && git push`.
-3. Watch **Actions** in your fork - a run starts within seconds. When it
-   finishes (2-8 minutes, first run cached), it opens an **Issue** labeled
-   `judge-verdict` with the verdict table + a `verdicts.json` artifact.
+Needs: an analyzer VM (way C sets one up), the three env vars
+`NETSEC_INGEST_URL / NETSEC_SENSOR_ID / NETSEC_SENSOR_SECRET` in your
+shell before launching the notebook, and `SMTP_USER / SMTP_PASS` set
+in the VM's `.env` (Gmail app-password works). See `docs/VM_OPS.md`
+for the exact ops.
 
-There is no LLM API key involved: the runner installs Ollama with
-`llama3.2` locally. Public forks get unlimited free Actions minutes;
-private forks have 2000 free minutes/month. See
-`.github/workflows/analyze-pcap.yml` and `incoming/README.md` for the
-trigger reference.
+### B. Headless CLI on your own machine
 
-#### Get the report by email
+Same detection pipeline, same LLM Judge, no notebook. Two flavours:
 
-The workflow can mail the report to any address instead of (or as well
-as) opening an Issue. It sends through **your** mailbox, so nothing is
-routed via anyone else's server and no account here is needed:
-
-1. In your fork: **Settings → Secrets and variables → Actions → New
-   repository secret**, and add two secrets:
-   - `SMTP_USER` - the address you send *from* (e.g. your Gmail address);
-   - `SMTP_PASS` - an **app password**, not your account password. For
-     Gmail: Google Account → Security → 2-Step Verification → App
-     passwords.
-2. Optional secrets for a non-Gmail provider: `SMTP_HOST` (default
-   `smtp.gmail.com`), `SMTP_PORT` (`587` STARTTLS, or `465` for implicit
-   TLS), `SMTP_FROM` (a different From: header).
-3. Run the workflow from **Actions → Analyze PCAP (LLM Judge) → Run
-   workflow** and type the destination into **notify_email**.
-
-Without the secrets the workflow logs a warning and skips the email; the
-Issue still opens, so a fork that skips this section keeps working. The
-same delivery is available locally:
-
-```bash
-python llm_judge/judge_cli.py capture.pcap --email you@example.com
-```
-
-or for a report you already generated:
-
-```bash
-python llm_judge/send_report.py verdicts.md you@example.com --json verdicts.json
-```
-
-### B. Run the headless CLI on your own machine
-
-For users who don't want to touch GitHub. Same detection pipeline, same
-LLM Judge, no notebook required.
+**B1. Local analyze + local report** (nothing leaves your machine):
 
 ```
-pip install -r requirements.txt          # (once)
-pip install -r llm_judge/requirements.txt # only if you want Claude
+pip install -r requirements.txt
 python llm_judge/judge_cli.py path/to.pcap \
     --output verdicts.json --markdown verdicts.md
 ```
 
-Requires `tshark` on PATH (installed with Wireshark), Ollama running
-locally for the free provider, or `ANTHROPIC_API_KEY` set for Claude. See
-`llm_judge/README.md` for env var options.
+Requires `tshark` on PATH (installed with Wireshark), plus one LLM
+provider - Ollama for the zero-key path (`LLM_JUDGE_PROVIDER=ollama`),
+or Groq / Gemini / Cerebras / OpenRouter / Anthropic / GitHub Models
+with your own key. Set `LLM_JUDGE_PANEL=<m1>,<m2>[,...]` for a real
+multi-judge debate. See `llm_judge/README.md` for every knob.
 
-Want a second opinion on every verdict? Set
-`LLM_JUDGE_PANEL=<model1>,<model2>[,...]` and the same command runs an
-**expert panel**: N models judge independently, argue when they disagree,
-and the report carries a per-judge participation audit. Details in
-`llm_judge/README.md`.
+**B2. Upload to your VM + mail the report** (same as the dashboard
+button, from the shell):
 
-### C. Open the notebook (interactive, exploratory)
+```
+export NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766
+export NETSEC_SENSOR_ID=laptop NETSEC_SENSOR_SECRET=...
+python tools/upload_pcap.py capture.pcapng --email you@example.com
+```
 
-`llm_judge/LLM_Judge_Notebook.ipynb` in Jupyter - same code as the CLI,
-but you can poke around, benchmark models, run the expert panel, and see
-the verdict table inline. (The main dashboard has its own separate
-notebook, `app/Network_Security_Dashboard.ipynb`, which does not depend
-on any of this.)
+The `--email` flag rides through as the `X-Notify-Email` header; the
+worker's SMTP → n8n fallback chain delivers the PDF report.
 
-### D. Run your own always-on analysis VM (continuous, private)
+### C. Run your own always-on analysis VM (continuous, private)
 
-Ways A-C analyze one capture at a time. For continuous monitoring that
-does not depend on your laptop being awake - and where raw packets never
-leave your own network - run the analysis stack on a small VM you
-control. This is the "ecosystem" path; the full design (in Hebrew, by
-request) is `ARCHITECTURE_HE.md`, and the deployment templates live in
-`deploy/`.
+For continuous monitoring that does not depend on your laptop being
+awake - and where raw packets never leave your own network - run the
+analysis stack on a small VM you control. The full design (in Hebrew,
+by request) is `ARCHITECTURE_HE.md`, and the deployment templates
+live in `deploy/`.
 
 **What it is.** Four cooperating tiers instead of four tools glued by
 `scp`:
@@ -227,12 +189,12 @@ request) is `ARCHITECTURE_HE.md`, and the deployment templates live in
 - **Consumers (Tier 3)** - the notebook (as a remote client *or* a fully
   offline local analyzer), email, and n8n alerts.
 
-**Why a VM instead of GitHub Actions.** The Actions path (way A) caps
-uploads at 25 MB and analyzes one file per run. The VM path has no size
-cap (upload is a direct, signed HTTP stream), keeps history so that
-beaconing and per-device baselines become meaningful, and keeps raw
-packets on infrastructure you own. Actions stays for CI and the public
-zero-setup demo; nothing in your personal flow depends on it.
+**Why a VM.** No size cap (upload is a direct, signed HTTP stream),
+keeps history so that beaconing and per-device baselines become
+meaningful, and keeps raw packets on infrastructure you own. The
+Actions-based "push a PCAP to `incoming/`" flow that used to live here
+was retired - the 25 MB Actions cap made it unusable for real captures,
+and the VM path covers every case it did.
 
 **Quickstart** (full guide in `deploy/README.md`):
 
@@ -269,9 +231,9 @@ Set `WIGLE_API_NAME`/`WIGLE_API_TOKEN`, `SHODAN_API_KEY` and
 empty and the threat-intel weight contributes nothing - identical to the
 base behavior.
 
-**Everything above is optional.** Ways A-C keep working exactly as
-before; the local dashboard notebook still analyzes a file with no VM
-and no network at all.
+**Everything above is optional.** The local dashboard notebook still
+analyzes a file with no VM and no network at all; the VM path is what
+turns a one-off notebook into a continuous, mail-your-inbox system.
 
 **Managing your VM day to day.** After the one-time setup, all the
 common operations - SSH in, redeploy after `git pull`, watch a live
