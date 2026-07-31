@@ -199,8 +199,13 @@ def test_declared_digest_must_match_the_bytes(stack):
                      "X-Timestamp": str(ts), "X-Signature": sig,
                      "X-Filename": "lie.pcap",
                      "Authorization": f"Bearer {stack['token']}"})
-    assert resp.status_code >= 400, (
-        "a body that does not hash to the signed digest must be rejected")
+    # Tight: 400 is what the digest-mismatch path raises, and its message
+    # must mention the hash. A bare ">= 400" would be satisfied by a schema
+    # rejection or an off-by-one in another header check, which would leave
+    # the whole digest verification silently gone.
+    assert resp.status_code == 400, resp.text
+    assert "sha" in resp.text.lower() or "digest" in resp.text.lower(), (
+        f"400 came from something other than the digest check: {resp.text}")
     conn = stack["conn"]
     assert conn.execute("SELECT COUNT(*) c FROM pcap_files"
                         ).fetchone()["c"] == 0
