@@ -31,6 +31,10 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "attack_tests"))
 
 pytest.importorskip("fastapi", reason="server extras not installed")
+# httpx too: TestClient raises at import time without it, and a raised
+# import in a test module is a collection error that aborts the whole
+# suite rather than skipping this one file.
+pytest.importorskip("httpx", reason="server extras not installed")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from server import auth, db, ingest_api, storage, worker  # noqa: E402

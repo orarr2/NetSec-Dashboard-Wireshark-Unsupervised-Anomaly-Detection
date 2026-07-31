@@ -3,3 +3,7 @@
 # run the API tests):  pip install -r server/requirements.txt
 fastapi==0.115.6
 uvicorn==0.32.1
+# Test-only: starlette's TestClient refuses to start without it, so the
+# API tests skip themselves when it is absent. Left them silently green
+# in CI for several runs, hence the pin here rather than a bare note.
+httpx==0.28.1
