@@ -414,3 +414,33 @@ def test_render_markdown_panel_shows_failed_judge(tmp_path):
         clients[0])
     assert "_failed_" in md
     assert "failure examples" in md
+
+
+# --- commentary provider routing regression (panel path) ------------------
+
+def test_commentary_provider_matches_the_client_type_not_the_default():
+    """Panel entries like 'ollama:llama3.2' get an OllamaClient with no
+    provider_name attribute. Falling back to the configured default
+    (claude by default) would build a ClaudeClient with the wrong model
+    for the commentary call - the exception is swallowed and the emailed
+    report carries '(Analyst commentary unavailable: ...)'. The router
+    must classify by the actual client type."""
+    from llm_judge import judge_cli, llm_clients
+
+    # Endpoint-profile client: honor provider_name
+    class Prof: pass
+    p = Prof(); p.provider_name = "gemini"; p.model_id = "x"
+    assert judge_cli._commentary_provider(p) == "gemini"
+
+    # Built-in classes: derive from the type, ignore the config default
+    ol = llm_clients.OllamaClient.__new__(llm_clients.OllamaClient)
+    ol.model_id = "llama3.2"; ol.provider_name = None
+    assert judge_cli._commentary_provider(ol) == "ollama"
+
+    oa = llm_clients.OpenAICompatClient.__new__(llm_clients.OpenAICompatClient)
+    oa.model_id = "m"
+    assert judge_cli._commentary_provider(oa) == "openai_compat"
+
+    cl = llm_clients.ClaudeClient.__new__(llm_clients.ClaudeClient)
+    cl.model_id = "claude-x"
+    assert judge_cli._commentary_provider(cl) == "claude"

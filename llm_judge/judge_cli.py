@@ -28,7 +28,35 @@ for _p in (_ROOT, os.path.join(_ROOT, "attack_tests")):
         sys.path.insert(0, _p)
 
 from llm_judge import judge_config, judge_core                  # noqa: E402
+from llm_judge import llm_clients                                   # noqa: E402
 from llm_judge.llm_clients import make_client, make_panel_clients  # noqa: E402
+
+
+def _commentary_provider(client):
+    """Provider-name string suitable for make_client(provider=...), derived
+    from the actual client instance rather than a stringly-typed hint.
+
+    Fixes a real defect: a panel entry like 'ollama:llama3.2' becomes an
+    OllamaClient with no provider_name attribute, so falling back to
+    judge_config.LLM_JUDGE_PROVIDER (default 'claude') would build a
+    ClaudeClient with the wrong model id for the commentary call. That
+    call would then fail, the exception would be swallowed, and the
+    report would carry '(Analyst commentary unavailable: ...)' - the
+    least-verified text in the pipeline going out over email and Issue.
+
+    Endpoint-profile clients keep their provider_name; every other client
+    is classified by its class."""
+    name = getattr(client, "provider_name", None)
+    if name:
+        return name
+    if isinstance(client, llm_clients.ClaudeClient):
+        return "claude"
+    if isinstance(client, llm_clients.OllamaClient):
+        return "ollama"
+    if isinstance(client, llm_clients.OpenAICompatClient):
+        return "openai_compat"
+    # A custom client not in the shipped set - honor the configured default.
+    return judge_config.LLM_JUDGE_PROVIDER
 
 
 # --------------------------------------------------------------------------
@@ -522,11 +550,8 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
         # it, so clients[0] is the second entry - and reading entries[0]
         # here would generate the commentary through the judge that was
         # just excluded from the panel.
-        commentary_provider = getattr(client, "provider_name", None)
+        commentary_provider = _commentary_provider(client)
         commentary_model = client.model_id
-        if commentary_provider is None:
-            # Not a profile client (plain claude/ollama/openai_compat).
-            commentary_provider = judge_config.LLM_JUDGE_PROVIDER
         if verbose:
             print(f"[cli] panel: {' + '.join(c.model_id for c in clients)} "
                   f"(debate {'on' if judge_config.LLM_JUDGE_DEBATE else 'off'})"

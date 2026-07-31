@@ -470,7 +470,11 @@ def _analyze_pcap_tshark(path, label, tshark_path):
     # of the whole session.
     nxdomain_per_dst = collections.Counter(
         df[_nx_mask & (df["ip_dst"]!="")]["ip_dst"].tolist())
-    nonstd_mask  = (df["dns_qname"]!="") & (df["udp_dport"]!="")
+    # Queries only: a DNS response travels TO the client's ephemeral
+    # port, so counting every non-53/5353 dstport double-counts each
+    # (query, response) pair as "unusual".
+    nonstd_mask  = ((df["dns_qname"]!="") & (df["udp_dport"]!="")
+                    & (df["dns_response"] != "1"))
     if nonstd_mask.any():
         ports_int = pd.to_numeric(df.loc[nonstd_mask,"udp_dport"], errors="coerce")
         dns_nonstandard = int(((ports_int != 53) & (ports_int != 5353)).sum())
@@ -1872,7 +1876,9 @@ def _derive_device_name(ip, mdns_names, model):
     """Pick a friendly device name. Prefer mDNS hostname, else model+last-octet."""
     for n in mdns_names:
 
-        clean = n.split("._")[0].rstrip(".local").rstrip(".")
+        clean = n.split("._")[0].rstrip(".")
+        if clean.endswith(".local"):
+            clean = clean[:-6].rstrip(".")
         if 3 <= len(clean) <= 40 and not clean.startswith("_"):
             return clean
 
@@ -2667,7 +2673,9 @@ class LiveCaptureWorker:
                         d["mdns_per_ip"][ip_src].add(q)
             if dns_rc == "3" and dns_rsp in ("1", "True"):
                 d["dns_nxdomain"] += 1
-            if dns_q and udp_dp:
+            # Queries only - see the loader's note (B17). A response
+            # goes to the querier's ephemeral port and is not "unusual".
+            if dns_q and udp_dp and dns_rsp not in ("1", "True"):
                 try:
                     if int(udp_dp) not in (53, 5353):
                         d["dns_nonstandard"] += 1
