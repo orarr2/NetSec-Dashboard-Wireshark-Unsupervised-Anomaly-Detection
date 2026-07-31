@@ -263,21 +263,16 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             )
         lines.append("")
 
-        # Reasoning gets its own section - a long free-text field turns
-        # the 8-column table into a horizontal-scrolling mess on PDF /
-        # phone email clients. The queue stays scannable; the reasoning
-        # per candidate stays fully readable right below it.
-        lines += ["### Reasoning per candidate", ""]
+        # Reasoning as a compact bulleted list right below the queue -
+        # one line per candidate (verdict/category is already in the
+        # table, so we don't repeat it). The long free-text field cannot
+        # live in the 8-column table (PDF overflow), but it also does
+        # not deserve one heading + one blockquote per candidate.
+        lines += ["**Reasoning per candidate**", ""]
         for i, r in enumerate(out["results"], 1):
-            v = r["verdict"]
-            reasoning = v["reasoning"].strip()
-            lines += [
-                f"**#{i} `{r['candidate_id']}` - "
-                f"{v['verdict']}** ({v['category']})",
-                "",
-                f"> {reasoning}",
-                "",
-            ]
+            reasoning = r["verdict"]["reasoning"].strip()
+            lines.append(f"{i}. `{r['candidate_id']}` - {reasoning}")
+        lines.append("")
         if any(r.get("guardrail") for r in out["results"]):
             lines += [
                 "> ⚑ = rule guardrail overrode a benign model verdict "
@@ -368,32 +363,18 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             "",
         ]
 
-    # ----- 5. Not queued for judgment (the honest "we looked at these") -
+    # ----- 5. Not queued for judgment (one line, not a table) -----------
+    # The full "we looked at these" audit is in verdicts.json for anyone
+    # who wants it; the email report only needs the count so the reader
+    # knows the pipeline did not silently skip them.
     not_flagged = (ctx.get("not_flagged_ips") or []) if ctx else []
     if not_flagged:
         lines += [
-            "## Not queued for judgment (traffic considered normal)",
+            f"_Pipeline also analyzed **{len(not_flagged)} additional IP"
+            f"{'' if len(not_flagged) == 1 else 's'}** with no flags - see "
+            f"`verdicts.json` for the full list._",
             "",
-            f"The pipeline analyzed **{len(not_flagged)} additional IP"
-            f"{'' if len(not_flagged) == 1 else 's'}** but did not flag "
-            f"{'it' if len(not_flagged) == 1 else 'them'} - no ML anomaly "
-            "and no deterministic rule fired. Included here so you can see "
-            "the full traffic set the pipeline reasoned about.",
-            "",
-            "| IP | Packets | iso_score |",
-            "|---|--:|--:|",
         ]
-        MAX_ROWS = 20
-        for entry in not_flagged[:MAX_ROWS]:
-            iso = "-" if entry["iso_score"] is None \
-                else f"{entry['iso_score']:+.3f}"
-            lines.append(
-                f"| `{entry['ip']}` | {entry['packets']:,} | {iso} |")
-        if len(not_flagged) > MAX_ROWS:
-            lines.append(
-                f"| _(+ {len(not_flagged) - MAX_ROWS} more, "
-                f"see `verdicts.json`)_ | | |")
-        lines.append("")
 
     # ----- 6. Dropped / Capped ------------------------------------------
     if out["dropped"]:
@@ -447,28 +428,9 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         if examples:
             lines.append("")
 
-    # ----- 7. How to interpret ------------------------------------------
-    lines += [
-        "## How to interpret",
-        "",
-        "- **Verdict**: `benign` (no attack pattern), `suspicious` (weak or "
-        "ambiguous signal), `malicious` (strong, unambiguous evidence).",
-        "- **Category**: the attack shape - `port_scan`, `syn_flood`, "
-        "`dns_amp`, `arp_mitm`, `beaconing_c2`, `dns_tunnel`, or "
-        "`benign_anomaly` (statistical outlier that isn't an attack).",
-        "- **Priority**: ensemble rank score, `0.20·anomaly + "
-        "0.40·confidence + 0.30·category_severity + 0.10·threat_intel`. "
-        "Higher = more urgent for the analyst.",
-        "- **⚑ Rule guardrail**: a candidate whose deterministic rule fired "
-        "(scan / flood / amp / ARP) can never be judged `benign` by the "
-        "model. When the model tries to, the guardrail overrides to "
-        "`suspicious` with the rule-implied category; the raw model verdict "
-        "stays in `verdicts.json` for auditing.",
-        "- **⚖ Panel review**: the panel's judges still disagreed after the "
-        "debate round (or too few judges answered), so the fail-safe "
-        "verdict is shown and a human should make the final call. ↺ marks "
-        "a judge that changed its position during the debate.",
-    ]
+    # The "How to interpret" legend used to live here and repeated on
+    # every email. It moved to docs/LLM_JUDGE_SPEC.md - a reader who
+    # needs the definitions once does not need them again on every run.
     return "\n".join(lines) + "\n"
 
 

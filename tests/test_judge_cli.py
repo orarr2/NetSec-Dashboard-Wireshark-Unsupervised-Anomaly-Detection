@@ -165,7 +165,9 @@ def test_render_markdown_has_expected_sections():
     assert "## Pipeline stats" in md
     assert "## Top verdict" in md
     assert "## Triaged queue" in md
-    assert "## How to interpret" in md
+    # 'How to interpret' was cut: the same legend used to reprint on
+    # every email. It lives in docs/LLM_JUDGE_SPEC.md now.
+    assert "## How to interpret" not in md
     assert "| # | Candidate |" in md   # triaged table header
     for r in out["results"]:
         assert r["candidate_id"] in md
@@ -188,51 +190,45 @@ def test_render_markdown_pipeline_stats_content():
     assert "192.168.1.10" in stats_section       # per-alert detail
 
 
-def test_render_markdown_not_flagged_section_lists_ips():
-    """The 'Not queued for judgment' section shows the analyzed clean IPs."""
+def test_render_markdown_not_flagged_is_one_line_summary():
+    """The 'Not queued for judgment' section used to be a 20-row IP
+    table. Cut down to a single italic line ('Pipeline also analyzed N
+    additional IPs with no flags - see verdicts.json') so the emailed
+    report does not carry 19 rows of benign noise. The full audit still
+    lives in the JSON attachment."""
     out, assembled, client = _judged_batch()
     ctx = _fake_context(not_flagged_count=4)
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=ctx)
-    assert "## Not queued for judgment" in md
+    assert "## Not queued for judgment" not in md
+    assert "Pipeline also analyzed **4 additional IPs**" in md
+    assert "verdicts.json" in md
+    # individual IPs are no longer printed - they belong in the JSON
     for entry in ctx["not_flagged_ips"]:
-        assert entry["ip"] in md
-    # nothing to include -> section is omitted
+        assert entry["ip"] not in md
+    # zero -> the summary line is omitted too
     empty = _fake_context(not_flagged_count=0)
     md2 = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                      context=empty)
-    assert "## Not queued for judgment" not in md2
+    assert "Pipeline also analyzed" not in md2
 
 
-def test_render_markdown_not_flagged_caps_long_list():
+def test_render_markdown_singular_ip_line():
+    """The count line pluralises correctly ('1 additional IP', not '1 IPs')."""
     out, assembled, client = _judged_batch()
-    ctx = _fake_context(not_flagged_count=35)
+    ctx = _fake_context(not_flagged_count=1)
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=ctx)
-    assert "## Not queued for judgment" in md
-    # only the first 20 rows are rendered, plus a "more" hint
-    for i in range(20):
-        assert f"10.0.0.{i + 5}" in md
-    assert "15 more" in md
-    # rows past the cap are elided
-    assert "10.0.0.34" not in md
+    assert "Pipeline also analyzed **1 additional IP**" in md
+    assert "additional IPs" not in md  # no plural
 
 
-def test_render_markdown_how_to_interpret_included():
-    out, assembled, client = _judged_batch()
-    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
-                                    context=_fake_context())
-    assert "## How to interpret" in md
-    assert "Verdict" in md
-    assert "Rule guardrail" in md
-
-
-def test_render_markdown_reasoning_lives_in_its_own_section():
-    """Reasoning was moved out of the triaged-queue table because the
-    long free-text field overflowed the 9-column layout in PDF / phone
-    email clients. It now renders as a `> quote` under its own heading -
-    so a `|` in the reasoning survives verbatim (no escaping needed) and
-    the queue table stays 8 compact columns."""
+def test_render_markdown_reasoning_lives_below_the_queue_as_a_list():
+    """Reasoning is out of the triaged-queue table (was overflowing the
+    9-column layout on PDF / phone email). It renders as a compact
+    numbered list right below the queue - one line per candidate - so a
+    `|` in the reasoning survives verbatim (no escaping needed) and the
+    queue table stays 8 columns."""
     out = {
         "stats": {"total": 1, "judged": 1, "cache_hits": 0, "dropped": 0,
                   "prompt_version": "v", "model": "fake"},
@@ -257,9 +253,11 @@ def test_render_markdown_reasoning_lives_in_its_own_section():
     assert table_row.count("|") == 9  # 8 columns + trailing edge
     assert "before" not in table_row  # reasoning NOT in the queue row
 
-    # Reasoning shows under its own heading, as a blockquote.
-    assert "### Reasoning per candidate" in md
-    assert "> before | after pipe" in md
+    # Reasoning shows as `**Reasoning per candidate**` (bold, not a
+    # heading - it is not a top-level section) followed by a numbered
+    # list. `|` inside the reasoning is preserved verbatim.
+    assert "**Reasoning per candidate**" in md
+    assert "1. `1.2.3.4` - before | after pipe" in md
 
 
 def test_render_markdown_empty_batch():
@@ -333,7 +331,7 @@ def test_main_writes_json_and_markdown(tmp_path):
     assert "# Judge verdicts" in md
     assert "sample.pcap" in md
     assert "## Pipeline stats" in md
-    assert "## How to interpret" in md
+    assert "## Triaged queue" in md  # replaced 'How to interpret'
 
 
 def test_main_returns_nonzero_when_pcap_missing(tmp_path):
