@@ -175,25 +175,33 @@ class OpenAICompatClient:
     def __init__(self, model=None, base_url=None, api_key=None,
                  timeout_s=None, verdict_schema=None, max_tokens=2048):
         import os
-        self.model_id = model or judge_config.OPENAI_COMPAT_MODEL
-        if not self.model_id:
-            raise JudgeClientError(
-                "OPENAI_COMPAT_MODEL is not set - the openai_compat "
-                "provider needs an explicit model name")
         # An explicit base_url means the caller is pointing at a specific
-        # host (an endpoint profile). The global OPENAI_COMPAT_API_KEY
-        # belongs to whatever host OPENAI_COMPAT_BASE_URL names, so
-        # falling back to it here would put one provider's secret in the
-        # Authorization header sent to a different provider. Only the
-        # default host may use the default key.
+        # host (an endpoint profile). Every global default - the key AND
+        # the model name - belongs to whatever host OPENAI_COMPAT_BASE_URL
+        # names, so borrowing either one for a different host is wrong:
+        # the key would leak one provider's secret to another, and the
+        # model name would name a model that host has never heard of.
+        # Only the default host may use the defaults.
         explicit_host = base_url is not None
         self.base_url = (base_url
                          or judge_config.OPENAI_COMPAT_BASE_URL).rstrip("/")
         if explicit_host:
+            self.model_id = model
             self.api_key = api_key or ""
+            if not self.model_id:
+                raise JudgeClientError(
+                    f"no model given for endpoint {self.base_url} - set "
+                    "the profile's _MODEL variable (the global "
+                    "OPENAI_COMPAT_MODEL belongs to a different host and "
+                    "is deliberately not used here)")
         else:
+            self.model_id = model or judge_config.OPENAI_COMPAT_MODEL
             self.api_key = api_key or os.environ.get("OPENAI_COMPAT_API_KEY",
                                                      "")
+            if not self.model_id:
+                raise JudgeClientError(
+                    "OPENAI_COMPAT_MODEL is not set - the openai_compat "
+                    "provider needs an explicit model name")
         self.timeout_s = timeout_s or judge_config.JUDGE_TIMEOUT_S
         self.verdict_schema = verdict_schema
         self.max_tokens = max_tokens

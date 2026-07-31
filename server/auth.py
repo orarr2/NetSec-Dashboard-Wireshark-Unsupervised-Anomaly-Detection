@@ -58,7 +58,15 @@ def verify_upload(sensor_row, file_sha256, timestamp, signature,
         raise AuthError("timestamp outside window")
     expected = upload_signature(sensor_row["hmac_secret"], file_sha256,
                                 sensor_row["name"], ts)
-    if not hmac.compare_digest(expected, signature or ""):
+    # compare_digest raises TypeError on a str containing non-ASCII, and
+    # the API layer only maps AuthError to 401 - so an emoji in the header
+    # would surface as an unhandled 500 and hand an attacker a way to tell
+    # malformed input apart from a wrong signature. A signature is hex, so
+    # anything outside ASCII is simply wrong.
+    sig = signature or ""
+    if not sig.isascii():
+        raise AuthError("bad signature")
+    if not hmac.compare_digest(expected, sig):
         raise AuthError("bad signature")
 
 

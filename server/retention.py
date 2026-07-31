@@ -113,17 +113,38 @@ def purge_by_watermark(conn, root, pct=None, dry_run=False, export_fn=None,
     pct = pct if pct is not None else _cfg_int("RETENTION_WATERMARK_PCT", 85)
     usage_fn = usage_fn or disk_used_pct
     purged = 0
+    # A row whose purge fails keeps deleted_at NULL, so it stays the oldest
+    # candidate forever. Stopping on it (or retrying it) would let one
+    # unexportable pcap - a truncated chunk, a DB restored onto a fresh
+    # volume - disable the emergency valve permanently while the disk
+    # climbs to ENOSPC. Skip it for this cycle and keep reclaiming; the
+    # SKIP line in _purge_row still reports it every run.
+    attempted = set()
     while usage_fn(root) > pct:
-        row = conn.execute(
-            "SELECT * FROM pcap_files WHERE deleted_at IS NULL"
-            " ORDER BY received_at LIMIT 1").fetchone()
+        if attempted:
+            marks = ",".join("?" * len(attempted))
+            row = conn.execute(
+                "SELECT * FROM pcap_files WHERE deleted_at IS NULL"
+                f" AND id NOT IN ({marks})"
+                " ORDER BY received_at LIMIT 1", tuple(attempted)).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM pcap_files WHERE deleted_at IS NULL"
+                " ORDER BY received_at LIMIT 1").fetchone()
         if row is None:
-            print(f"[retention] disk above {pct}% but no raw pcaps left "
-                  "to purge - reports/DB are never touched", flush=True)
+            if attempted:
+                print(f"[retention] disk above {pct}% and every remaining "
+                      f"pcap failed to purge ({len(attempted)} skipped) - "
+                      "investigate the SKIP lines above", flush=True)
+            else:
+                print(f"[retention] disk above {pct}% but no raw pcaps left "
+                      "to purge - reports/DB are never touched", flush=True)
             break
-        if not _purge_row(conn, dict(row), root, dry_run, export_fn,
+        row = dict(row)
+        if not _purge_row(conn, row, root, dry_run, export_fn,
                           f"disk>{pct}%"):
-            break
+            attempted.add(row["id"])
+            continue
         purged += 1
         if dry_run:      # a dry run frees nothing; one report is enough
             break

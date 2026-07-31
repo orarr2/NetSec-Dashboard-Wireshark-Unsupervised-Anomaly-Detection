@@ -516,7 +516,17 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     if panel is not None:
         entries, clients, init_failures = panel
         client = clients[0]
-        commentary_provider, commentary_model = entries[0]
+        # Take the commentary provider from the client that was actually
+        # constructed, not from entries[0]. When the first entry fails to
+        # initialize (missing key, unknown model) make_panel_clients drops
+        # it, so clients[0] is the second entry - and reading entries[0]
+        # here would generate the commentary through the judge that was
+        # just excluded from the panel.
+        commentary_provider = getattr(client, "provider_name", None)
+        commentary_model = client.model_id
+        if commentary_provider is None:
+            # Not a profile client (plain claude/ollama/openai_compat).
+            commentary_provider = judge_config.LLM_JUDGE_PROVIDER
         if verbose:
             print(f"[cli] panel: {' + '.join(c.model_id for c in clients)} "
                   f"(debate {'on' if judge_config.LLM_JUDGE_DEBATE else 'off'})"

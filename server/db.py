@@ -13,7 +13,7 @@ existing database is a no-op.
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 SCHEMA_VERSION = 2
 
@@ -293,10 +293,49 @@ def get_session(conn, session_id):
 
 # ---- worker queue --------------------------------------------------------
 
+# A session is only ever moved out of 'running' by mark_done/mark_error,
+# so a worker killed mid-analysis (OOM, container restart, power loss)
+# leaves its row running forever and that PCAP is never analysed again.
+# Anything still running after this many seconds is treated as abandoned
+# and requeued. The default is generously above the slowest observed
+# analysis (a 37k-packet flood capture takes ~75s).
+STALE_RUNNING_S = int(os.environ.get("NETSEC_STALE_RUNNING_S", "3600"))
+
+
+def requeue_stale_jobs(conn, stale_s=None, now=None):
+    """Return abandoned 'running' sessions to the queue. Returns the list
+    of requeued session ids so the caller can log them - a silent requeue
+    would hide a worker that is crash-looping on one capture."""
+    stale_s = STALE_RUNNING_S if stale_s is None else stale_s
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(seconds=stale_s)
+    # started_at is written by _utcnow(), so compare in the same shape -
+    # these are lexically ordered ISO-8601 strings.
+    cutoff_s = cutoff.isoformat(timespec="seconds")
+    rows = conn.execute(
+        "SELECT id FROM sessions WHERE status='running'"
+        " AND started_at IS NOT NULL AND started_at < ?",
+        (cutoff_s,)).fetchall()
+    ids = [r["id"] for r in rows]
+    for sid in ids:
+        conn.execute(
+            "UPDATE sessions SET status='queued', started_at=NULL"
+            " WHERE id=? AND status='running'", (sid,))
+    if ids:
+        conn.commit()
+    return ids
+
+
 def claim_next_job(conn):
     """Atomically move the oldest queued session to running and return it
     (joined with its pcap row), or None when the queue is empty. Uses an
-    IMMEDIATE transaction instead of RETURNING so any sqlite3 works."""
+    IMMEDIATE transaction instead of RETURNING so any sqlite3 works.
+
+    Abandoned 'running' rows are requeued first, so a worker death cannot
+    strand a capture."""
+    stale = requeue_stale_jobs(conn)
+    if stale:
+        print(f"[db] requeued {len(stale)} stale running session(s): "
+              f"{stale}", flush=True)
     conn.execute("BEGIN IMMEDIATE")
     try:
         row = conn.execute(

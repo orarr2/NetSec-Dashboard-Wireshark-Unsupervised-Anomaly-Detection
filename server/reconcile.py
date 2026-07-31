@@ -65,37 +65,57 @@ def reconcile(conn, session_id, S, dsts=None, slack_s=WINDOW_SLACK_S):
     infra_pairs = [(src, dst, cnt) for (src, dst), cnt in pairs.items()
                    if dst in dsts]
 
+    # A flow only counts as declared self-telemetry when a telemetry row
+    # overlapping this window went to the SAME destination. Testing
+    # `if rows:` instead would be loop-invariant: every upload writes an
+    # ingest_log row that brackets the capture, so any flow to any infra
+    # address would be excused and undeclared_infra_flow could never fire
+    # on a live server - exactly the exfiltration case this rule exists
+    # to catch.
+    declared_dsts = {r.get("dst") for r in rows if r.get("dst")}
+
     matched_srcs = set()
+    matched_row_ids = set()
     for src, dst, cnt in infra_pairs:
-        if rows:
+        if dst in declared_dsts:
             matched_srcs.add(src)
+            matched_row_ids.update(r["id"] for r in rows
+                                   if r.get("dst") == dst)
         else:
             conn.execute(
                 "INSERT INTO findings (session_id, layer, rule, ip,"
                 " severity, detail_json) VALUES (?,?,?,?,?,?)",
                 (session_id, "telemetry", "undeclared_infra_flow", src,
-                 "high", json.dumps({"dst": dst, "packets": int(cnt)})))
+                 "high", json.dumps({"dst": dst, "packets": int(cnt),
+                                     "declared_dsts": sorted(declared_dsts)})))
             summary["undeclared"] += 1
 
     for src in matched_srcs:
         conn.execute(
             "UPDATE ip_features SET self_telemetry=1 WHERE session_id=?"
             " AND ip=?", (session_id, src))
-    for r in rows:
+    # Only rows that actually explained a flow are consumed. Marking every
+    # overlapping row would hide a telemetry upload the capture never saw.
+    for rid in matched_row_ids:
         conn.execute(
             "UPDATE telemetry_log SET matched_session_id=? WHERE id=?"
-            " AND matched_session_id IS NULL", (session_id, r["id"]))
+            " AND matched_session_id IS NULL", (session_id, rid))
 
-    if rows and not infra_pairs:
-        for r in rows:
-            conn.execute(
-                "INSERT INTO findings (session_id, layer, rule, ip,"
-                " severity, detail_json) VALUES (?,?,?,?,?,?)",
-                (session_id, "telemetry", "capture_blind_spot", None,
-                 "medium", json.dumps({"telemetry_row": r["id"],
-                                       "dst": r.get("dst"),
-                                       "bytes_sent": r.get("bytes_sent")})))
-            summary["blind_spots"] += 1
+    # A blind spot is a telemetry row the capture did not corroborate:
+    # the sensor says it uploaded, but no flow to that destination appears
+    # in the packets. Keying this on "no infra pairs at all" would miss the
+    # case where one upload is visible and another is not.
+    for r in rows:
+        if r["id"] in matched_row_ids:
+            continue
+        conn.execute(
+            "INSERT INTO findings (session_id, layer, rule, ip,"
+            " severity, detail_json) VALUES (?,?,?,?,?,?)",
+            (session_id, "telemetry", "capture_blind_spot", None,
+             "medium", json.dumps({"telemetry_row": r["id"],
+                                   "dst": r.get("dst"),
+                                   "bytes_sent": r.get("bytes_sent")})))
+        summary["blind_spots"] += 1
 
     summary["matched_ips"] = sorted(matched_srcs)
     conn.commit()
