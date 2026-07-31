@@ -36,8 +36,12 @@ SHODAN_MAX_PEERS = int(os.environ.get("NETSEC_SHODAN_MAX_PEERS", "5"))
 
 
 def _shodan_enabled():
-    return os.environ.get("NETSEC_ENABLE_SHODAN", "").lower() \
-        not in ("", "0", "false")
+    # Take only the first token, so an inline "0  # comment" in .env (which
+    # some parsers keep as part of the value) still counts as off. Requires
+    # an explicit "1" / "true" / "on" / "yes" to enable - fail-closed, since
+    # this turns on a paid / rate-limited external lookup.
+    raw = os.environ.get("NETSEC_ENABLE_SHODAN", "").strip().split()
+    return bool(raw) and raw[0].lower() in ("1", "true", "on", "yes")
 
 
 def enrich_threat_intel(conn, out, assembled, S, shodan_fn=None):

@@ -288,3 +288,46 @@ def test_upload_cli_end_to_end(tmp_path):
         assert record["dst"] == "127.0.0.1"
     finally:
         server.shutdown()
+
+
+def test_bearer_cannot_read_another_sensors_session(tmp_path):
+    """Cross-sensor authz. Sensor A uploads a capture; sensor B has a valid
+    bearer of its own. B must NOT be able to read A's session or reports.
+    404 (not 403) so the presence of A's session id is not confirmed."""
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+    from server.ingest_api import create_app
+
+    app = create_app(db_path=str(tmp_path / "netsec.db"),
+                     data_root=str(tmp_path))
+    conn = db.connect(str(tmp_path / "netsec.db"))
+    a_sensor, a_token = _sensor(conn, "sensor-a")
+    b_sensor, b_token = _sensor(conn, "sensor-b")
+    conn.close()
+
+    with TestClient(app) as client:
+        payload = b"\xd4\xc3\xb2\xa1" + b"z" * 200
+        _, headers = _upload_headers(a_sensor, payload)
+        r = client.post("/v1/pcap", content=payload, headers=headers)
+        assert r.status_code == 202, r.text
+        sid = r.json()["session_id"]
+
+        # A can read its own session
+        ok = client.get(f"/v1/sessions/{sid}",
+                        headers={"Authorization": f"Bearer {a_token}"})
+        assert ok.status_code == 200
+
+        # B (a real, valid sensor) cannot - and gets 404, not 403,
+        # so the id's existence is not disclosed.
+        forbidden = client.get(
+            f"/v1/sessions/{sid}",
+            headers={"Authorization": f"Bearer {b_token}"})
+        assert forbidden.status_code == 404
+
+        # Report endpoint is subject to the same rule (before 404 for the
+        # report itself, which isn't generated yet).
+        forbidden_r = client.get(
+            f"/v1/reports/{sid}.html",
+            headers={"Authorization": f"Bearer {b_token}"})
+        assert forbidden_r.status_code == 404

@@ -147,14 +147,26 @@ def create_app(db_path=None, data_root=None):
         except auth.AuthError as e:
             raise HTTPException(401, e.reason)
 
+    def _authorize_session(conn, sensor, session):
+        """A sensor may read only its own sessions unless it is the admin
+        sensor (NETSEC_ADMIN_SENSOR - the dashboard's read-all account).
+        Returning 404 (not 403) for a foreign session so the presence of
+        a session id owned by another sensor is not confirmed."""
+        if session is None:
+            raise HTTPException(404, "no such session")
+        admin = os.environ.get("NETSEC_ADMIN_SENSOR", "").strip()
+        if admin and sensor.get("name") == admin:
+            return
+        if session.get("sensor_id") != sensor.get("id"):
+            raise HTTPException(404, "no such session")
+
     @app.get("/v1/sessions/{session_id}")
     def get_session(session_id: int, authorization: str = Header(None)):
         conn = _conn()
         try:
-            _bearer(conn, authorization)
+            sensor = _bearer(conn, authorization)
             session = db.get_session(conn, session_id)
-            if session is None:
-                raise HTTPException(404, "no such session")
+            _authorize_session(conn, sensor, session)
             return session
         finally:
             conn.close()
@@ -167,7 +179,9 @@ def create_app(db_path=None, data_root=None):
                 404, "kind must be " + "|".join(_REPORT_MEDIA))
         conn = _conn()
         try:
-            _bearer(conn, authorization)
+            sensor = _bearer(conn, authorization)
+            session = db.get_session(conn, session_id)
+            _authorize_session(conn, sensor, session)
             report = db.get_report(conn, session_id, kind)
         finally:
             conn.close()

@@ -142,6 +142,26 @@ def test_worker_rerank_off_without_env(conn, monkeypatch):
                                       {}, shodan_fn=lambda ip: {}) == 0
 
 
+def test_shodan_toggle_fail_closed(monkeypatch):
+    """NETSEC_ENABLE_SHODAN gates a paid external lookup; the parser must
+    default OFF for the common .env pitfall of leaving an inline comment
+    on the value (some parsers keep '0    # comment' as the whole value).
+    Also normalizes case/whitespace and rejects garbage."""
+    from server.worker import _shodan_enabled
+    # Off cases
+    for v in ("", "  ", "0", "false", "FALSE", "off", "no",
+              "0    # 1 = look up external peers on Shodan",
+              "0\t# comment", "definitely-not-a-truthy-value"):
+        monkeypatch.setenv("NETSEC_ENABLE_SHODAN", v)
+        assert _shodan_enabled() is False, f"should be off: {v!r}"
+    monkeypatch.delenv("NETSEC_ENABLE_SHODAN", raising=False)
+    assert _shodan_enabled() is False
+    # On cases (fail-closed: must be explicit)
+    for v in ("1", "true", "TRUE", "yes", "on", "1 # note"):
+        monkeypatch.setenv("NETSEC_ENABLE_SHODAN", v)
+        assert _shodan_enabled() is True, f"should be on: {v!r}"
+
+
 # ---- geo map -------------------------------------------------------------
 
 def test_map_render_places_points(tmp_path):

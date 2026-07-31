@@ -301,7 +301,8 @@ def latest_session_for_pcap(conn, pcap_id):
 
 def get_session(conn, session_id):
     row = conn.execute(
-        "SELECT s.*, p.sha256, p.orig_name, p.size_bytes, p.storage_path"
+        "SELECT s.*, p.sha256, p.orig_name, p.size_bytes, p.storage_path,"
+        " p.sensor_id"
         " FROM sessions s JOIN pcap_files p ON p.id = s.pcap_id"
         " WHERE s.id = ?", (session_id,)).fetchone()
     return dict(row) if row else None
