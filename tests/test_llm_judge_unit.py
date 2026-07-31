@@ -472,3 +472,128 @@ def test_single_judge_result_has_no_committee_key(tmp_path):
     assert "committee" not in out["results"][0]
     assert "committee" not in out["stats"]
     assert "needs_review" not in out["stats"]
+
+
+# --------------------------------------------------------------------------
+# Advanced signals + device context wiring (Stage 3)
+# --------------------------------------------------------------------------
+def test_assemble_populates_advanced_signals_and_device_context_when_passed():
+    """Prove the wiring: when the caller passes an advanced_signals dict
+    (from threats_to_advanced_signals) and a device_context dict (from
+    local_inv_to_device_context), the per-IP data lands in the candidate
+    blob instead of the all-null defaults. This was hardcoded null before
+    Stage 3 - the audit's D1/D4 defect - and the schema now documents
+    that it is populated when the pipeline runs the dashboard's advanced
+    engines."""
+    S = make_session()
+    adv = {"192.168.1.10": {
+        "beaconing": {"score": 0.85, "severity": "high", "count": 42,
+                      "peer": "8.8.8.8"},
+        "dns_tunneling": None, "dga": None, "tls_anomaly": None,
+        "fusion_score": {"score": 0.9, "techniques": 2}}}
+    dev = {"192.168.1.10": {"category": "Network Infra",
+                            "hostname": "edge-router",
+                            "oui_vendor": "Cisco"}}
+    out = judge_core.assemble_candidates(
+        S, make_findings(), advanced_signals=adv, device_context=dev)
+    c = next(x for x in out["candidates"]
+             if x["candidate_id"] == "192.168.1.10")
+    assert c["advanced_signals"]["beaconing"]["score"] == 0.85
+    assert c["advanced_signals"]["fusion_score"]["techniques"] == 2
+    assert c["device_context"] == {"category": "Network Infra",
+                                   "hostname": "edge-router",
+                                   "oui_vendor": "Cisco"}
+    # Backward compat: an IP not in the passed dict still gets the default
+    # all-null block, so the schema stays stable.
+    S2 = make_session()
+    out2 = judge_core.assemble_candidates(S2, make_findings())
+    for c in out2["candidates"]:
+        assert c["advanced_signals"] == {"beaconing": None,
+            "dns_tunneling": None, "dga": None, "tls_anomaly": None,
+            "fusion_score": None}
+        assert c["device_context"] == {"category": "unknown",
+            "hostname": None, "oui_vendor": None}
+
+
+def test_threats_to_advanced_signals_reshape():
+    """Direct helper test: raw run_advanced_threats() output -> per-IP
+    map, with per-engine {score, severity, count, peer} preserved and
+    fusion_score attached from device_risk."""
+    threats = {
+        "available": True, "n_packets": 100,
+        "per_engine": {
+            "beaconing": [{"device": "10.0.0.1", "peer": "8.8.8.8",
+                           "score": 0.9, "severity": "high", "count": 40}],
+            "dns_tunnel": [{"device": "10.0.0.1", "peer": "",
+                            "score": 0.62, "severity": "medium", "count": 30}],
+            "dga": [], "arp_dhcp": [],
+            "tls": [{"device": "10.0.0.2", "peer": "1.2.3.4",
+                     "score": 0.5, "severity": "low", "count": 3}],
+        },
+        "device_risk": [
+            {"device": "10.0.0.1", "risk": 0.9, "techniques_seen": 2}],
+    }
+    adv = judge_core.threats_to_advanced_signals(threats)
+    assert set(adv) == {"10.0.0.1", "10.0.0.2"}
+    assert adv["10.0.0.1"]["beaconing"]["score"] == 0.9
+    assert adv["10.0.0.1"]["dns_tunneling"]["count"] == 30
+    assert adv["10.0.0.1"]["fusion_score"]["techniques"] == 2
+    assert adv["10.0.0.2"]["tls_anomaly"]["severity"] == "low"
+    # unavailable / missing -> empty
+    assert judge_core.threats_to_advanced_signals({"available": False}) == {}
+    assert judge_core.threats_to_advanced_signals(None) == {}
+
+
+def test_local_inv_to_device_context_accepts_df_and_records():
+    """Same helper on both a list-of-dicts and a pandas DataFrame - the
+    dashboard produces the frame, the run_pipeline path can produce the
+    lightweight records shape."""
+    records = [{"ip": "10.0.0.1", "device_name": "router",
+                "category": "Network Infra", "vendor": "Cisco"},
+               {"ip": "10.0.0.2", "device_name": "phone",
+                "category": "Mobile", "vendor": "Apple"}]
+    dev_from_records = judge_core.local_inv_to_device_context(records)
+    df = pd.DataFrame(records)
+    dev_from_df = judge_core.local_inv_to_device_context(df)
+    assert dev_from_records == dev_from_df
+    assert dev_from_records["10.0.0.1"]["hostname"] == "router"
+    assert dev_from_records["10.0.0.2"]["oui_vendor"] == "Apple"
+    assert judge_core.local_inv_to_device_context(None) == {}
+    assert judge_core.local_inv_to_device_context([]) == {}
+
+
+# --------------------------------------------------------------------------
+# Pipeline-vs-judge findings contract (Stage 3: pin against D2 drift)
+# --------------------------------------------------------------------------
+def test_run_pipeline_findings_keys_match_what_assemble_reads():
+    """The judge's assemble_candidates reads a specific set of keys off
+    the findings dict: scan_alerts, amp_alerts, flood_alerts,
+    arp_spoofing_ips. attack_tests/run_pipeline.py is the only detector
+    layer that feeds the judge (the dashboard's own run_security_scans
+    uses different names and is not the caller). If run_pipeline ever
+    stops emitting one of these keys - or renames one - the judge
+    silently drops that signal. Pin the contract with a static parse of
+    the return dict so a rename breaks CI immediately."""
+    import ast
+    path = os.path.join(ROOT, "attack_tests", "run_pipeline.py")
+    tree = ast.parse(open(path).read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) \
+                and node.name == "run_security_scans":
+            # find the final `return {...}` in the function body
+            ret = next(s for s in reversed(node.body)
+                       if isinstance(s, ast.Return)
+                       and isinstance(s.value, ast.Dict))
+            keys = {k.value for k in ret.value.keys
+                    if isinstance(k, ast.Constant)}
+            break
+    else:
+        pytest.fail("run_security_scans not found in run_pipeline.py")
+    # Every key assemble_candidates reads must be present in the returned dict
+    required = {"scan_alerts", "amp_alerts", "flood_alerts",
+                "arp_spoofing_ips"}
+    missing = required - keys
+    assert not missing, (
+        f"run_pipeline.run_security_scans dropped judge-consumed keys: "
+        f"{sorted(missing)}. The judge reads them in judge_core."
+        f"assemble_candidates; a silent rename breaks the LLM signal path.")

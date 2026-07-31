@@ -253,17 +253,102 @@ FEATURE_COLS = ["mean_len", "std_len", "count", "burst_score", "unique_dsts",
                 "xmas_count"]
 
 
-def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None):
+_EMPTY_ADV = {"beaconing": None, "dns_tunneling": None,
+              "dga": None, "tls_anomaly": None, "fusion_score": None}
+_EMPTY_DEV = {"category": "unknown", "hostname": None, "oui_vendor": None}
+
+
+def threats_to_advanced_signals(threats):
+    """Reshape the dict `run_advanced_threats(pcap, label)` returns into the
+    per-IP `advanced_signals` blob assemble_candidates puts in each
+    candidate. Passes through unchanged if given an already-per-IP dict.
+
+    Input: {available, per_engine{arp_dhcp, dns_tunnel, dga, beaconing, tls},
+            all_signals, device_risk}. Output: {ip -> {beaconing, dns_tunneling,
+            dga, tls_anomaly, fusion_score}}. Missing engines stay `None`.
+
+    Safe on the {"available": False, "reason": "..."} shape: returns an
+    empty dict so a caller can pass this through without checking first."""
+    if not isinstance(threats, dict) or not threats.get("available"):
+        return {}
+    per = threats.get("per_engine") or {}
+    device_risk = threats.get("device_risk") or []
+    ENGINE_TO_KEY = {"beaconing": "beaconing", "dns_tunnel": "dns_tunneling",
+                     "dga": "dga", "tls": "tls_anomaly"}
+    per_ip = {}
+    for engine, target_key in ENGINE_TO_KEY.items():
+        for row in per.get(engine) or []:
+            ip = row.get("device")
+            if not ip:
+                continue
+            cur = per_ip.setdefault(ip, dict(_EMPTY_ADV))
+            prev = cur.get(target_key)
+            score = _num(row.get("score"))
+            # keep the worst signal seen for this device+engine
+            if (prev is None or (isinstance(prev, dict)
+                                 and _num(prev.get("score") or 0) < score)):
+                cur[target_key] = {
+                    "score": score,
+                    "severity": row.get("severity"),
+                    "count": int(row.get("count") or 0),
+                    "peer": row.get("peer"),
+                }
+    for row in device_risk:
+        ip = row.get("device")
+        if not ip:
+            continue
+        cur = per_ip.setdefault(ip, dict(_EMPTY_ADV))
+        cur["fusion_score"] = {
+            "score": _num(row.get("risk") or row.get("score")),
+            "techniques": int(row.get("techniques_seen")
+                              or row.get("engines_hit") or 0),
+        }
+    return per_ip
+
+
+def local_inv_to_device_context(inv):
+    """Reshape a `build_local_inventory` DataFrame (or list-of-dicts) into
+    {ip -> {category, hostname, oui_vendor}}. Returns {} if inv is falsy
+    or has no rows."""
+    if inv is None:
+        return {}
+    rows = inv.to_dict("records") if hasattr(inv, "to_dict") else list(inv)
+    out = {}
+    for r in rows or []:
+        ip = r.get("ip")
+        if not ip:
+            continue
+        out[ip] = {
+            "category": r.get("category") or "unknown",
+            "hostname": r.get("device_name") or r.get("hostname"),
+            "oui_vendor": r.get("vendor") or r.get("vendor_oui") or r.get("oui_vendor"),
+        }
+    return out
+
+
+def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
+                        advanced_signals=None, device_context=None):
     """Union of everything any detector flagged, one JSON blob each.
 
     lstm_flags: optional {ip: bin_flag_count} attribution from the LSTM
     layer (null in the blob when not provided - the standalone pipeline
     treats the LSTM as an optional, slow extra).
+    advanced_signals: optional {ip: {beaconing, dns_tunneling, dga,
+        tls_anomaly, fusion_score}} - the per-IP output of the dashboard's
+        five advanced engines + fusion scorer. Preserved as-is per IP
+        (use `threats_to_advanced_signals` to reshape a raw
+        run_advanced_threats() output). Absent IPs get the default all-null
+        block so the schema is stable.
+    device_context: optional {ip: {category, hostname, oui_vendor}} - the
+        per-IP output of the device classifier + inventory. Same story:
+        absent IPs get the default "unknown/None/None" block.
 
     Returns {"candidates": [...], "capped": [ids dropped by the batch cap]}.
     Rule-triggered candidates always survive the cap; the statistical-only
     remainder is ranked by iso_score (most anomalous first).
     """
+    advanced_signals = advanced_signals or {}
+    device_context = device_context or {}
     if max_candidates is None:
         max_candidates = judge_config.MAX_CANDIDATES_PER_BATCH
     ip_agg = S["ip_agg"]
@@ -352,11 +437,8 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None):
                 "amp_alerts": [amp_by_src[ip]] if ip in amp_by_src else [],
                 "arp_multi_mac": ip in arp_ips,
             },
-            "advanced_signals": {"beaconing": None, "dns_tunneling": None,
-                                 "dga": None, "tls_anomaly": None,
-                                 "fusion_score": None},
-            "device_context": {"category": "unknown", "hostname": None,
-                               "oui_vendor": None},
+            "advanced_signals": advanced_signals.get(ip, dict(_EMPTY_ADV)),
+            "device_context": device_context.get(ip, dict(_EMPTY_DEV)),
             "enrichments": {"is_private": _is_private(ip),
                             "reverse_dns": None, "asn": None,
                             "baseline_seen_before": None},
@@ -384,11 +466,10 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None):
                            "silhouette": None, "lstm_bin_flag_count": None},
             "rule_signals": {"scan_alerts": [], "flood_alerts": flood_alerts,
                              "amp_alerts": [], "arp_multi_mac": False},
-            "advanced_signals": {"beaconing": None, "dns_tunneling": None,
-                                 "dga": None, "tls_anomaly": None,
-                                 "fusion_score": None},
-            "device_context": {"category": "unknown", "hostname": None,
-                               "oui_vendor": None},
+            # Session-scope candidate: advanced/device context are per-IP
+            # concepts, so keep them at the default empty blocks here.
+            "advanced_signals": dict(_EMPTY_ADV),
+            "device_context": dict(_EMPTY_DEV),
             "enrichments": {"is_private": None, "reverse_dns": None,
                             "asn": None, "baseline_seen_before": None},
             "trigger_reasons": ["flood_rule"],

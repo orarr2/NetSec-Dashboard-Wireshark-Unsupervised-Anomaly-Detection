@@ -67,7 +67,7 @@
     },
     "advanced_signals": {
       "type": "object",
-      "description": "Reserved for the dashboard's advanced threat engines. Always null in the standalone pipeline (v1).",
+      "description": "Per-IP output of the dashboard's five advanced engines + fusion. When the caller passes an advanced_signals map to assemble_candidates (e.g. from run_advanced_threats -> threats_to_advanced_signals), each engine slot becomes {score, severity, count, peer} and fusion_score becomes {score, techniques}. Absent engines / IPs stay null - this is the default when no advanced pipeline ran.",
       "properties": {
         "beaconing": {},
         "dns_tunneling": {},
