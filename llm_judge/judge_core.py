@@ -11,11 +11,13 @@ Flow (one PCAP):
     out = judge_candidates(candidates)          # cache -> LLM -> validate
     out["results"]                              # ranked by ensemble priority
 """
+import concurrent.futures
 import hashlib
 import ipaddress
 import json
 import os
 import sqlite3
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -154,42 +156,57 @@ def fingerprint(candidate_context, prompt_version, model_id):
 
 
 class JudgeCache:
-    """SQLite verdict cache. Only schema-validated verdicts are written."""
+    """SQLite verdict cache. Only schema-validated verdicts are written.
+
+    Thread-safe: the panel path fans one candidate out to N judges in
+    parallel (see judge_candidates_panel), and every worker thread hits
+    the same cache. `check_same_thread=False` on the connection lets
+    threads share it, and `_lock` serialises the actual reads/writes so
+    SQLite never sees interleaved statements. The lock is only held for
+    the duration of a single query - the LLM call itself, which is what
+    we actually parallelise, stays outside it."""
 
     def __init__(self, db_path):
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
-        self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS judge_cache (
-                fingerprint TEXT PRIMARY KEY,
-                prompt_version TEXT NOT NULL,
-                verdict_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                llm_model TEXT NOT NULL,
-                latency_ms INTEGER
-            )""")
-        self._conn.commit()
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS judge_cache (
+                    fingerprint TEXT PRIMARY KEY,
+                    prompt_version TEXT NOT NULL,
+                    verdict_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    llm_model TEXT NOT NULL,
+                    latency_ms INTEGER
+                )""")
+            self._conn.commit()
 
     def get(self, fp):
-        row = self._conn.execute(
-            "SELECT verdict_json FROM judge_cache WHERE fingerprint = ?",
-            (fp,)).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT verdict_json FROM judge_cache WHERE fingerprint = ?",
+                (fp,)).fetchone()
         return json.loads(row[0]) if row else None
 
     def put(self, fp, prompt_version, verdict, model_id, latency_ms):
-        self._conn.execute(
-            "INSERT OR REPLACE INTO judge_cache VALUES (?, ?, ?, ?, ?, ?)",
-            (fp, prompt_version, canonical_json(verdict),
-             datetime.now(timezone.utc).isoformat(timespec="seconds"),
-             model_id, int(latency_ms)))
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO judge_cache VALUES (?, ?, ?, ?, ?, ?)",
+                (fp, prompt_version, canonical_json(verdict),
+                 datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 model_id, int(latency_ms)))
+            self._conn.commit()
 
     def stats(self):
-        n, = self._conn.execute("SELECT COUNT(*) FROM judge_cache").fetchone()
+        with self._lock:
+            n, = self._conn.execute(
+                "SELECT COUNT(*) FROM judge_cache").fetchone()
         return {"entries": int(n)}
 
     def close(self):
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
 
 # --------------------------------------------------------------------------
@@ -1153,14 +1170,25 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
     iso_min, iso_max = _iso_bounds(candidates)
     results, dropped = [], []
     cache_hits = needs_review = debated_candidates = 0
+    # Initial verdicts run in parallel per candidate - one thread per
+    # judge, so wall-clock for a 2-judge panel is ~max(A, B) instead of
+    # A + B. Results come back in `clients` order regardless of finish
+    # order (executor.map preserves input order), so the participation
+    # audit and debate framing stay stable.
+    _pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=max(len(clients), 1),
+        thread_name_prefix="panel-judge")
     try:
         for i, cand in enumerate(candidates, 1):
             positions = []
-            for cl in clients:
+            client_results = list(_pool.map(
+                lambda cl: _verdict_from_client(cand, cl, cache,
+                                                prompt_version),
+                clients))
+            for cl, (verdict, latency, was_cached, err) in zip(
+                    clients, client_results):
                 r = report[cl.model_id]
                 r["assigned"] += 1
-                verdict, latency, was_cached, err = _verdict_from_client(
-                    cand, cl, cache, prompt_version)
                 r["latency_ms_total"] += latency
                 if was_cached:
                     r["cache_hits"] += 1
@@ -1188,9 +1216,8 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                 # Peers are anonymized by panel position, in config order,
                 # so every judge sees the identical dispute framing.
                 pre_debate = {p["model"]: dict(p["verdict"]) for p in valid}
-                for p in valid:
-                    r = report[p["model"]]
-                    r["debates"] += 1
+
+                def _one_debate(p):
                     peers = [{"analyst": f"Analyst {k + 1}",
                               "verdict": pre_debate[q["model"]]["verdict"],
                               "category": pre_debate[q["model"]]["category"],
@@ -1201,10 +1228,18 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                              for k, q in enumerate(positions)
                              if q["verdict"] is not None
                              and q["model"] != p["model"]]
-                    (verdict, stance, rebuttal, latency, was_cached,
-                     err) = _debate_from_client(
+                    return p, _debate_from_client(
                         cand, pre_debate[p["model"]], peers, p["client"],
                         cache, prompt_version)
+
+                # Debate round also parallelises per judge - same
+                # rationale as the initial verdicts, wall-clock ~max
+                # instead of sum.
+                debate_results = list(_pool.map(_one_debate, valid))
+                for p, (verdict, stance, rebuttal, latency, was_cached,
+                        err) in debate_results:
+                    r = report[p["model"]]
+                    r["debates"] += 1
                     r["latency_ms_total"] += latency
                     if was_cached:
                         r["cache_hits"] += 1
@@ -1287,6 +1322,7 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                       f"{effective['verdict']:<10} {votes}"
                       f"{' (debated)' if did_debate else ''}{flag}")
     finally:
+        _pool.shutdown(wait=True)
         cache.close()
 
     for model_id, r in report.items():

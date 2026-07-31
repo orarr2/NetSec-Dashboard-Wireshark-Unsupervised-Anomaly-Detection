@@ -122,6 +122,103 @@ def run_panel(clients, candidates, tmp_path, debate=True, **kw):
         verbose=False, debate=debate, **kw)
 
 
+class _SleepyPanelFake(PanelFake):
+    """PanelFake whose round-1 and debate calls block for `delay_s`
+    seconds - lets a wall-clock test tell parallel judges apart from
+    sequential ones."""
+
+    def __init__(self, model_id, round1, delay_s, debate=None):
+        super().__init__(model_id, round1, debate)
+        self._delay_s = delay_s
+
+    def judge(self, system_prompt, user_content, schema=None):
+        import time as _t
+        _t.sleep(self._delay_s)
+        return super().judge(system_prompt, user_content, schema=schema)
+
+
+def test_panel_runs_judges_in_parallel_not_sequentially(tmp_path):
+    """Three judges each block for 400 ms in judge(). Sequential run
+    would take >=1200 ms; parallel run should stay <=750 ms (that
+    leaves plenty of slack for GIL / scheduling on Windows CI). The
+    test proves the panel actually fans out the round-1 verdicts
+    through a ThreadPoolExecutor and does not just call them one after
+    another in a for loop.
+
+    Consensus verdict on the ml_only candidate means no debate round -
+    so the time we measure is purely the initial-verdict parallelism.
+    """
+    import time as _t
+    delay = 0.4
+    clients = [
+        _SleepyPanelFake("m-a", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+        _SleepyPanelFake("m-b", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+        _SleepyPanelFake("m-c", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+    ]
+    t0 = _t.perf_counter()
+    out = run_panel(clients, [ml_only_candidate()], tmp_path, debate=False)
+    elapsed = _t.perf_counter() - t0
+    assert out["stats"]["debated_candidates"] == 0  # consensus, no debate
+    # Sequential would be ~3*400 = 1200 ms.  Parallel is max(delays) + setup.
+    # Give it 750 ms; anything close to 1200 ms means the pool did not fan
+    # out and we regressed to per-client loop.
+    assert elapsed < 0.75, (
+        f"panel round-1 ran sequentially (elapsed {elapsed:.2f}s for "
+        f"3 x {delay}s judges - expected <0.75s with parallel executor)")
+
+
+def test_panel_parallel_debate_stays_under_sequential_bound(tmp_path):
+    """When judges disagree, the debate round also fans out. Two judges
+    each blocking 400 ms both in round-1 and in debate: sequential
+    total would be >=1600 ms (round-1 800 + debate 800). Parallel
+    stays under 1100 ms."""
+    import time as _t
+    delay = 0.4
+    clients = [
+        _SleepyPanelFake("m-a", verdict("malicious"), delay,
+                         debate=debate_response("maintain", "malicious")),
+        _SleepyPanelFake("m-b", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay,
+                         debate=debate_response(
+                             "maintain", "suspicious", "benign_anomaly",
+                             conf=0.6)),
+    ]
+    t0 = _t.perf_counter()
+    out = run_panel(clients, [scan_candidate()], tmp_path, debate=True)
+    elapsed = _t.perf_counter() - t0
+    assert out["stats"]["debated_candidates"] == 1  # disagreement -> debate
+    # Sequential: round-1 800ms + debate 800ms = 1600ms.
+    # Parallel: max(400,400)*2 rounds + setup ~= 900ms.
+    assert elapsed < 1.1, (
+        f"panel debate ran sequentially (elapsed {elapsed:.2f}s for 2 "
+        f"judges x 2 rounds x {delay}s - expected <1.1s with parallel exec)")
+
+
+def test_panel_cache_is_thread_safe(tmp_path):
+    """The parallel judges hit the same JudgeCache from different threads.
+    Before the check_same_thread=False + Lock change this raised
+    sqlite3.ProgrammingError; now it stays consistent under load."""
+    delay = 0.05
+    clients = [
+        _SleepyPanelFake(f"m-{i}", verdict("suspicious", "benign_anomaly",
+                                           conf=0.6), delay)
+        for i in range(4)
+    ]
+    # 6 candidates x 4 judges = 24 parallel cache put()s across threads.
+    cands = [copy.deepcopy(ml_only_candidate()) for _ in range(6)]
+    for i, c in enumerate(cands):
+        c["candidate_id"] = f"10.0.0.{i + 5}"  # unique per candidate
+    out = run_panel(clients, cands, tmp_path, debate=False)
+    assert len(out["results"]) == 6
+    assert out["stats"]["cache_hits"] == 0
+    # Every result carries a valid verdict - no thread lost a write.
+    for r in out["results"]:
+        assert r["verdict"]["verdict"] == "suspicious"
+
+
 # --------------------------------------------------------------------------
 # parse_panel_spec
 # --------------------------------------------------------------------------
