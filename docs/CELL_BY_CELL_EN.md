@@ -195,15 +195,22 @@ user loads captures:
 ```
 S1 = None
 S2 = None
-df1 = None      # legacy alias, kept for backward compatibility
-df2 = None
+ip_agg = None                              # last session's per-IP frame
+z_scores = None                            # last session's Z-scores
+local_ip_agg = None
+extern_ip_agg = None
+compare_df = None                          # S1 vs S2 delta frame
+new_n = 0
+gone_n = 0
 SESSION_PCAPS = {"S1": None, "S2": None}   # source PCAP path per slot
-SECURITY_FINDINGS = {"S1": {}, "S2": {}}
 INSIGHTS_LINES = []
 ```
 
 `load_session_from_pcap(path, label)` is a thin wrapper around
 `analyze_pcap` that also records the source path in `SESSION_PCAPS`.
+Security findings are stashed on `S["_security_findings"]` at analysis
+time, not on a module-level dict, so every consumer reads them off the
+same session dict the ML columns live on.
 
 ---
 

@@ -9336,7 +9336,7 @@ import os as _os_n8n
 N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "")
 N8N_REMOTE_USER = _os_n8n.environ.get("NETSEC_REMOTE_USER", "ubuntu")
 N8N_REMOTE_INCOMING = _os_n8n.environ.get(
-    "NETSEC_REMOTE_INCOMING", "/home/ubuntu/netsec/incoming")
+    "NETSEC_REMOTE_INCOMING", "/srv/netsec/incoming")
 N8N_SSH_KEY = _os_n8n.environ.get(
     "NETSEC_SSH_KEY",
     _os_n8n.path.expanduser(

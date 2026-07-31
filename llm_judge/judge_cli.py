@@ -530,13 +530,20 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
 
     if verbose:
         print("[cli] assembling candidates...", flush=True)
-    # If the caller (typically the dashboard) already ran the advanced
-    # engines and built a local device inventory, pass them through so
-    # the judge sees them per candidate. run_pipeline itself does not
-    # compute either (it is a slim CLI fork of the notebook's ML +
-    # rules), so on the CI / VM path these stay empty and the schema's
-    # default all-null block is what the model receives - exactly the
-    # pre-Stage-3 behaviour.
+    # Extension point for the advanced signals + device context that
+    # `assemble_candidates` accepts. `run_pipeline.py` is a slim ML +
+    # rules subset of the notebook and does NOT populate either key,
+    # so on today's two production callers - the GitHub Actions
+    # workflow (`.github/workflows/analyze-pcap.yml`) and the VM
+    # worker (`server/worker.py` -> `_default_analyze`) - both lookups
+    # miss and behaviour is identical to before Stage 3. A caller
+    # that ran `run_advanced_threats(pcap, label)` (e.g. the
+    # dashboard's `_ingest_pcap_from_path` writes S["threats"]) or
+    # attached a `build_local_inventory(S)` DataFrame at S["_local_inv"]
+    # will have that data flow through here into the per-candidate
+    # blob - no plumbing change required. Producers on the
+    # Actions / worker paths need the advanced-engine cell extracted
+    # to a Dash-free module first (planned; see docs/SCIENTIFIC_AUDIT.md).
     adv_signals = judge_core.threats_to_advanced_signals(S.get("threats"))
     device_ctx = judge_core.local_inv_to_device_context(
         S.get("_local_inv") or S.get("local_inv"))
