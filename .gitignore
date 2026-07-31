@@ -10,11 +10,14 @@ _*.json
 !**/__init__.py
 netsec_upload_*.pcapng
 
-# Hebrew documentation versions - kept locally, English-only in the repo
+# Hebrew documentation versions - kept locally, English-only in the repo.
+# Explicit exceptions for docs the user has approved for the shared repo.
 *_HE.md
 *_he.mmd
 *_he.dot
 *_he.png
+!docs/DOCKER_AI_AGENTS_HE.md
+!docs/VM_ARCHITECTURE_HE.md
 
 # local working backups created by tooling
 *.local-bak
