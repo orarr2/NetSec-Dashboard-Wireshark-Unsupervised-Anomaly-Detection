@@ -228,6 +228,79 @@ def test_render_markdown_singular_ip_line():
     assert "additional IPs" not in md  # no plural
 
 
+def _panel_result(cand_id, judges_round1, judges_final, effective=None):
+    """Build one judge_candidates_panel-shaped result dict for tests."""
+    judges = []
+    for m, r1, fin in zip(("m-a", "m-b"), judges_round1, judges_final):
+        judges.append({
+            "model": m,
+            "initial_verdict": {"verdict": r1, "category": "port_scan",
+                                "confidence": 0.7, "reasoning": ""},
+            "verdict": {"verdict": fin, "category": "port_scan",
+                        "confidence": 0.7, "reasoning": ""},
+            "stance": "revise" if r1 != fin else "maintain",
+            "rebuttal": None, "revised": r1 != fin, "failed": False,
+            "cached": False, "latency_ms": 100, "error": None,
+        })
+    effective = effective or judges[0]["verdict"]
+    return {
+        "candidate_id": cand_id, "kind": "ip",
+        "verdict": {"verdict": effective if isinstance(effective, str)
+                    else effective["verdict"],
+                    "category": "port_scan", "confidence": 0.7,
+                    "reasoning": ""},
+        "panel": {"agreement": len(set(j["verdict"]["verdict"]
+                                        for j in judges)) == 1,
+                  "needs_human_review": len(set(j["verdict"]["verdict"]
+                                                 for j in judges)) > 1,
+                  "note": None, "debate": True, "judges": judges},
+        "guardrail": None, "priority": 0.5, "cached": False,
+        "latency_ms": 200,
+    }
+
+
+def test_consensus_summary_counts_unanimous_agreed_split():
+    """Three candidates, three panel outcomes:
+      * unanimous round-1 (both malicious from the start)
+      * agreed after debate (one revised)
+      * still split (fail-safe to malicious)
+    The summary line must report 1/3 unanimous, 1 in debate, 1 review."""
+    results = [
+        _panel_result("192.168.1.1", ["malicious", "malicious"],
+                      ["malicious", "malicious"]),
+        _panel_result("192.168.1.2", ["benign", "malicious"],
+                      ["malicious", "malicious"]),
+        _panel_result("192.168.1.3", ["benign", "malicious"],
+                      ["benign", "malicious"],
+                      effective="malicious"),
+    ]
+    stats = {"panel": True, "models": ["m-a", "m-b"]}
+    md = "\n".join(judge_cli._render_consensus_summary(results, stats))
+
+    assert "## Consensus summary" in md
+    assert "**1/3** unanimous in round 1" in md
+    assert "**1** reached agreement in debate" in md
+    assert "**1** still ⚖ REVIEW" in md
+
+    # Per-candidate table rows.
+    assert "| 1 | `192.168.1.1` |" in md
+    assert "| 2 | `192.168.1.2` |" in md
+    assert "| 3 | `192.168.1.3` |" in md
+    # Row 2 shows 1 revised in debate.
+    assert "1 revised in debate" in md
+    # Row 3 shows the fail-safe verdict in the 'how' column.
+    assert "split - fail-safe to malicious" in md
+
+
+def test_consensus_summary_only_appears_in_panel_mode():
+    """Single-judge output has no 'panel' key on stats; the section is
+    skipped, since 'consensus' has no meaning for one judge."""
+    out, assembled, client = _judged_batch()  # single-judge shape
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=_fake_context())
+    assert "## Consensus summary" not in md
+
+
 def test_first_sentence_helpers():
     """Report compaction depends on these two helpers cutting cleanly."""
     fs = judge_cli._first_sentence

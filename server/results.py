@@ -125,14 +125,65 @@ def write_verdicts(conn, session_id, out, candidate_ids):
              r.get("tokens_in"), r.get("tokens_out")))
         n += 1
     _write_panel_audit(conn, session_id,
+                       out.get("results") or [],
                        (out.get("stats") or {}).get("panel_report"))
     conn.commit()
     return n
 
 
-def _write_panel_audit(conn, session_id, report):
-    """Best-effort: the panel report's exact shape belongs to judge_core;
-    store what is recognizable, never fail the run over its format."""
+def _write_panel_audit(conn, session_id, results, report):
+    """Persist the panel discussion so queries like 'on what did llama
+    disagree with gpt-oss across 30 sessions' have a data source at the
+    DB layer. Two row shapes, both in the same table:
+
+      1. **Per-candidate per-judge** rows (candidate_id = the real IP or
+         kind_id): initial_verdict + final_verdict as JSON, stance,
+         rebuttal, revised, needs_review. One row per (candidate, judge)
+         pair.
+      2. **Per-model summary** rows (candidate_id = '*'): aggregated
+         participation counts from the panel_report - assigned, valid,
+         failures, debates, revised, agreed_with_final. One row per
+         judge, at the end.
+
+    Best-effort: the panel block's exact shape belongs to judge_core;
+    a schema deviation must degrade to a NULL column, never crash the
+    worker."""
+    if isinstance(results, list):
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            panel = r.get("panel") or {}
+            judges = panel.get("judges") or []
+            cand_id = r.get("candidate_id") or "?"
+            needs_review = int(bool(panel.get("needs_human_review")))
+            for j in judges:
+                if not isinstance(j, dict):
+                    continue
+                initial = j.get("initial_verdict")
+                final = j.get("verdict")
+                rebuttal = j.get("rebuttal")
+                if rebuttal is not None:
+                    rebuttal = str(rebuttal)[:500]
+                err = j.get("error")
+                if err is not None:
+                    err = str(err)[:500]
+                conn.execute(
+                    "INSERT INTO panel_audit (session_id, candidate_id,"
+                    " judge_model, initial_verdict, final_verdict,"
+                    " debated, stance, rebuttal, revised, needs_review,"
+                    " error)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (session_id, str(cand_id),
+                     str(j.get("model") or "unknown"),
+                     _canonical(initial) if initial else None,
+                     _canonical(final) if final else None,
+                     int(bool(panel.get("debate"))),
+                     j.get("stance"),
+                     rebuttal,
+                     int(bool(j.get("revised"))),
+                     needs_review,
+                     err))
+
     entries = []
     if isinstance(report, list):
         entries = [e for e in report if isinstance(e, dict)]
@@ -144,12 +195,17 @@ def _write_panel_audit(conn, session_id, report):
     for e in entries:
         conn.execute(
             "INSERT INTO panel_audit (session_id, candidate_id,"
-            " judge_model, initial_verdict, final_verdict, debated, error)"
-            " VALUES (?,?,?,?,?,?,?)",
-            (session_id, str(e.get("candidate_id") or "*"),
+            " judge_model, initial_verdict, final_verdict, debated,"
+            " stance, rebuttal, revised, needs_review, error)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (session_id, "*",
              str(e.get("model") or e.get("judge") or "unknown"),
-             e.get("initial_verdict"), e.get("final_verdict"),
-             int(bool(e.get("debated"))),
+             _canonical(e),  # full participation summary as JSON
+             None,
+             int(bool(e.get("debates") or e.get("debated"))),
+             None, None,
+             int(e.get("revised") or 0),
+             0,
              e.get("error") if e.get("error") is None
              else str(e.get("error"))[:500]))
 

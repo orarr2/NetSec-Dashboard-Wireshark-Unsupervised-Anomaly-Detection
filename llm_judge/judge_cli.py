@@ -178,6 +178,95 @@ def _first_sentence(text, max_chars=160):
     return s
 
 
+def _render_consensus_summary(results, stats):
+    """Return a bounded chunk of markdown lines summarising how the
+    panel reached each verdict. Only called in panel mode.
+
+    Layout:
+        ## Consensus summary
+        > N/M candidates unanimous in round 1, K reached agreement in
+        > debate, R still ⚖ REVIEW.
+
+        | # | Candidate | round 1 | after debate | how |
+        |---|---|---|---|---|
+        | 1 | 192.168.1.104 | 2/2 malicious | 2/2 malicious | unanimous |
+        | 2 | 192.168.1.1   | 1 malicious, 1 benign | 1 mal, 1 susp | 1 revised |
+        ...
+
+    Nothing here calls the LLM again - it is a projection of the
+    per-result panel block, so it costs zero API tokens and stays
+    deterministic on cache-hit reruns."""
+    total = len(results)
+    if not total:
+        return []
+
+    unanimous_r1 = agreed_after = still_split = single_judge = 0
+    rows = []
+    for i, r in enumerate(results, 1):
+        panel = r.get("panel") or {}
+        judges = panel.get("judges") or []
+        valid = [j for j in judges
+                 if isinstance(j, dict) and j.get("verdict")]
+        if len(valid) < 2:
+            single_judge += 1
+            r1 = _fmt_positions(valid, key="initial_verdict")
+            after = _fmt_positions(valid, key="verdict")
+            how = "1 judge only"
+        else:
+            initial_labels = {j.get("initial_verdict", {}).get("verdict")
+                              for j in valid}
+            final_labels = {j["verdict"]["verdict"] for j in valid}
+            if len(initial_labels) == 1:
+                unanimous_r1 += 1
+                how = "unanimous"
+            elif len(final_labels) == 1:
+                agreed_after += 1
+                n_revised = sum(1 for j in valid if j.get("revised"))
+                how = (f"{n_revised} revised in debate"
+                       if n_revised else "agreed after debate")
+            else:
+                still_split += 1
+                how = ("⚖ split - fail-safe to "
+                       f"{r['verdict']['verdict']}")
+            r1 = _fmt_positions(valid, key="initial_verdict")
+            after = _fmt_positions(valid, key="verdict")
+        rows.append((i, r.get("candidate_id", "?"), r1, after, how))
+
+    lines = [
+        "## Consensus summary",
+        "",
+        f"> **{unanimous_r1}/{total}** unanimous in round 1 · "
+        f"**{agreed_after}** reached agreement in debate · "
+        f"**{still_split}** still ⚖ REVIEW"
+        + (f" · **{single_judge}** with 1 judge only" if single_judge else ""),
+        "",
+        "| # | Candidate | Round 1 | After debate | How |",
+        "|--:|---|---|---|---|",
+    ]
+    for i, cid, r1, after, how in rows:
+        lines.append(f"| {i} | `{cid}` | {r1} | {after} | {how} |")
+    lines.append("")
+    return lines
+
+
+def _fmt_positions(judges, key="verdict"):
+    """Compact per-judge label rollup for the summary table:
+    '2 malicious' when both agree, '1 mal, 1 benign' when split.
+    Judges whose verdict is missing (round-1 failure) are counted as 'X'.
+    """
+    labels = []
+    for j in judges:
+        v = j.get(key) if isinstance(j, dict) else None
+        labels.append(v["verdict"] if isinstance(v, dict) and v.get("verdict")
+                      else "X")
+    from collections import Counter
+    counter = Counter(labels)
+    if len(counter) == 1:
+        (lbl, n), = counter.items()
+        return f"{n} {lbl}"
+    return ", ".join(f"{n} {lbl[:4]}" for lbl, n in counter.most_common())
+
+
 def _first_n_sentences(text, n=2, max_chars=380):
     """Up to `n` sentences; cap at max_chars total. For the analyst
     commentary the LLM often runs 5+ sentences and the first 2 already
@@ -247,6 +336,15 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             f"> {_first_n_sentences(commentary, n=2)}",
             "",
         ]
+
+    # ----- 0.5 Consensus summary (panel mode only) ----------------------
+    # A one-look answer to 'how did the panel arrive at these verdicts?'.
+    # Counts up unanimous-first-round, agreed-after-debate, still-split
+    # candidates; adds a per-candidate agreement table so a reader can
+    # tell at a glance which judges lined up on what without scrolling
+    # into Panel disputes or the debate transcripts below.
+    if stats.get("panel") and out["results"]:
+        lines += _render_consensus_summary(out["results"], stats)
 
     # ----- 2. Pipeline stats ---------------------------------------------
     if ctx:

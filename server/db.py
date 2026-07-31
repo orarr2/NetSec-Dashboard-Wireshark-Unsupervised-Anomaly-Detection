@@ -15,7 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sensors (
@@ -159,6 +159,23 @@ _SCHEMA_V3 = """
 ALTER TABLE sessions ADD COLUMN notify_email TEXT;
 """
 
+# v4: panel_audit gets the columns that make it actually queryable.
+# Before v4 it stored only per-model summary rows (candidate_id='*',
+# initial_verdict=NULL, final_verdict=NULL) - so 'on what did llama
+# disagree with gpt-oss?' had no answer at the DB level. v4 adds:
+#   - stance: 'maintain' | 'revise' | NULL (single-round-only mode)
+#   - rebuttal: judge's own debate text, up to 500 chars
+#   - revised: 1 when the judge changed its verdict in the debate round
+#   - needs_review: 1 when the panel escalated this candidate (⚖)
+# The writer starts persisting per-(candidate, judge) rows in addition
+# to the legacy summary rows.
+_SCHEMA_V4 = """
+ALTER TABLE panel_audit ADD COLUMN stance TEXT;
+ALTER TABLE panel_audit ADD COLUMN rebuttal TEXT;
+ALTER TABLE panel_audit ADD COLUMN revised INTEGER DEFAULT 0;
+ALTER TABLE panel_audit ADD COLUMN needs_review INTEGER DEFAULT 0;
+"""
+
 
 def default_db_path():
     """Resolve the history DB path. Treats NETSEC_DB set to an EMPTY
@@ -205,6 +222,10 @@ def migrate(conn):
     if current < 3:
         conn.executescript(_SCHEMA_V3)
         conn.execute("PRAGMA user_version = 3")
+        conn.commit()
+    if current < 4:
+        conn.executescript(_SCHEMA_V4)
+        conn.execute("PRAGMA user_version = 4")
         conn.commit()
     return SCHEMA_VERSION
 

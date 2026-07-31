@@ -1200,7 +1200,16 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                 else:
                     r["valid_verdicts"] += 1
                 positions.append({"model": cl.model_id, "client": cl,
-                                  "verdict": verdict, "stance": None,
+                                  "verdict": verdict,
+                                  # initial_verdict is what round-1 returned.
+                                  # `verdict` gets rewritten below in the
+                                  # debate loop when a judge revises, so
+                                  # holding a copy here is what lets the
+                                  # panel_audit table answer 'what did
+                                  # llama say BEFORE it heard the peers'.
+                                  "initial_verdict": (dict(verdict)
+                                                       if verdict else None),
+                                  "stance": None,
                                   "rebuttal": None, "revised": False,
                                   "failed": verdict is None,
                                   "cached": was_cached,
@@ -1301,7 +1310,9 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                     "judges": [{k: p[k] for k in
                                 ("model", "stance", "rebuttal", "revised",
                                  "failed", "cached", "latency_ms", "error")}
-                               | {"verdict": _slim_verdict(p["verdict"])}
+                               | {"verdict": _slim_verdict(p["verdict"]),
+                                  "initial_verdict": _slim_verdict(
+                                      p.get("initial_verdict"))}
                                for p in positions],
                     "debate": did_debate,
                     **info,
