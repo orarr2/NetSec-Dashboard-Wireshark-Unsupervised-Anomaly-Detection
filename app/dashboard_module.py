@@ -3184,7 +3184,7 @@ def _burst_anomaly_tag(row, q95_burst, q95_dom):
 
 
 
-def _build_device_map_figure(session_dict, title_label):
+def _build_device_map_figure(session_dict, title_label, inv=None):
     """Project per-IP behavioural features to 2D via PCA and render a scatter
     plot. Each point = one IP. Color = device category. Size = log(bytes).
     Returns a Plotly figure (may be empty if no data)."""
@@ -3243,7 +3243,8 @@ def _build_device_map_figure(session_dict, title_label):
     import math
     sizes = [max(8, min(40, 8 + math.log1p(b) * 2.2)) for b in bytes_per_ip]
 
-    inv = session_dict.get("local_inv", None)
+    if inv is None:
+        inv = session_dict.get("local_inv", None)
     cat_map  = {}
     vendor_map = {}
     mac_map = {}
@@ -4321,8 +4322,12 @@ def rebuild_figures():
 
 
     try:
-        FIGS["device_map"]    = _build_device_map_figure(s1_eff, "S1")
-        FIGS["device_map_s2"] = _build_device_map_figure(s2_eff, "S2")
+        inv1_eff = LOCAL_INV_S1 if S1 is not None else LOCAL_INV_S2
+        inv2_eff = LOCAL_INV_S2 if S2 is not None else LOCAL_INV_S1
+        FIGS["device_map"]    = _build_device_map_figure(
+            s1_eff, "S1", inv1_eff)
+        FIGS["device_map_s2"] = _build_device_map_figure(
+            s2_eff, "S2", inv2_eff)
     except Exception as e:
         print(f"Device map build failed: {e}")
         import traceback; traceback.print_exc()
