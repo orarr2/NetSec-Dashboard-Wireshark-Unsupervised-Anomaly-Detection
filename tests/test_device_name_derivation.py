@@ -17,7 +17,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _extract_derive_device_name():
-    src = open(os.path.join(REPO, "app", "dashboard_module.py")).read()
+    src = open(os.path.join(REPO, "app", "dashboard_module.py"),
+               encoding="utf-8").read()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and \

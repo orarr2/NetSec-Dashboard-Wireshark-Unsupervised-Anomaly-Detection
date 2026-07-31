@@ -576,7 +576,7 @@ def test_run_pipeline_findings_keys_match_what_assemble_reads():
     the return dict so a rename breaks CI immediately."""
     import ast
     path = os.path.join(ROOT, "attack_tests", "run_pipeline.py")
-    tree = ast.parse(open(path).read())
+    tree = ast.parse(open(path, encoding="utf-8").read())
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) \
                 and node.name == "run_security_scans":

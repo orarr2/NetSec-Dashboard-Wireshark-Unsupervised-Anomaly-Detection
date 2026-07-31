@@ -21,11 +21,16 @@ PCAP = os.path.join(REPO_ROOT, "attack_tests", "pcaps", "tcp_syn_scan.pcap")
 @pytest.mark.skipif(shutil.which("tshark") is None,
                     reason="tshark not on PATH")
 def test_measure_ratios_end_to_end(tmp_path):
+    # Force UTF-8 on both ends of the pipe: without it, a repo path with
+    # non-ASCII characters crashes the reader thread on a non-UTF-8
+    # Windows locale (cp1255 and friends).
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
     r = subprocess.run(
         [sys.executable,
          os.path.join(REPO_ROOT, "tools", "measure_pipeline_ratios.py"),
          PCAP, "--json"],
-        capture_output=True, text=True, cwd=REPO_ROOT, timeout=300)
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=REPO_ROOT, timeout=300, env=env)
     assert r.returncode == 0, r.stderr
 
     summary = json.loads(r.stdout.strip().splitlines()[-1])
