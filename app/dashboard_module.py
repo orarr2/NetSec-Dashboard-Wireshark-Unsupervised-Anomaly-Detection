@@ -140,7 +140,7 @@ CSV1  = None
 PCAP2 = None
 CSV2  = None
 
-MY_DEVICE_IP = "192.168.1.126"
+MY_DEVICE_IP = os.environ.get("NETSEC_MY_DEVICE_IP", "")
 
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 MAX_UPLOAD_HUMAN = "100 MB"
@@ -3863,8 +3863,10 @@ def make_figures(s1, s2, cdf, z_scores_df, my_ip):
                     cand = z_scores_df.index[0]
                 if cand is not None and not pd.isna(cand):
                     _profile_ip = cand
-                    _profile_note = (f" - fallback (MY_DEVICE_IP {my_ip} not "
-                                     f"observed in this capture)")
+                    if my_ip:
+                        _profile_note = (f" - fallback (MY_DEVICE_IP "
+                                         f"{my_ip} not observed in this "
+                                         f"capture)")
             except Exception:
                 _profile_ip = (z_scores_df.index[0]
                                if len(z_scores_df.index) else None)
@@ -6082,7 +6084,7 @@ def build_choice_view(staged=None, replacing_s1=False):
                             "fontWeight":"600","marginBottom":"6px"}),
                         dbc.InputGroup([
                             dbc.Input(id="pcap-path-input", type="text",
-                                placeholder=r"e.g. C:\Users\OR\Downloads\capture.pcapng",
+                                placeholder=r"e.g. C:\Users\you\Downloads\capture.pcapng",
                                 style={"background":"rgba(255,255,255,0.04)",
                                        "color":INK,
                                        "border":f"1px solid {GLASS_BORDER_STRONG}",
@@ -7169,8 +7171,9 @@ def _render_n8n_send_button(session, session_key):
         return html.Div()
     src_pcap = session.get("_source_pcap") or ""
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
+    _host_label = N8N_REMOTE_HOST or "set NETSEC_REMOTE_HOST"
     caption = (f"Upload `{src_name}` to the incoming/ folder on the cloud "
-               f"VM ({N8N_REMOTE_HOST}). The n8n workflow will pick it up "
+               f"VM ({_host_label}). The n8n workflow will pick it up "
                f"within 60 seconds, run the judge against Groq, and email "
                f"an HTML alert if any verdict is malicious or suspicious. "
                f"Requires Tailscale to be connected.")
@@ -8403,7 +8406,7 @@ def _build_second_pcap_modal():
             html.Div(id="second-pcap-stage1", children=[
                 dbc.InputGroup([
                     dbc.Input(id="second-pcap-path-input", type="text",
-                        placeholder=r"e.g. C:\Users\OR\Downloads\capture2.pcapng",
+                        placeholder=r"e.g. C:\Users\you\Downloads\capture2.pcapng",
                         debounce=False, n_submit=0,
                         style={"background":"rgba(255,255,255,0.04)",
                                 "color":INK,
@@ -9470,14 +9473,14 @@ import os as _os_n8n
 # over Tailscale - not on this machine. Every value is overridable by env
 # var so a fork can point at its own host without editing code.
 # See docs/VM_DEPLOYMENT.md.
-N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "100.68.246.54")
+N8N_REMOTE_HOST = _os_n8n.environ.get("NETSEC_REMOTE_HOST", "")
 N8N_REMOTE_USER = _os_n8n.environ.get("NETSEC_REMOTE_USER", "ubuntu")
 N8N_REMOTE_INCOMING = _os_n8n.environ.get(
     "NETSEC_REMOTE_INCOMING", "/home/ubuntu/netsec/incoming")
 N8N_SSH_KEY = _os_n8n.environ.get(
     "NETSEC_SSH_KEY",
     _os_n8n.path.expanduser(
-        "~/.ssh/netsec-agent.key/ssh-key-2026-07-12.key"))
+        "~/.ssh/netsec-agent"))
 
 
 def _n8n_stack_status():
@@ -9490,6 +9493,9 @@ def _n8n_stack_status():
     import socket as _socket
     import urllib.request as _urlreq
     out = {"judge_api": False, "n8n": False, "detail": ""}
+    if not N8N_REMOTE_HOST:
+        out["detail"] = "NETSEC_REMOTE_HOST is not set"
+        return out
     try:
         with _urlreq.urlopen(
                 f"http://{N8N_REMOTE_HOST}:8765/health", timeout=4) as r:
@@ -9521,8 +9527,8 @@ def _n8n_stack_down_message(status):
     return html.Div([
         html.Div([
             html.Span("⚠️", style={"marginRight":"6px"}),
-            html.Span(f"Cannot reach the automation stack on "
-                      f"{N8N_REMOTE_HOST}",
+            html.Span("Cannot reach the automation stack on "
+                      f"{N8N_REMOTE_HOST or 'the VM (NETSEC_REMOTE_HOST unset)'}",
                       style={"color":"#f59e0b","fontWeight":"600"}),
         ]),
         html.Div(
@@ -9533,10 +9539,10 @@ def _n8n_stack_down_message(status):
             style={"marginTop":"4px","color":INK_MUTE,"fontSize":"10px"}),
         html.Pre(
             "tailscale status         # this machine must be connected\n"
-            f"curl http://{N8N_REMOTE_HOST}:8765/health\n"
+            f"curl http://{N8N_REMOTE_HOST or '<vm-tailscale-ip>'}:8765/health\n"
             "\n"
             "# only if the VM itself is down:\n"
-            "ssh ubuntu@<vm> 'cd ~/netsec/automation && docker compose up -d'",
+            "ssh <user>@<vm> 'cd ~/netsec/deploy && docker compose up -d'",
             style={"marginTop":"6px","padding":"6px 8px",
                    "background":"#1e1e2e","color":"#e5e7eb",
                    "fontSize":"10px","borderRadius":"6px",

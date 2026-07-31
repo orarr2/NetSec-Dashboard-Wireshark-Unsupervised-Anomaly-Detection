@@ -1,18 +1,19 @@
 # Run your own analysis VM - deployment scaffolding
 
-Stage A of the ecosystem plan (`ARCHITECTURE_HE.md` at the repo root).
 This directory holds the generic, secret-free deployment templates so
-that any fork can stand up the 24/7 analysis stack on its own VM. The
-original local-only `automation/` directory stays untracked; everything
-a fork needs lands here instead, stage by stage.
+that any fork can stand up the 24/7 analysis stack on its own VM.
+Everything a fork needs to run the four-tier ecosystem lives here or
+under `../server/`, `../sensor/` and `../tools/`.
 
-## What ships today (stages A-B)
+## What ships
 
 | File | Purpose |
 |---|---|
-| `.env.example` | Every environment variable the stack reads, documented. Variables consumed by later stages are included and clearly marked - they are inert until that stage lands. |
-| `docker-compose.yml` | n8n + the ingest API, bound to your Tailscale IP only. Slots for `judge_api` and the worker arrive in stage C. |
+| `.env.example` | Every environment variable the stack reads, with its code default. |
+| `docker-compose.yml` | n8n + ingest API + worker + retention, each bound to your Tailscale IP only. |
 | `Dockerfile.ingest` | The ingest API image - `server/` + FastAPI, port 8766. |
+| `Dockerfile.worker` | The analysis worker image - runs the detection pipeline, writes verdicts + HTML/PDF reports. |
+| `n8n_workflows/mvp_triage_email.json` | Importable n8n workflow: receives the worker's alert webhook and emails when a verdict is malicious/suspicious. |
 | `create_sensor.py` | Registers a sensor in the history DB and prints its credentials once. |
 | `../server/` | History DB schema, HMAC upload auth, streaming storage, and the FastAPI ingest layer. |
 | `../tools/upload_pcap.py` | Signed streaming upload from any machine - the no-size-cap replacement for the GitHub 25MB path. |
@@ -58,13 +59,22 @@ a fork needs lands here instead, stage by stage.
    `curl -s -o /dev/null -w "%{http_code}\n" http://$TS_BIND:5678/`
    `curl -s http://$TS_BIND:8766/healthz`
 7. Register a sensor and copy the printed credentials into the
-   sensor's environment (shown once, not recoverable):
-   `python3 deploy/create_sensor.py laptop`
-8. Upload a capture from any machine on the tailnet - no size cap:
+   sensor's environment (shown once, not recoverable). Run it from the
+   `deploy/` directory; the containers created `db/netsec.db` as root, so
+   use `sudo` and point it at the same data root:
+   `sudo NETSEC_DATA_ROOT=/srv/netsec python3 create_sensor.py laptop`
+8. Upload a capture from any machine on the tailnet - no size cap
+   (run from the repo root, or adjust the path):
    `python3 tools/upload_pcap.py capture.pcapng`
    (needs `NETSEC_INGEST_URL=http://<vm-tailscale-ip>:8766` plus the
-   sensor credentials in the environment). The session is queued;
-   analysis and the HTML/PDF reports arrive with stage C.
+   sensor credentials in the environment). The session is queued, the
+   worker analyses it, and `verdicts.json` / `.md` / `report.html` /
+   `report.pdf` are written under `reports/<session_id>/`.
+9. (Optional) Wire up n8n alerts: open n8n at `http://<vm>:5678`,
+   **Import from File** → `deploy/n8n_workflows/mvp_triage_email.json`,
+   attach an SMTP credential to the *Send Email Alert* node, **Activate**
+   it, and set `N8N_WEBHOOK_URL` in `.env` to that webhook's URL so the
+   worker posts each verdict to it.
 
 ## Storage layout (per the approved plan, spec section 8)
 
@@ -73,8 +83,7 @@ a fork needs lands here instead, stage by stage.
 ├── data/pcap/      raw captures - kept 7 days, then auto-purged
 ├── data/fields/    gzipped field exports - kept forever (IDX-04)
 ├── reports/        verdicts.json / .md / .html / .pdf - kept forever
-├── db/             netsec.db (SQLite history) + nightly backups
-└── incoming/       drop directory polled by the automation
+└── db/             netsec.db (SQLite history) + nightly backups
 ```
 
 ## Running a sensor (laptop today, Raspberry Pi 5 tomorrow)

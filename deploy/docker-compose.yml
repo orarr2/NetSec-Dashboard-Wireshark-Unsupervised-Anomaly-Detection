@@ -1,13 +1,13 @@
-# Generic automation stack - committed template, no secrets.
+# Generic analysis stack - committed template, no secrets.
 # Values come from ./.env (cp .env.example .env). Services bind to
 # ${TS_BIND} so nothing listens on a public interface (decision IDX-08):
 # set TS_BIND to the VM's Tailscale IP, or leave the loopback default
-# for a local smoke test. This template replaces the untracked
-# local-only automation/ stack so any fork can deploy (spec section 9).
+# for a local smoke test. Any fork can deploy this as-is (spec section 9).
 #
-# Stages A-B run n8n and the ingest API. The judge_api HTTP wrapper and
-# the analysis worker join in stage C of ARCHITECTURE_HE.md; their
-# service blocks below are deliberate placeholders until then.
+# Four services run the four-tier ecosystem: n8n (alerting), the ingest
+# API (:8766), the analysis worker (queue -> detection -> reports), and
+# retention (daily housekeeping). The judge_api HTTP wrapper is optional
+# and off by default - the worker owns the queue path.
 
 services:
   n8n:
@@ -21,6 +21,10 @@ services:
       - GENERIC_TIMEZONE=${TZ:-UTC}
     volumes:
       - n8n_data:/home/node/.n8n
+      # Workflow templates, importable via the n8n UI or the CLI:
+      #   docker compose exec n8n n8n import:workflow \
+      #     --input=/workflows/mvp_triage_email.json
+      - ./n8n_workflows:/workflows:ro
 
   ingest_api:
     build:

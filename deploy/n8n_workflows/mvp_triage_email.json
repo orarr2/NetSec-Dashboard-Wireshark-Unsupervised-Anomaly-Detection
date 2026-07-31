@@ -1,0 +1,98 @@
+{
+  "id": "netsecTriageAlert1",
+  "name": "NetSec Triage Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "netsec-alert",
+        "options": {}
+      },
+      "id": "b1a1e001-0000-4000-8000-000000000001",
+      "name": "Worker Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 300],
+      "webhookId": "netsec-alert"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json[\"body\"][\"worst\"] }}",
+              "operation": "regex",
+              "value2": "malicious|suspicious"
+            }
+          ]
+        }
+      },
+      "id": "b1a1e001-0000-4000-8000-000000000002",
+      "name": "Is Malicious or Suspicious",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "netsec@example.com",
+        "toEmail": "you@example.com",
+        "subject": "=NetSec alert: session {{ $json[\"body\"][\"session_id\"] }} - {{ $json[\"body\"][\"worst\"] }}",
+        "text": "=A NetSec analysis returned a {{ $json[\"body\"][\"worst\"] }} verdict.\n\nSession: {{ $json[\"body\"][\"session_id\"] }}\nLabel:   {{ $json[\"body\"][\"label\"] }}\nKind:    {{ $json[\"body\"][\"kind\"] }}\nSHA256:  {{ $json[\"body\"][\"sha256\"] }}\nResults: {{ $json[\"body\"][\"results\"] }} candidate(s)\n\nOpen the full HTML/PDF report on the VM:\n  GET /v1/reports/{{ $json[\"body\"][\"session_id\"] }}.html\n\n(Configure the SMTP credential on this node in the n8n UI.)",
+        "options": {}
+      },
+      "id": "b1a1e001-0000-4000-8000-000000000003",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [800, 220]
+    },
+    {
+      "parameters": {},
+      "id": "b1a1e001-0000-4000-8000-000000000004",
+      "name": "Benign - No Alert",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [800, 400]
+    }
+  ],
+  "connections": {
+    "Worker Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Malicious or Suspicious",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Malicious or Suspicious": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Benign - No Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Receives the NetSec worker's POST (session_id, label, kind, sha256, results, worst) on the /netsec-alert webhook, and emails an alert when the worst verdict is malicious or suspicious. Set N8N_WEBHOOK_URL on the VM to this webhook's URL. Attach an SMTP credential to the Send Email Alert node in the n8n UI, then Activate."
+  }
+}

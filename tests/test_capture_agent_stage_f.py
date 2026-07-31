@@ -16,8 +16,8 @@ from sensor.capture_agent import CaptureAgent, build_capture_filter  # noqa
 # ---- capture filter (self-telemetry exclusion, spec 12.2 layer 0) --------
 
 def test_bpf_excludes_declared_dst_with_port():
-    bpf = build_capture_filter(["100.68.246.54"], upload_port=8766)
-    assert bpf == "not ((host 100.68.246.54 and port 8766))"
+    bpf = build_capture_filter(["100.64.0.1"], upload_port=8766)
+    assert bpf == "not ((host 100.64.0.1 and port 8766))"
 
 
 def test_bpf_multiple_dsts_and_empty():
