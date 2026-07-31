@@ -3,9 +3,11 @@
 Everything here is defensive by design: the pipeline's dict shapes are
 owned by app/ and llm_judge/, and a missing optional key must degrade to
 a NULL column, never to a crashed worker. Advanced-engine signals
-(adv_signals / fusion_scores) are dashboard-side today and stay empty
-until a later stage runs those engines headless - the tables exist so
-that wiring them is a pure INSERT.
+(adv_signals / fusion_scores) are populated the moment
+`app/advanced_engines.py` runs on the worker (attack_tests/run_pipeline
+leaves them at `S["threats"]`). Absent `S["threats"]` the two tables
+stay empty and everything else still writes - that's the graceful
+degradation the historical docstring was reserving space for.
 """
 import json
 
@@ -152,12 +154,61 @@ def _write_panel_audit(conn, session_id, report):
              else str(e.get("error"))[:500]))
 
 
+def write_adv_signals(conn, session_id, S):
+    """S['threats'] (from run_advanced_threats) -> adv_signals rows +
+    fusion_scores rows. Returns (n_signal_rows, n_fusion_rows).
+
+    No-op when the engines were skipped or the pcap yielded no rows - the
+    two tables just stay empty for that session, which is the correct
+    signal that the advanced layer did not fire (as opposed to reading
+    zero rows and inferring it did fire with nothing to report)."""
+    threats = S.get("threats") if isinstance(S, dict) else None
+    if not isinstance(threats, dict) or not threats.get("available"):
+        return 0, 0
+    n_sig = 0
+    per_engine = threats.get("per_engine") or {}
+    for rows in per_engine.values():
+        for row in rows or []:
+            if not isinstance(row, dict) or not row.get("device"):
+                continue
+            conn.execute(
+                "INSERT INTO adv_signals (session_id, device, peer,"
+                " signal, tactic, technique, score, severity, count,"
+                " first_ts, last_ts, detail)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (session_id, row.get("device"), row.get("peer"),
+                 row.get("signal"), row.get("tactic"),
+                 row.get("technique"), row.get("score"),
+                 row.get("severity"), row.get("count"),
+                 row.get("first_ts"), row.get("last_ts"),
+                 row.get("detail")))
+            n_sig += 1
+    n_fusion = 0
+    for row in (threats.get("device_risk") or []):
+        if not isinstance(row, dict) or not row.get("device"):
+            continue
+        # fusion_scores PK = (session_id, device); REPLACE lets a
+        # re-analysis of the same session update in place.
+        conn.execute(
+            "INSERT OR REPLACE INTO fusion_scores (session_id, device,"
+            " score, engines_hit, window_start)"
+            " VALUES (?,?,?,?,?)",
+            (session_id, row.get("device"), row.get("risk"),
+             row.get("signal_types") or row.get("signals"), None))
+        n_fusion += 1
+    conn.commit()
+    return n_sig, n_fusion
+
+
 def write_all(conn, session_id, S, findings, assembled, out):
     """One call from the worker: everything the run produced, in order."""
     counts = {
         "ip_features": write_ip_features(conn, session_id, S),
         "findings": write_findings(conn, session_id, findings),
     }
+    n_sig, n_fusion = write_adv_signals(conn, session_id, S)
+    counts["adv_signals"] = n_sig
+    counts["fusion_scores"] = n_fusion
     candidate_ids = write_candidates(conn, session_id, assembled)
     counts["candidates"] = len(candidate_ids)
     counts["verdicts"] = write_verdicts(conn, session_id, out,

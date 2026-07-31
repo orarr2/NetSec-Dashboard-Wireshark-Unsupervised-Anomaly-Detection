@@ -152,8 +152,17 @@ CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id);
 
 
 def default_db_path():
-    root = os.environ.get("NETSEC_DATA_ROOT", "/srv/netsec")
-    return os.environ.get("NETSEC_DB", os.path.join(root, "db", "netsec.db"))
+    """Resolve the history DB path. Treats NETSEC_DB set to an EMPTY
+    string exactly like an unset variable - this matters because docker
+    compose's `env_file: .env` exports every line, and a blank
+    `NETSEC_DB=` in .env used to poison the worker (which loads .env)
+    while leaving the ingest_api (which only reads `environment:`
+    entries) untouched. The .env.example ships that blank line as a
+    documentation hint, so removing it there would be a worse fix."""
+    root = os.environ.get("NETSEC_DATA_ROOT", "/srv/netsec") \
+        or "/srv/netsec"
+    override = (os.environ.get("NETSEC_DB") or "").strip()
+    return override or os.path.join(root, "db", "netsec.db")
 
 
 def _utcnow():

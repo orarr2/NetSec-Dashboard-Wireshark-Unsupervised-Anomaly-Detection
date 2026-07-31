@@ -273,6 +273,14 @@ base behavior.
 before; the local dashboard notebook still analyzes a file with no VM
 and no network at all.
 
+**Managing your VM day to day.** After the one-time setup, all the
+common operations - SSH in, redeploy after `git pull`, watch a live
+run, restart a service, back up the history DB, roll a compromised
+sensor - are collected in [`docs/VM_OPS.md`](docs/VM_OPS.md) as
+paste-ready command blocks. The doc uses `<vm>` and `<sensor>`
+placeholders throughout; substitute your own Tailscale IP and sensor
+name once and the rest just works.
+
 ## Testing
 
 ```
