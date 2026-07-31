@@ -797,8 +797,6 @@ print("analyze_pcap() ready  -  loader:",
 
 S1 = None
 S2 = None
-df1 = None
-df2 = None
 ip_agg = None
 z_scores = None
 local_ip_agg = None
@@ -807,7 +805,6 @@ compare_df = None
 new_n = 0
 gone_n = 0
 SESSION_PCAPS = {"S1": None, "S2": None}
-SECURITY_FINDINGS = {"S1": {}, "S2": {}}
 INSIGHTS_LINES = []
 
 
@@ -1417,7 +1414,6 @@ print(f"Loaded {len(DEVICE_RULES['rules'])} device rules, "
 
 
 _SORTED_RULES = sorted(DEVICE_RULES["rules"], key=lambda r: -r["priority"])
-_HIERARCHY    = DEVICE_RULES["hierarchy"]
 _FINGERPRINTS = DNS_FINGERPRINTS["fingerprints"]
 
 
@@ -1858,7 +1854,7 @@ print("Device classification engine ready.")
 
 import pandas as pd
 import ipaddress as _ipa
-from collections import Counter as _Counter, defaultdict as _dd
+from collections import Counter as _Counter
 
 def _is_private(ip):
     try:
@@ -2176,13 +2172,6 @@ def list_capture_interfaces():
     except Exception as e:
         # do NOT cache an error - retry next time
         return [("?", f"error listing: {e}")]
-
-def _clear_interface_list_cache():
-    """Force a re-scan on the next list_capture_interfaces() call. Wire to a
-    refresh button if the user wants to add a NIC mid-session."""
-    global _INTERFACE_LIST_CACHE
-    _INTERFACE_LIST_CACHE = None
-
 
 class LiveCaptureWorker:
     """Single live capture session. Thread-safe. Persists across browser refresh."""
@@ -2692,10 +2681,6 @@ LIVE_SESSIONS = {
 }
 
 
-LIVE = {"enabled": False, "running": False, "tshark_path": TSHARK_PATH,
-        "interface": "Wi-Fi", "session": None, "last_refresh": None,
-        "error": None, "proc": None, "files_processed": set(),
-        "dir": LIVE_SESSIONS["S1"].save_dir}
 def pick_default_wifi_interface():
     """Return the interface ID most likely to be a Wi-Fi adapter; fall back to
     the first non-loopback interface or '1' if none are visible."""
@@ -2847,7 +2832,6 @@ def make_browsing_category_fig(s):
 
 
 def make_browsing_hour_fig(s):
-    import datetime as _dt
     ip_to_name = build_device_names(s)
 
     BUCKET_SEC = 5 * 60
@@ -4926,18 +4910,6 @@ SESSION_TWIN = {
 SESSION_TWIN.update({v: k for k, v in list(SESSION_TWIN.items())})
 
 
-SECTION_TITLES = [
-    ("live","🔴 LIVE CAPTURE"),
-    ("analysis","ANALYSIS"),
-    ("device","DEVICE PROFILE"),
-    ("browsing","BROWSING ANALYSIS"),
-    ("security","SECURITY"),
-    ("compare","COMPARISON"),
-    ("inventory","DEVICE INVENTORY"),
-    ("external","EXTERNAL TRAFFIC"),
-    ("coverage","COVERAGE"),
-]
-
 # === Top-level tab structure ============================================
 # Replaces the long-scrolling sidebar with two top tabs (Analyze + Security).
 # Each tab filters NAV_ITEMS by section_id.
@@ -5000,7 +4972,6 @@ ZSCORE_EXPLAIN = (
 EXPLANATIONS = {
     "lstm":          LSTM_EXPLAIN,
     "lstm_s1":       LSTM_EXPLAIN,
-    "lstm_combined": LSTM_EXPLAIN,
     "zbar":          ZSCORE_EXPLAIN,
     "profile":       ZSCORE_EXPLAIN,
 }
@@ -6916,7 +6887,6 @@ def _build_ip_history_session_fig(session, ip_addr):
     """Build a Plotly heatmap of (time_bin x domain -> query count) for a
     single IP within a single session. Returns (fig, n_queries). If the IP
     has no DNS activity in this session, fig is None and n_queries is 0."""
-    import datetime as _dt_local
     from collections import Counter as _Counter_local
 
     dns_timeline = session.get("dns_timeline") or []
@@ -7226,21 +7196,12 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
     AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
     if active_session == "s2" and S2 is None:
         active_session = "s1"
-    items_by_sec = {}
-    for nid, icon, lbl, sec, scope in NAV_ITEMS:
-        if SECTION_TO_TAB.get(sec, "analyze") != active_tab:
-            continue
-        if scope != "any" and scope != active_session:
-            continue
-        items_by_sec.setdefault(sec, []).append((nid, icon, lbl))
 
     children = []
     has_s1 = S1 is not None
     has_s2 = S2 is not None
     # gather worker states once for the whole sidebar
     _wsum = _worker_state_summary()
-
-    needs_s2 = NEEDS_S2_IDS
 
     children.append(_session_info_cards())
     if has_s1:
@@ -7359,62 +7320,9 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
 
     # Chart navigation moved to build_chart_picker_strip (the horizontal
     # chip row right under the Analyze / Security pills). The sidebar now
-    # hosts ONLY S1 / S2 status and the replace / add-session controls,
-    # so the loop below is short-circuited.
-    return children
-
-    for sec_id, sec_title in SECTION_TITLES:
-        if sec_id not in items_by_sec:
-            continue
-        section_items = items_by_sec[sec_id]
-        children.append(html.Div([
-            html.Span(sec_title, style={"flex":"1"}),
-            html.Span(str(len(section_items)), style={
-                "fontSize":"9px","color":INK_DIM,
-                "background":GLASS_BG_STRONG,
-                "border":f"1px solid {GLASS_BORDER}",
-                "padding":"1px 6px","borderRadius":"5px",
-                "fontFamily":"'JetBrains Mono', monospace"}),
-        ], style={"padding":"6px 12px","fontSize":"9.5px","color":INK_MUTE,
-                  "textTransform":"uppercase","letterSpacing":"0.18em",
-                  "fontWeight":"600","marginTop":"12px","marginBottom":"6px",
-                  "display":"flex","alignItems":"center",
-                  "fontFamily":"'JetBrains Mono', monospace"}))
-        for nid, icon, lbl in section_items:
-            disabled = (nid in needs_s2 and not has_s2)
-            is_active = (nid == active_chart)
-
-            if is_active:
-                style = {"padding":"8px 12px","marginBottom":"2px","borderRadius":"10px",
-                    "fontSize":"13px","cursor":"pointer","color":INK,
-                    "background":f"linear-gradient(135deg, rgba(139,92,246,0.18), rgba(34,211,238,0.12))",
-                    "border":f"1px solid rgba(139,92,246,0.3)",
-                    "boxShadow":"0 0 0 1px rgba(139,92,246,0.15), 0 4px 20px -8px rgba(139,92,246,0.4)",
-                    "fontWeight":"500","display":"flex","alignItems":"center","gap":"10px",
-                    "fontFamily":"'Inter Tight', sans-serif",
-                    "position":"relative"}
-            elif disabled:
-                style = {"padding":"8px 12px","marginBottom":"2px","borderRadius":"10px",
-                    "fontSize":"13px","cursor":"not-allowed","color":INK_MUTE,
-                    "opacity":"0.4","display":"flex","alignItems":"center","gap":"10px",
-                    "fontFamily":"'Inter Tight', sans-serif"}
-            else:
-                style = {"padding":"8px 12px","marginBottom":"2px","borderRadius":"10px",
-                    "fontSize":"13px","cursor":"pointer","color":INK_DIM,
-                    "display":"flex","alignItems":"center","gap":"10px",
-                    "fontFamily":"'Inter Tight', sans-serif",
-                    "transition":"all .2s cubic-bezier(.4,0,.2,1)"}
-            children.append(html.Div([
-                html.Span(icon, style={"fontSize":"13px","width":"18px",
-                                        "textAlign":"center","opacity":"0.85"}),
-                html.Span(lbl, style={"flex":"1"}),
-            ],
-                id={"type":"nav-item","id":nid},
-                n_clicks=0 if not disabled else None,
-                style=style,
-                className="aur-nav-active" if is_active else (
-                    "aur-nav-disabled" if disabled else "aur-nav"
-                )))
+    # hosts ONLY S1 / S2 status and the replace / add-session controls;
+    # the nav-item loop this used to append here was removed with the
+    # chip-strip refactor.
     return children
 
 
@@ -7859,67 +7767,6 @@ def _needs_s2_banner():
 def _s2_loaded():
     """True iff S2 is loaded - used to decide between single and dual panel."""
     return S2 is not None
-
-
-def _render_combined(chart_id):
-    """Render side-by-side multi-chart views."""
-    def G(k, h=380):
-        if k not in FIGS:
-            return html.Div(f"(chart {k} not built)",
-                style={"color":INK_MUTE,"padding":"20px","textAlign":"center"})
-        return dcc.Graph(figure=FIGS[k], style={"height":f"{h}px"},
-                         config={"displayModeBar":False, "responsive":True})
-
-    if chart_id == "upload_download":
-        return html.Div([
-            dbc.Row([dbc.Col(G("upload_s1"), md=6), dbc.Col(G("upload_s2"), md=6)]),
-            dbc.Row([dbc.Col(G("download_s1"), md=6), dbc.Col(G("download_s2"), md=6)]),
-        ])
-    if chart_id == "dns_combined":
-        return dbc.Row([dbc.Col(G("dns_s1", 450), md=6), dbc.Col(G("dns", 450), md=6)])
-    if chart_id == "lstm_combined":
-        return dbc.Row([dbc.Col(G("lstm_s1", 420), md=6), dbc.Col(G("lstm", 420), md=6)])
-    if chart_id == "browse_combined":
-        return dbc.Row([dbc.Col(G("browse_cat_s1", 420), md=6),
-                        dbc.Col(G("browse_cat", 420), md=6)])
-    if chart_id == "browse_hour_combined":
-        return dbc.Row([dbc.Col(G("browse_hour_s1", 420), md=6),
-                        dbc.Col(G("browse_hour", 420), md=6)])
-    if chart_id == "external_combined":
-        return html.Div([
-            dbc.Row([dbc.Col(G("ext_provider_s1"), md=6),
-                     dbc.Col(G("ext_provider_s2"), md=6)]),
-            dbc.Row([dbc.Col(G("ext_type_s1"), md=6),
-                     dbc.Col(G("ext_type_s2"), md=6)]),
-        ])
-    if chart_id == "coverage_combined":
-        return dbc.Row([dbc.Col(G("coverage_s1", 360), md=6),
-                        dbc.Col(G("coverage_s2", 360), md=6)])
-    # Dual-session side-by-side branches added by Patch C. When the user is on
-    # one of these chart_ids and S2 is loaded, render both panels. When S2 is
-    # absent, return None so _get_chart_content falls through to the single
-    # FIGS[chart_id] direct render (which then shows just the S1 chart).
-    if not _s2_loaded():
-        return None
-    if chart_id == "talkers":
-        return dbc.Row([dbc.Col(G("talkers_s1", 500), md=6),
-                        dbc.Col(G("talkers", 500),    md=6)])
-    if chart_id == "burst":
-        return dbc.Row([dbc.Col(G("burst_s1", 500), md=6),
-                        dbc.Col(G("burst", 500),    md=6)])
-    if chart_id == "devices":
-        return dbc.Row([dbc.Col(G("devices_s1", 600), md=6),
-                        dbc.Col(G("devices", 600),    md=6)])
-    if chart_id == "timeline":
-        return dbc.Row([dbc.Col(G("timeline_s1", 480), md=6),
-                        dbc.Col(G("timeline", 480),    md=6)])
-    if chart_id == "device_map":
-        return dbc.Row([dbc.Col(G("device_map", 520),    md=6),
-                        dbc.Col(G("device_map_s2", 520), md=6)])
-    if chart_id == "proximity":
-        return dbc.Row([dbc.Col(G("proximity", 560),    md=6),
-                        dbc.Col(G("proximity_s2", 560), md=6)])
-    return None
 
 
 def _render_insights():
@@ -10168,10 +10015,6 @@ def build_ip_history_heatmap(_n_clicks, _n_submit, ip_value):
         return html.Div(
             f"No sessions loaded. Load a PCAP first, then look up {ip_addr}.",
             style={"color":INK_MUTE,"padding":"40px 10px","textAlign":"center"})
-
-    if all(not isinstance(c.children, html.Div) for c in cols):
-        # defensive - shouldn't happen, but be safe
-        pass
 
     return dbc.Row(cols)
 
