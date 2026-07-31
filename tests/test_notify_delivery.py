@@ -17,12 +17,23 @@ sys.path.insert(0, REPO_ROOT)
 from server import notify  # noqa: E402
 
 
-def _paths(tmp_path, md_body="# report\n\nOK\n"):
+def _paths(tmp_path, md_body="# report\n\nOK\n", with_pdf=True,
+           with_html=True):
     md = tmp_path / "verdicts.md"
     md.write_text(md_body, encoding="utf-8")
     js = tmp_path / "verdicts.json"
     js.write_text('{"results": []}', encoding="utf-8")
-    return {"md": str(md), "json": str(js)}
+    paths = {"md": str(md), "json": str(js)}
+    if with_html:
+        html = tmp_path / "report.html"
+        html.write_text("<html><body>report</body></html>",
+                        encoding="utf-8")
+        paths["html"] = str(html)
+    if with_pdf:
+        pdf = tmp_path / "report.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n% fake pdf bytes\n")
+        paths["pdf"] = str(pdf)
+    return paths
 
 
 class _FakeResponse:
@@ -95,7 +106,43 @@ def test_deliver_smtp_success_short_circuits_the_chain(tmp_path):
     assert sent["to"] == "user@example.com"
     assert "session 42" in sent["subject"]
     assert "capture.pcap" in sent["subject"]
-    assert sent["attachments"] == ["verdicts.json"]
+    # PDF wins over HTML wins over anything else; verdicts.json is
+    # deliberately NOT attached (it is a developer artefact, not a
+    # human-readable report).
+    assert sent["attachments"] == ["report.pdf"]
+
+
+def test_deliver_falls_back_to_html_when_pdf_missing(tmp_path):
+    """weasyprint absent -> no report.pdf. HTML is attached instead."""
+    sent = {}
+
+    def fake_send(to, body, subject=None, attachments=None):
+        sent["attachments"] = list((attachments or {}).keys())
+        return True, "sent"
+
+    paths = _paths(tmp_path, with_pdf=False)
+    notify.deliver(
+        {"id": 1, "notify_email": "user@example.com"},
+        out={}, report_paths=paths, env={},
+        send_fn=fake_send)
+    assert sent["attachments"] == ["report.html"]
+
+
+def test_deliver_no_human_report_attaches_nothing(tmp_path):
+    """Only .md/.json on disk -> the email carries the report as its own
+    body (via markdown_to_html) and has zero attachments."""
+    sent = {}
+
+    def fake_send(to, body, subject=None, attachments=None):
+        sent["attachments"] = list((attachments or {}).keys())
+        return True, "sent"
+
+    paths = _paths(tmp_path, with_pdf=False, with_html=False)
+    notify.deliver(
+        {"id": 1, "notify_email": "user@example.com"},
+        out={}, report_paths=paths, env={},
+        send_fn=fake_send)
+    assert sent["attachments"] == []
 
 
 # ---- deliver: SMTP -> n8n fallback ---------------------------------------

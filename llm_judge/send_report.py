@@ -193,10 +193,33 @@ def markdown_to_html(md):
         "</body></html>")
 
 
+_ATTACHMENT_MIME = {
+    ".pdf":  ("application", "pdf"),
+    ".html": ("text",        "html"),
+    ".htm":  ("text",        "html"),
+    ".json": ("application", "json"),
+    ".md":   ("text",        "markdown"),
+    ".txt":  ("text",        "plain"),
+    ".csv":  ("text",        "csv"),
+    ".xml":  ("application", "xml"),
+}
+
+
+def _attachment_mime(name):
+    """Pick a sensible (maintype, subtype) from the filename extension.
+    Unknown extensions fall back to a generic binary type so a mail
+    client offers a Download instead of guessing wrongly."""
+    ext = os.path.splitext(name)[1].lower()
+    return _ATTACHMENT_MIME.get(ext, ("application", "octet-stream"))
+
+
 def build_message(to_addr, subject, markdown_body, sender,
                   attachments=None):
     """Build a multipart/alternative message with the markdown as the
-    plain-text part and the rendered HTML as the rich part."""
+    plain-text part and the rendered HTML as the rich part. Attachments
+    are typed by extension - PDF stays application/pdf, HTML stays
+    text/html - so mail clients open them the right way instead of
+    treating everything as JSON."""
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = sender
@@ -206,7 +229,8 @@ def build_message(to_addr, subject, markdown_body, sender,
     for name, data in (attachments or {}).items():
         if isinstance(data, str):
             data = data.encode("utf-8")
-        msg.add_attachment(data, maintype="application", subtype="json",
+        maintype, subtype = _attachment_mime(name)
+        msg.add_attachment(data, maintype=maintype, subtype=subtype,
                            filename=name)
     return msg
 

@@ -79,18 +79,28 @@ def _subject_for(session):
 
 
 def _attachments_for(report_paths):
-    """Best-effort read of the JSON verdicts file for attachment. Returns
-    {filename: str} that llm_judge.send_report knows how to attach."""
+    """Human-readable report as a single attachment: PDF when the worker
+    managed to render one (weasyprint present), HTML otherwise. Returns
+    {filename: bytes|str} for llm_judge.send_report to attach.
+
+    Deliberately NOT including verdicts.json - it is the machine-readable
+    exchange format, not a report a person opens. Anyone who needs it can
+    fetch it from GET /v1/reports/{id}.json with their bearer token."""
     attachments = {}
     if not isinstance(report_paths, dict):
         return attachments
-    json_path = report_paths.get("json")
-    if json_path and os.path.isfile(json_path):
+    for kind in ("pdf", "html"):
+        path = report_paths.get(kind)
+        if not path or not os.path.isfile(path):
+            continue
         try:
-            with open(json_path, encoding="utf-8") as f:
-                attachments[os.path.basename(json_path)] = f.read()
+            mode = "rb" if kind == "pdf" else "r"
+            with open(path, mode, **({"encoding": "utf-8"}
+                                     if kind != "pdf" else {})) as f:
+                attachments[os.path.basename(path)] = f.read()
         except Exception:
-            pass
+            continue
+        break  # one human-readable copy is enough; stop at the first
     return attachments
 
 

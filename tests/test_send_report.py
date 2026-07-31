@@ -166,6 +166,30 @@ def test_markdown_escapes_html():
     assert "&amp;" in html
 
 
+def test_build_message_attachments_mime_by_extension():
+    """Attachments must be typed by extension so a mail client offers the
+    right action (Open in PDF viewer for report.pdf, Open in browser for
+    report.html). Before this fix everything was forced to
+    application/json, which turned report.pdf into a broken .json file
+    in the recipient's inbox."""
+    msg = sr.build_message(
+        "to@example.com", "subject", "# body", "from@example.com",
+        attachments={
+            "report.pdf": b"%PDF-1.4\ntest",
+            "report.html": "<html><body>hello</body></html>",
+            "verdicts.json": '{"x": 1}',
+            "whatever.dat": b"\x00\x01\x02",
+        })
+    by_name = {p.get_filename(): (p.get_content_type(),
+                                  p.get_content_maintype())
+               for p in msg.iter_attachments()}
+    assert by_name["report.pdf"]      == ("application/pdf",  "application")
+    assert by_name["report.html"]     == ("text/html",        "text")
+    assert by_name["verdicts.json"]   == ("application/json", "application")
+    assert by_name["whatever.dat"]    == ("application/octet-stream",
+                                          "application")
+
+
 def test_markdown_handles_empty_input():
     html = sr.markdown_to_html("")
     assert html.startswith("<html>") and html.endswith("</html>")
