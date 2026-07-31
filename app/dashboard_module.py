@@ -6387,7 +6387,7 @@ def build_chart_picker_strip(active_chart, active_tab, active_session="s1"):
                "aur-chip-disabled" if is_disabled else "aur-chip")))
     return html.Div(pills + chips, id="chart-picker-strip-inner", style={
         "display":"flex","gap":"8px","padding":"10px 22px 14px",
-        "overflowX":"auto","overflowY":"hidden",
+        "flexWrap":"wrap","rowGap":"8px",
         "alignItems":"center"})
 
 
@@ -6718,10 +6718,6 @@ def _render_n8n_send_button(session, session_key):
     src_pcap = session.get("_source_pcap") or ""
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
     _host_label = N8N_REMOTE_HOST or "set NETSEC_INGEST_URL"
-    caption = (f"Upload `{src_name}` to the VM ({_host_label}) over "
-               f"Tailscale. The worker analyzes it end to end and mails "
-               f"the finished report (PDF) to the address you enter here. "
-               f"Nothing runs on this machine.")
     default_email = _os.environ.get("NETSEC_NOTIFY_EMAIL", "")
     return html.Div([
         html.Div([
@@ -6762,10 +6758,6 @@ def _render_n8n_send_button(session, session_key):
                 "marginTop":"6px",
                 "textAlign":"left",
             }),
-        html.Div(caption,
-            style={"fontSize":"10px","color":INK_MUTE,"marginTop":"6px",
-                   "padding":"0 4px","lineHeight":"1.5",
-                   "fontFamily":"'Inter Tight', sans-serif"}),
         html.Div(id={"type":"n8n-send-status","session":session_key},
                  style={"fontSize":"10.5px","marginTop":"6px",
                         "padding":"0 4px","lineHeight":"1.5",

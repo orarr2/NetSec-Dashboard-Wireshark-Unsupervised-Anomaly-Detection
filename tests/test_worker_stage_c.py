@@ -147,6 +147,30 @@ def test_worker_error_path(env):
     assert "pipeline exploded" in session["error"]
 
 
+def test_worker_rejects_empty_pcap_with_clear_message(env, tmp_path):
+    """A 0-byte or micro-truncated PCAP used to reach tshark and come
+    back as a cryptic 'Invalid value NaN' from the pandas layer. The
+    early size check now catches it and writes a message a human can
+    read straight from the session's error column."""
+    conn, sid, _, root = env
+    # Overwrite the session's PCAP with an empty file so the check trips.
+    empty_pcap = tmp_path / "cap.pcap"
+    empty_pcap.write_bytes(b"")
+    conn.execute("UPDATE pcap_files SET storage_path=? WHERE id=1",
+                 (str(empty_pcap),))
+    conn.commit()
+
+    def never_called(pcap_path, label):
+        raise AssertionError("analyze_fn must not run on an empty PCAP")
+
+    assert worker.run_once(conn, analyze_fn=never_called, md_fn=_stub_md,
+                           data_root=str(root)) == sid
+    session = db.get_session(conn, sid)
+    assert session["status"] == "error"
+    assert "too small to be a valid capture" in session["error"]
+    assert "0 byte(s)" in session["error"]
+
+
 def test_reconcile_undeclared_flow_is_a_finding(env):
     conn, sid, _, _ = env
     # a flow to the declared infra dst with NO telemetry record at all

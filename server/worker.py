@@ -163,6 +163,14 @@ def _notify(session, out, report_paths):
         print(f"[worker] notify {tag}[{mode}]: {msg}", flush=True)
 
 
+# The libpcap file header is 24 bytes. Anything shorter cannot be a
+# valid capture, and letting tshark run on 0 bytes returned the cryptic
+# "Invalid value NaN" from the pandas parse layer instead of a message
+# a human could act on. Caught early here so the failure row explains
+# itself.
+_MIN_PCAP_HEADER_BYTES = 24
+
+
 def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
     """One claimed session end to end. Raises nothing: failures land in
     sessions.error and the loop moves on."""
@@ -174,6 +182,12 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
     try:
         if not os.path.isfile(pcap_path):
             raise FileNotFoundError(f"pcap missing on disk: {pcap_path}")
+        size = os.path.getsize(pcap_path)
+        if size < _MIN_PCAP_HEADER_BYTES:
+            raise ValueError(
+                f"PCAP is {size} byte(s) - too small to be a valid capture "
+                f"(need at least {_MIN_PCAP_HEADER_BYTES} for the libpcap "
+                f"file header). Nothing to analyze.")
 
         out, assembled, client, context, S, findings = analyze_fn(
             pcap_path, job.get("label"))
