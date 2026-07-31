@@ -136,13 +136,70 @@ def build_context(S, findings, assembled):
 
 # --------------------------------------------------------------------------
 # Markdown renderer. Sections, in order:
-#   1. Metadata table (PCAP, model, prompt, guardrail)
-#   2. Pipeline stats (packets, IPs, detections)
-#   3. Top verdict (highest priority row)
-#   4. Triaged queue (full verdict table)
-#   5. Not queued for judgment (IPs the pipeline analyzed and cleared)
-#   6. Dropped / Capped (only if non-empty)
-#   7. How to interpret
+#   1. Metadata table (PCAP, model, prompt, guardrail, panel summary)
+#   2. Analyst commentary (capped to first 2 sentences)
+#   3. Pipeline stats (2 compact lines - traffic + detectors)
+#   4. Top verdict (highest priority row)
+#   5. Triaged queue (full verdict table, 8 columns)
+#   6. Reasoning per candidate (first sentence per row)
+#   7. Panel disputes (2-judge grid, no Note column)
+#   8. Debate positions (first sentence per model per candidate)
+#   9. Not queued for judgment (one-line summary)
+#  10. Dropped / Capped (only if non-empty)
+#  11. Panel participation (per-judge audit, no caption)
+#
+# The report exists to be read once and acted on. Anything a reader would
+# skip on the second capture belongs in verdicts.json, not in the email.
+# --------------------------------------------------------------------------
+
+
+def _first_sentence(text, max_chars=160):
+    """First sentence of `text`, capped at max_chars. Ends with '.' if
+    a period was found, ' ...' if the cap truncated a longer sentence.
+    Empty input -> empty string. Used to compact LLM prose (reasoning,
+    debate rebuttals, analyst commentary) for the email report - the
+    full text stays in verdicts.json."""
+    if not isinstance(text, str):
+        return ""
+    s = text.strip()
+    if not s:
+        return ""
+    # Split at first sentence boundary. Look for '. ' (period + space),
+    # '? ' or '! '; also stop at a newline since these are single-para
+    # LLM outputs and a newline is effectively a paragraph break.
+    import re as _re
+    m = _re.search(r"[.!?](?:\s|$)|\n", s)
+    if m:
+        s = s[:m.end()].rstrip()
+    if len(s) > max_chars:
+        s = s[:max_chars - 4].rstrip() + " ..."
+    elif not s.endswith((".", "!", "?", "...")):
+        s += "."
+    return s
+
+
+def _first_n_sentences(text, n=2, max_chars=380):
+    """Up to `n` sentences; cap at max_chars total. For the analyst
+    commentary the LLM often runs 5+ sentences and the first 2 already
+    cover the finding + recommended action."""
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    import re as _re
+    parts, remaining = [], text.strip()
+    for _ in range(n):
+        first = _first_sentence(remaining, max_chars=10_000)
+        if not first:
+            break
+        parts.append(first)
+        remaining = remaining[len(first):].lstrip()
+        if not remaining:
+            break
+    out = " ".join(parts).strip()
+    if len(out) > max_chars:
+        out = out[:max_chars - 4].rstrip() + " ..."
+    return out
+
+
 # --------------------------------------------------------------------------
 def _render_markdown(pcap_path, out, assembled, client, context=None):
     """Turn a judged batch into a GitHub-Issue-ready markdown report."""
@@ -180,11 +237,14 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
     lines.append("")
 
     # ----- 0. Analyst commentary (top of report - the human read) --------
+    # Capped at 2 sentences. The LLM's original 5-6-sentence version is
+    # persisted in verdicts.json under `analyst_commentary`; the emailed
+    # copy is deliberately the elevator-pitch cut.
     if commentary:
         lines += [
             "## Analyst commentary",
             "",
-            f"> {commentary}",
+            f"> {_first_n_sentences(commentary, n=2)}",
             "",
         ]
 
@@ -207,23 +267,27 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         rule_line = " · ".join(rule_hits) if rule_hits \
             else "no deterministic rule fired"
 
+        # Compact 2-line summary. What used to take 6 bullets now reads
+        # as one traffic line + one detectors line - same information,
+        # a third of the vertical space.
+        iso_word = "anomaly" if ml["isolation_forest_anomalies"] == 1 \
+            else "anomalies"
+        cluster_word = "cluster" if ml["dbscan_clusters"] == 1 \
+            else "clusters"
+        cluster_note = "" if ml["dbscan_meaningful"] \
+            else " (clustering not meaningful)"
+        detectors = (f"ML: {ml['isolation_forest_anomalies']} IF "
+                     f"{iso_word} · {ml['dbscan_noise']} DBSCAN noise "
+                     f"({ml['dbscan_clusters']} {cluster_word}"
+                     f"{cluster_note}) · Rules: {rule_line}")
+        traffic = (f"{ctx['n_packets']:,} packets over "
+                   f"{ctx['duration_s']}s · {ctx['total_ips']} IPs · "
+                   f"{ctx['total_macs']} MACs · top: {protos}")
         lines += [
             "## Pipeline stats",
             "",
-            f"- **Duration**: {ctx['duration_s']} seconds "
-            f"({ctx['time_range'][0]} → {ctx['time_range'][1]})",
-            f"- **Packets analyzed**: {ctx['n_packets']:,}",
-            f"- **Source IPs**: {ctx['total_ips']} · "
-            f"**MACs**: {ctx['total_macs']}",
-            f"- **Top protocols**: {protos}",
-            f"- **ML layer**: "
-            f"{ml['isolation_forest_anomalies']} IsolationForest anomal"
-            f"{'y' if ml['isolation_forest_anomalies'] == 1 else 'ies'} · "
-            f"{ml['dbscan_noise']} DBSCAN noise "
-            f"({ml['dbscan_clusters']} cluster"
-            f"{'' if ml['dbscan_clusters'] == 1 else 's'} found"
-            f"{'' if ml['dbscan_meaningful'] else ', clustering not meaningful'})",
-            f"- **Deterministic rules**: {rule_line}",
+            f"- **Traffic**: {traffic}",
+            f"- **Detectors**: {detectors}",
         ]
         for s in rules.get("scan_alerts_summary") or []:
             lines.append(f"  - {s}")
@@ -263,14 +327,12 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             )
         lines.append("")
 
-        # Reasoning as a compact bulleted list right below the queue -
-        # one line per candidate (verdict/category is already in the
-        # table, so we don't repeat it). The long free-text field cannot
-        # live in the 8-column table (PDF overflow), but it also does
-        # not deserve one heading + one blockquote per candidate.
+        # Reasoning as a numbered list of one-sentence summaries. The
+        # full paragraph the LLM produced lives in verdicts.json under
+        # results[i].verdict.reasoning.
         lines += ["**Reasoning per candidate**", ""]
         for i, r in enumerate(out["results"], 1):
-            reasoning = r["verdict"]["reasoning"].strip()
+            reasoning = _first_sentence(r["verdict"]["reasoning"])
             lines.append(f"{i}. `{r['candidate_id']}` - {reasoning}")
         lines.append("")
         if any(r.get("guardrail") for r in out["results"]):
@@ -284,18 +346,15 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                         if (r.get("panel") or {}).get("needs_human_review")]
         if panel_review:
             models = stats.get("models") or []
+            # Drop the Note column - every row said the same thing
+            # ("judges disagree after debate; using the more severe
+            # verdict"), which is exactly what the ⚖ flag already means.
             lines += [
-                "> ⚖ = the panel did not reach consensus (or a judge "
-                "failed): the effective verdict is the fail-safe, more "
-                "severe side, and the candidate is flagged for human "
-                "review. Per-judge positions and rebuttals are in "
-                "`verdicts.json` under `panel`.",
-                "",
                 "### Panel disputes",
                 "",
                 "| Candidate | " + " | ".join(f"`{m}`" for m in models)
-                + " | Effective | Note |",
-                "|---|" + "---|" * len(models) + "---|---|",
+                + " | Effective |",
+                "|---|" + "---|" * len(models) + "---|",
             ]
             for r in panel_review:
                 by_model = {j["model"]: j for j in r["panel"]["judges"]}
@@ -310,21 +369,21 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                         if j.get("revised"):
                             cell += " ↺"
                         cells.append(cell)
-                note = (r["panel"].get("note") or "").replace("|", "\\|")
                 lines.append(
                     f"| `{r['candidate_id']}` | " + " | ".join(cells)
-                    + f" | **{r['verdict']['verdict']}** | {note} |")
+                    + f" | **{r['verdict']['verdict']}** |")
             lines.append("")
             rebutted = [
                 (r["candidate_id"], j)
                 for r in panel_review for j in r["panel"]["judges"]
                 if j.get("rebuttal")]
             if rebutted:
-                lines += ["**Debate positions (defended verdicts):**", ""]
+                lines += ["**Debate positions** (first sentence only; full "
+                          "rebuttals in `verdicts.json`)", ""]
                 for cand_id, j in rebutted:
                     lines.append(
                         f"- `{cand_id}` - `{j['model']}` "
-                        f"({j['stance']}): {j['rebuttal']}")
+                        f"({j['stance']}): {_first_sentence(j['rebuttal'])}")
                 lines.append("")
 
         review = [r for r in out["results"]
@@ -398,14 +457,12 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
     # ----- 6.5 Panel participation (the per-judge audit) -----------------
     if stats.get("panel"):
         pr = stats["panel_report"]
+        # Caption dropped: the column headers (Valid / Failures / Debates
+        # / Revised / Agreed with final) are self-explaining, and the
+        # caption used to add ~4 lines of the same explanation on every
+        # report. Anyone who needs it once can read llm_judge/README.md.
         lines += [
             "## Panel participation",
-            "",
-            "Per-judge audit of this run: what each model received, how "
-            "often it answered validly, revised its position in debate, "
-            "and aligned with the final verdict. A failing judge never "
-            "blocks the panel - its failures are counted here and the "
-            "remaining judges carry the batch.",
             "",
             "| Model | Received | Valid | Failures | Debates | Revised | "
             "Agreed with final | Cache hits | Mean latency |",

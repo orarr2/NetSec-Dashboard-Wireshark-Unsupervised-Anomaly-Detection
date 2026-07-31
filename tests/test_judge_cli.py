@@ -176,18 +176,23 @@ def test_render_markdown_has_expected_sections():
 
 
 def test_render_markdown_pipeline_stats_content():
-    """Pipeline stats section must reflect the context numbers."""
+    """Pipeline stats section must reflect the context numbers - now
+    rendered on 2 compact lines (Traffic + Detectors) instead of 6
+    bullets, to keep the emailed report scannable."""
     out, assembled, client = _judged_batch()
     ctx = _fake_context()
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=ctx)
     stats_section = md.split("## Pipeline stats")[1].split("##")[0]
     assert "2,020" in stats_section              # packets, comma formatted
-    assert "71.2 seconds" in stats_section
+    assert "71.2s" in stats_section              # duration is short-suffixed
     assert "TCP 2,007" in stats_section          # top protocol formatted
-    assert "1 IsolationForest anomaly" in stats_section
+    assert "1 IF anomaly" in stats_section       # ML shorthand
     assert "1 scan alert(s)" in stats_section
     assert "192.168.1.10" in stats_section       # per-alert detail
+    # Reorganised into two labelled lines, not six bullets.
+    assert "**Traffic**" in stats_section
+    assert "**Detectors**" in stats_section
 
 
 def test_render_markdown_not_flagged_is_one_line_summary():
@@ -221,6 +226,39 @@ def test_render_markdown_singular_ip_line():
                                     context=ctx)
     assert "Pipeline also analyzed **1 additional IP**" in md
     assert "additional IPs" not in md  # no plural
+
+
+def test_first_sentence_helpers():
+    """Report compaction depends on these two helpers cutting cleanly."""
+    fs = judge_cli._first_sentence
+
+    # Simple: cut at the first period.
+    assert fs("Scan fired. Deterministic rule confirms.") \
+        == "Scan fired."
+    # Sentence-terminator variants.
+    assert fs("Is this suspicious? Yes, definitely.") == "Is this suspicious?"
+    assert fs("Alert! Investigate now.") == "Alert!"
+    # Newlines are treated as paragraph breaks.
+    assert fs("first line\nsecond line") == "first line."
+    # Cap length. A single sentence longer than max_chars is ellipsed.
+    long = "a" * 200 + "."
+    got = fs(long, max_chars=50)
+    assert len(got) <= 50 and got.endswith(" ...")
+    # Text with no terminator gets a period appended (up to cap).
+    assert fs("no terminator here") == "no terminator here."
+    # Empty / non-string inputs return empty string, never raise.
+    assert fs("") == fs(None) == fs(123) == ""
+
+    fn = judge_cli._first_n_sentences
+    # Take exactly N sentences when available.
+    assert fn("One. Two. Three. Four.", n=2) == "One. Two."
+    # If only one sentence exists, return it.
+    assert fn("Just one sentence.", n=3) == "Just one sentence."
+    # Empty stays empty.
+    assert fn("", n=2) == ""
+    # Total cap wins over sentence count.
+    assert len(fn("a" * 500 + ". " + "b" * 500 + ".", n=2,
+                  max_chars=100)) <= 100
 
 
 def test_render_markdown_reasoning_lives_below_the_queue_as_a_list():
