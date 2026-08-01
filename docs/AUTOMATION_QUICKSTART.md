@@ -301,9 +301,12 @@ Change these in `deploy/.env`, then `docker compose restart worker`
   most of its wall-clock waiting out 429s. Drop to `10` on a bursty
   key.
 - `LLM_JUDGE_BATCH_SIZE` - candidates packed into one call.
-  **Default `1`.** A 5-candidate batch measures ~5 500 tokens, which
-  does not fit the free-tier per-minute ceilings above, so raising it
-  there just converts one throttled call into per-candidate retries.
+  **Default `1`.** A request costs `1675 + n x 720` tokens (the system
+  prompt is paid once per call; each candidate blob is ~720). On the
+  ceilings above, `n=3` costs 3 835 and fits comfortably, while `n=5`
+  costs 5 275 - 88 % of llama-8b's whole minute in one request, which
+  any concurrent call throttles into the per-candidate fallback it was
+  meant to replace.
 - `LLM_JUDGE_TIMEOUT_S` - per-request timeout in seconds. **Default
   `300`** in code; raise to `600` when a cold local Ollama model has
   to load before its first answer.
