@@ -869,12 +869,69 @@ def analyst_commentary(client, context, verdicts, session_label="S1",
                 f"{type(e).__name__}: {e})")
 
 
+_GUARDRAIL_ESCAPE_PATTERNS = {
+    # SCIENTIFIC_AUDIT 3.1: whitelist of specific evidence patterns that
+    # justify letting a "benign" verdict past the guardrail on a
+    # fired-rule candidate. Every entry is (rule_category, allowed
+    # evidence_features prefix). If a benign verdict at >= 0.85 confidence
+    # cites at least one of these AND the reasoning contains the trigger
+    # phrase, the guardrail lets it through with a `guardrail_bypassed`
+    # audit trail. Grow this list conservatively - a false permissive
+    # here silences real attacks.
+    #
+    # dns_amp: benign public resolver caught by the amp rule. Only
+    # accept the escape if the model cites the resolver identity.
+    "dns_amp": [
+        {"prefix": "rule_signals.amp_alerts", "phrase": "public resolver"},
+        {"prefix": "enrichments.reverse_dns",  "phrase": "public resolver"},
+        {"prefix": "enrichments.reverse_dns",  "phrase": "anycast"},
+        {"prefix": "device_context.oui_vendor", "phrase": "cloud provider"},
+    ],
+}
+
+
+def _guardrail_escape_allowed(candidate, verdict, expected):
+    """SCIENTIFIC_AUDIT 3.1: return (allowed: bool, note: str) - True
+    when the model's benign verdict cites concrete evidence that the
+    rule misfired, per the whitelist above. Confidence threshold: 0.85
+    (proposal). All other cases: guardrail overrides as before.
+    """
+    if not judge_config.LLM_JUDGE_GUARDRAIL_ESCAPE:
+        return False, ""
+    if float(verdict.get("confidence") or 0.0) < 0.85:
+        return False, ""
+    patterns = _GUARDRAIL_ESCAPE_PATTERNS.get(expected) or []
+    if not patterns:
+        return False, ""
+    cited = verdict.get("evidence_features") or []
+    reasoning = (verdict.get("reasoning") or "").lower()
+    for pat in patterns:
+        cited_ok = any(str(c).startswith(pat["prefix"]) for c in cited)
+        phrase_ok = pat["phrase"].lower() in reasoning
+        if cited_ok and phrase_ok:
+            return True, (f"escape: cited '{pat['prefix']}' + reasoning "
+                          f"contains '{pat['phrase']}'")
+    return False, ""
+
+
 def apply_rule_guardrail(candidate, verdict):
     """Return (effective_verdict, guardrail_info). guardrail_info is None
     when nothing was overridden."""
     expected = rule_expected_category(candidate)
     if expected is None or verdict["verdict"] != "benign":
         return verdict, None
+    # SCIENTIFIC_AUDIT 3.1 escape hatch - allow narrow, evidence-backed
+    # benigns to pass. Every bypass is audited in `guardrail_bypassed`
+    # so a permissive drift is visible in the panel report.
+    escape_ok, escape_note = _guardrail_escape_allowed(
+        candidate, verdict, expected)
+    if escape_ok:
+        return verdict, {"applied": False,
+                         "guardrail_bypassed": True,
+                         "rule_category": expected,
+                         "model_verdict": verdict["verdict"],
+                         "model_category": verdict["category"],
+                         "note": escape_note}
     corrected = dict(verdict)
     corrected["verdict"] = "suspicious"
     corrected["category"] = expected

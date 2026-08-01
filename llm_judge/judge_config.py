@@ -97,6 +97,16 @@ LLM_JUDGE_DEBATE = os.environ.get("LLM_JUDGE_DEBATE",
 LLM_JUDGE_PANEL_QUORUM = os.environ.get("LLM_JUDGE_PANEL_QUORUM",
                                          "majority").lower()
 
+# SCIENTIFIC_AUDIT 3.1: narrow escape hatch for the rule guardrail. When
+# on (default), a benign verdict at confidence >= 0.85 that cites one of
+# the whitelisted evidence patterns (public resolver, anycast, known
+# cloud provider) is allowed through instead of being escalated to
+# suspicious. Every bypass is logged in the guardrail info as
+# `guardrail_bypassed: True` for audit. Set to 0 to force the strict
+# pre-v0.5 behaviour where every benign-on-fired-rule is overridden.
+LLM_JUDGE_GUARDRAIL_ESCAPE = os.environ.get("LLM_JUDGE_GUARDRAIL_ESCAPE",
+                                             "1").lower() not in ("0", "false")
+
 # Named endpoint profiles (spec section 6.1, decision IDX-05). Each profile
 # is an OpenAI-compatible host that can appear in a panel by name, so one
 # panel can mix several providers (Groq + Gemini + local Ollama) - which a

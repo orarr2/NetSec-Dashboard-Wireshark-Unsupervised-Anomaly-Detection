@@ -64,6 +64,100 @@ def test_guardrail_overrides_benign_on_fired_rule():
     judge_core.validate_verdict(corrected)
 
 
+# --------------------------------------------------------------------------
+# SCIENTIFIC_AUDIT 3.1 - guardrail escape hatch
+# --------------------------------------------------------------------------
+def _dns_amp_candidate():
+    """Amp-rule-triggered candidate (a resolver-shaped source)."""
+    return {"candidate_id": "8.8.8.8", "kind": "ip",
+            "features": {"count": 200},
+            "ml_signals": {"iso_score": 0.0, "iso_stability": 0.0,
+                           "anomaly": False, "cluster": -1,
+                           "silhouette": None, "lstm_bin_flag_count": None},
+            "rule_signals": {"scan_alerts": [],
+                             "flood_alerts": [],
+                             "amp_alerts": [{"responses": 250,
+                                             "mean_size": 400.0,
+                                             "peer": "8.8.8.8"}],
+                             "arp_multi_mac": False},
+            "enrichments": {"is_private": False, "reverse_dns": "dns.google",
+                            "asn": "AS15169", "baseline_seen_before": None}}
+
+
+def test_guardrail_escape_lets_benign_public_resolver_pass():
+    """SCIENTIFIC_AUDIT 3.1: a benign verdict at >=0.85 conf that cites
+    the specific evidence 'public resolver' passes the guardrail."""
+    benign = good_verdict(
+        verdict="benign", category="benign_anomaly", confidence=0.9,
+        evidence_features=["enrichments.reverse_dns",
+                           "rule_signals.amp_alerts"],
+        reasoning="Peer is a well-known public resolver (Google DNS 8.8.8.8); "
+                  "the amp rule misfired on a legitimate resolver.")
+    corrected, info = judge_core.apply_rule_guardrail(
+        _dns_amp_candidate(), benign)
+    assert corrected["verdict"] == "benign"
+    assert info["guardrail_bypassed"] is True
+    assert info["applied"] is False
+    assert "public resolver" in info["note"]
+
+
+def test_guardrail_escape_denies_without_specific_evidence():
+    """A benign verdict without the specific whitelist evidence still gets
+    overridden, even at high confidence."""
+    benign = good_verdict(
+        verdict="benign", category="benign_anomaly", confidence=0.95,
+        evidence_features=["features.count"],
+        reasoning="Low packet count looks normal")
+    corrected, info = judge_core.apply_rule_guardrail(
+        _dns_amp_candidate(), benign)
+    assert corrected["verdict"] == "suspicious"  # overridden
+    assert info["applied"] is True
+    assert "guardrail_bypassed" not in info
+
+
+def test_guardrail_escape_denies_below_confidence_threshold():
+    """Even with correct evidence, confidence <0.85 is not enough to
+    escape - "prefer suspicious over benign when signals are thin"."""
+    benign = good_verdict(
+        verdict="benign", category="benign_anomaly", confidence=0.7,
+        evidence_features=["enrichments.reverse_dns"],
+        reasoning="Peer is a public resolver.")
+    corrected, info = judge_core.apply_rule_guardrail(
+        _dns_amp_candidate(), benign)
+    assert corrected["verdict"] == "suspicious"  # overridden
+    assert info["applied"] is True
+
+
+def test_guardrail_escape_can_be_disabled_by_config(monkeypatch):
+    """Setting LLM_JUDGE_GUARDRAIL_ESCAPE=0 restores strict pre-v0.5
+    behaviour: no benign passes on a fired-rule candidate."""
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_GUARDRAIL_ESCAPE", False)
+    benign = good_verdict(
+        verdict="benign", category="benign_anomaly", confidence=0.95,
+        evidence_features=["enrichments.reverse_dns",
+                           "rule_signals.amp_alerts"],
+        reasoning="Public resolver, amp rule misfired.")
+    corrected, info = judge_core.apply_rule_guardrail(
+        _dns_amp_candidate(), benign)
+    assert corrected["verdict"] == "suspicious"
+    assert info["applied"] is True
+
+
+def test_guardrail_escape_only_covers_dns_amp_today():
+    """The whitelist only covers dns_amp for now - other rule categories
+    (port_scan, arp_mitm, syn_flood) do not have escape entries and
+    always land in the strict override path."""
+    benign = good_verdict(
+        verdict="benign", category="benign_anomaly", confidence=0.95,
+        evidence_features=["enrichments.reverse_dns"],
+        reasoning="Public resolver, amp rule misfired.")
+    # scan candidate has scan_rule, not amp_rule - no escape entry
+    corrected, info = judge_core.apply_rule_guardrail(
+        scan_candidate(), benign)
+    assert corrected["verdict"] == "suspicious"
+    assert info["applied"] is True
+
+
 def test_guardrail_leaves_non_benign_and_ml_only_alone():
     v, info = judge_core.apply_rule_guardrail(scan_candidate(),
                                               good_verdict())
