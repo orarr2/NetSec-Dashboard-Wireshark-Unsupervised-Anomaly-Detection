@@ -57,6 +57,17 @@ def _http_error_detail(e):
     return f"{e}" + (f" - {body}" if body.strip() else "")
 
 
+def _extract_json_block(text):
+    """Cut the reply down to the outermost {...} JSON object. Models running
+    with response_format omitted (the json_validate_failed rescue path)
+    answer in plain text that usually IS the JSON, but may wrap it in
+    markdown fences or a lead-in sentence."""
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return text[start:end + 1]
+    return text
+
+
 class ClaudeClient:
     """Anthropic API client. Requires ANTHROPIC_API_KEY in the environment."""
 
@@ -226,6 +237,13 @@ class OpenAICompatClient:
         # Set to True only after the json_object fallback SUCCEEDS where
         # json_schema got a 400 - later calls then skip json_schema.
         self._schema_unsupported = False
+        # Set to True only after a no-format rescue SUCCEEDS where JSON
+        # mode got 400 json_validate_failed (Groq's qwen3.6 in production:
+        # the hidden reasoning pass consumes the completion budget under
+        # JSON mode, so the validator sees an empty generation). Later
+        # calls then skip response_format entirely and the JSON object is
+        # cut out of the plain-text reply instead.
+        self._json_mode_broken = False
 
     # Free tiers (Groq: 12k tokens/min) return HTTP 429 when a batch is
     # bursty. Retry a bounded number of times, honoring the server's stated
@@ -311,12 +329,33 @@ class OpenAICompatClient:
             payload["reasoning_format"] = "hidden"
         return payload
 
+    def _no_format_rescue(self, system_prompt, user_content, prior_detail):
+        """One attempt with response_format omitted, for models that answer
+        fine as plain text but flunk the server-side JSON validator in JSON
+        mode (Groq's qwen3.6, measured in production: HTTP 400
+        json_validate_failed with an EMPTY failed_generation on 28/33
+        calls). Success is remembered so later calls go straight to
+        no-format instead of re-burning the doomed JSON modes."""
+        try:
+            data = self._post(self._payload(system_prompt, user_content,
+                                            None))
+        except urllib.error.HTTPError as e:
+            raise JudgeClientError(
+                f"OpenAI-compatible call failed ({self.base_url}, model "
+                f"{self.model_id}). {prior_detail}; no-format attempt: "
+                f"{_http_error_detail(e)}",
+                permanent=(e.code < 500)) from e
+        self._json_mode_broken = True
+        return data
+
     def judge(self, system_prompt, user_content, schema=None):
         active = schema if schema is not None else self.verdict_schema
         plain = ({"type": "json_object"}
-                 if active is not None else None)
+                 if active is not None and not self._json_mode_broken
+                 else None)
         strict = None
-        if active is not None and not self._schema_unsupported:
+        if (active is not None and not self._schema_unsupported
+                and not self._json_mode_broken):
             strict = {"type": "json_schema",
                       "json_schema": {"name": "judge_verdict",
                                       "strict": True,
@@ -338,24 +377,51 @@ class OpenAICompatClient:
                         data = self._post(self._payload(
                             system_prompt, user_content, plain))
                     except urllib.error.HTTPError as e2:
-                        # Both formats rejected by the server - the model
-                        # is broken (allam-2-7b's json_validate_failed),
-                        # the request is malformed, OR we already exhausted
-                        # the internal 429 retry budget inside _post. A
-                        # further retry cannot fix any of those and just
-                        # burns quota, so mark permanent for every 4xx
-                        # (429 included - _post already backed off).
+                        second_detail = _http_error_detail(e2)
+                        if (e2.code == 400
+                                and "json_validate_failed" in second_detail):
+                            # The model answers but flunks the server-side
+                            # JSON validator. Last resort: no format
+                            # constraint at all.
+                            data = self._no_format_rescue(
+                                system_prompt, user_content,
+                                f"json_schema attempt: {first_detail}; "
+                                f"json_object attempt: {second_detail}")
+                        else:
+                            # Both formats rejected by the server - the
+                            # model is broken, the request is malformed, OR
+                            # we already exhausted the internal 429 retry
+                            # budget inside _post. A further retry cannot
+                            # fix any of those and just burns quota, so
+                            # mark permanent for every 4xx (429 included -
+                            # _post already backed off).
+                            raise JudgeClientError(
+                                f"OpenAI-compatible call failed "
+                                f"({self.base_url}, model {self.model_id})."
+                                f" json_schema attempt: {first_detail}; "
+                                f"json_object attempt: {second_detail}",
+                                permanent=(e2.code < 500)) \
+                                from e2
+                    else:
+                        self._schema_unsupported = True
+            elif plain is not None:
+                try:
+                    data = self._post(self._payload(system_prompt,
+                                                    user_content, plain))
+                except urllib.error.HTTPError as e:
+                    detail = _http_error_detail(e)
+                    if e.code == 400 and "json_validate_failed" in detail:
+                        data = self._no_format_rescue(
+                            system_prompt, user_content,
+                            f"json_object attempt: {detail}")
+                    else:
                         raise JudgeClientError(
                             f"OpenAI-compatible call failed ({self.base_url},"
-                            f" model {self.model_id}). json_schema attempt: "
-                            f"{first_detail}; json_object attempt: "
-                            f"{_http_error_detail(e2)}",
-                            permanent=(e2.code < 500)) \
-                            from e2
-                    self._schema_unsupported = True
+                            f" model {self.model_id}): {detail}",
+                            permanent=(e.code < 500)) from e
             else:
                 data = self._post(self._payload(system_prompt,
-                                                user_content, plain))
+                                                user_content, None))
         except JudgeClientError:
             raise
         except urllib.error.HTTPError as e:
@@ -383,6 +449,9 @@ class OpenAICompatClient:
         if not text:
             raise JudgeClientError(
                 "empty response body from OpenAI-compatible endpoint")
+        if self._json_mode_broken and active is not None:
+            # No-format replies may wrap the JSON in prose or fences.
+            text = _extract_json_block(text)
         usage = data.get("usage") or {}
         self.last_usage = {"tokens_in": usage.get("prompt_tokens"),
                            "tokens_out": usage.get("completion_tokens")}

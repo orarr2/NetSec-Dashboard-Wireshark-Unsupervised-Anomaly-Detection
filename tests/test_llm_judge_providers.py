@@ -238,6 +238,7 @@ def test_judge_candidates_applies_guardrail(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------
 class _MockOpenAIHandler(BaseHTTPRequestHandler):
     reject_json_schema = False
+    reject_json_validate = False
     reject_everything = False
     requests_seen = []
 
@@ -254,9 +255,21 @@ class _MockOpenAIHandler(BaseHTTPRequestHandler):
         if type(self).reject_json_schema and rf.get("type") == "json_schema":
             self._send(400, b'{"error": "json_schema not supported"}')
             return
+        if type(self).reject_json_validate and rf:
+            # Groq's validator error for models that flunk JSON mode
+            # (qwen3.6: empty failed_generation)
+            self._send(400, b'{"error":{"message":"Failed to validate JSON.",'
+                            b'"code":"json_validate_failed",'
+                            b'"failed_generation":""}}')
+            return
+        content = json.dumps(good_verdict())
+        if type(self).reject_json_validate:
+            # no-format reply: same JSON but wrapped in prose + fences,
+            # the shape the extraction helper must strip
+            content = "Here is my verdict:\n```json\n" + content + "\n```"
         reply = {"choices": [{"finish_reason": "stop", "message": {
             "role": "assistant",
-            "content": json.dumps(good_verdict())}}]}
+            "content": content}}]}
         self._send(200, json.dumps(reply).encode("utf-8"))
 
     def _send(self, status, data):
@@ -277,6 +290,7 @@ def mock_openai_server(monkeypatch):
     monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
     _MockOpenAIHandler.requests_seen = []
     _MockOpenAIHandler.reject_json_schema = False
+    _MockOpenAIHandler.reject_json_validate = False
     _MockOpenAIHandler.reject_everything = False
     server = HTTPServer(("127.0.0.1", 0), _MockOpenAIHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -321,6 +335,44 @@ def test_openai_compat_falls_back_to_json_object(mock_openai_server):
     client.judge("system prompt", "{}")
     assert (_MockOpenAIHandler.requests_seen[-1]["body"]
             ["response_format"]["type"]) == "json_object"
+
+
+def test_openai_compat_json_validate_failed_rescues_without_format(
+        mock_openai_server):
+    """Groq's qwen3.6 flunks the server-side JSON validator in BOTH JSON
+    modes (json_validate_failed, empty failed_generation) yet answers fine
+    as plain text. The client must fall through to a no-format call, cut
+    the JSON out of the prose, and remember the downgrade."""
+    _MockOpenAIHandler.reject_json_validate = True
+    client = OpenAICompatClient(model="qwen-like",
+                                base_url=mock_openai_server, timeout_s=10,
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+    raw = client.judge("system prompt", "{}")
+    assert json.loads(raw)["category"] == "port_scan"  # fences stripped
+    kinds = [(r["body"].get("response_format") or {}).get("type")
+             for r in _MockOpenAIHandler.requests_seen]
+    assert kinds == ["json_schema", "json_object", None]
+    assert client._json_mode_broken is True
+    # the downgrade sticks: the next call goes straight to no-format
+    client.judge("system prompt", "{}")
+    assert ("response_format"
+            not in _MockOpenAIHandler.requests_seen[-1]["body"])
+
+
+def test_openai_compat_json_validate_failed_direct_plain_path(
+        mock_openai_server):
+    """Same rescue when json_schema was already marked unsupported and the
+    json_object attempt is the FIRST one to hit json_validate_failed."""
+    _MockOpenAIHandler.reject_json_validate = True
+    client = OpenAICompatClient(model="qwen-like",
+                                base_url=mock_openai_server, timeout_s=10,
+                                verdict_schema=judge_core.VERDICT_SCHEMA)
+    client._schema_unsupported = True
+    raw = client.judge("system prompt", "{}")
+    assert json.loads(raw)["category"] == "port_scan"
+    kinds = [(r["body"].get("response_format") or {}).get("type")
+             for r in _MockOpenAIHandler.requests_seen]
+    assert kinds == ["json_object", None]
 
 
 def test_openai_compat_unrelated_400_reports_both_attempts(
