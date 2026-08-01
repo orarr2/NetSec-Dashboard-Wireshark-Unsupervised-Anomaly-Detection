@@ -6711,6 +6711,11 @@ def _render_n8n_send_button(session, session_key):
 
     Silent no-op if the session is not loaded, so S2 shows nothing until
     a second capture exists.
+
+    N1: an LLM panel dropdown lets the user pick which judges run for
+    THIS upload - overrides the VM's .env default just for this session.
+    Preset list is imported from llm_judge/panel_presets.py so adding a
+    preset there auto-populates the dropdown.
     """
     import os as _os
     if session is None:
@@ -6719,6 +6724,20 @@ def _render_n8n_send_button(session, session_key):
     src_name = _os.path.basename(src_pcap) if src_pcap else ""
     _host_label = N8N_REMOTE_HOST or "set NETSEC_INGEST_URL"
     default_email = _os.environ.get("NETSEC_NOTIFY_EMAIL", "")
+    # N1: build the panel-selector dropdown. Import lazily so a broken
+    # llm_judge import can't take down the dashboard.
+    try:
+        import sys as _sys
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        _root = _os.path.abspath(_os.path.join(_here, ".."))
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from llm_judge import panel_presets as _pp
+        _panel_choices = _pp.choices_for_ui()
+        _panel_default = _pp.DEFAULT_PRESET_ID
+    except Exception:
+        _panel_choices = []
+        _panel_default = None
     return html.Div([
         html.Div([
             html.Div("Email for the report",
@@ -6739,6 +6758,28 @@ def _render_n8n_send_button(session, session_key):
                        "fontFamily":"'JetBrains Mono', monospace",
                        "outline":"none"}),
         ], style={"marginBottom":"8px"}),
+        # N1: LLM panel selector - lets the user pick per-upload which
+        # judges run (fast/balanced/local-only/max diversity). The
+        # dropdown is silent when llm_judge is unavailable, and
+        # ingest_api silently falls back to .env when the preset id is
+        # unknown - a broken dropdown must not lose a PCAP.
+        html.Div([
+            html.Div("LLM panel",
+                style={"fontSize":"9.5px","color":INK_MUTE,
+                       "letterSpacing":"0.14em","textTransform":"uppercase",
+                       "fontWeight":"600","marginBottom":"4px",
+                       "fontFamily":"'JetBrains Mono', monospace"}),
+            dcc.Dropdown(
+                id={"type":"n8n-panel","session":session_key},
+                options=[{"label": lab, "value": pid}
+                         for pid, lab in _panel_choices],
+                value=_panel_default,
+                clearable=False,
+                searchable=False,
+                style={"fontSize":"11.5px",
+                       "fontFamily":"'JetBrains Mono', monospace"}),
+        ], style={"marginBottom":"8px",
+                  "display": "block" if _panel_choices else "none"}),
         html.Button(
             [html.Span("\U0001F4E7", style={"marginRight":"8px",
                                              "fontSize":"1.05rem"}),
@@ -8963,13 +9004,19 @@ def _n8n_stack_down_message(status):
     Input({"type":"n8n-send-btn","session":MATCH}, "n_clicks"),
     State({"type":"n8n-send-btn","session":MATCH}, "id"),
     State({"type":"n8n-email","session":MATCH}, "value"),
+    State({"type":"n8n-panel","session":MATCH}, "value"),
     prevent_initial_call=True,
 )
-def send_session_to_n8n(n_clicks, btn_id, email):
+def send_session_to_n8n(n_clicks, btn_id, email, panel_preset):
     """Sign and stream the session's PCAP to /v1/pcap on the VM, with
     X-Notify-Email so the worker mails the finished report to whatever
     address the user typed. Never scp's a file anywhere - the HTTP ingest
-    path replaces the older folder-poll flow."""
+    path replaces the older folder-poll flow.
+
+    N1: panel_preset is the LLM panel dropdown value (a preset id like
+    'fast_cloud_3'). Sent as X-Judge-Panel header so the worker uses
+    that panel just for this upload; unrecognised id falls back to the
+    VM's .env default."""
     import os as _os
     import re as _re
     if not n_clicks:
@@ -9031,6 +9078,7 @@ def send_session_to_n8n(n_clicks, btn_id, email):
         kind="prod",
         label=f"{session_key.upper()}_{_os.path.basename(src_pcap)}",
         notify_email=addr or None,
+        judge_panel=(panel_preset or None),
         timeout=300.0, retries=2)
 
     if not result.get("ok"):

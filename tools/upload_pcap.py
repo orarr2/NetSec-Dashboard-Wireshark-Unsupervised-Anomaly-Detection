@@ -83,7 +83,7 @@ def _append_manifest(manifest_path, record):
 
 def upload_file(path, url, sensor, secret, kind="prod", label=None,
                 manifest=None, timeout=600.0, retries=4, sleep_fn=time.sleep,
-                notify_email=None):
+                notify_email=None, judge_panel=None):
     """Sign and stream one PCAP to the ingest API. Shared by the CLI and
     the capture agent. Returns a dict:
         {"ok": bool, "status": int|None, "session_id": ..., "duplicate":
@@ -93,7 +93,12 @@ def upload_file(path, url, sensor, secret, kind="prod", label=None,
 
     notify_email, when set, becomes the X-Notify-Email header so the
     worker mails the finished report to that address. Invalid addresses
-    are silently dropped by the server (a typo must not cost the run)."""
+    are silently dropped by the server (a typo must not cost the run).
+
+    judge_panel (N1), when set, becomes the X-Judge-Panel header - a
+    llm_judge.panel_presets id (fast_cloud_3 / balanced_4 / ...) or
+    a raw LLM_JUDGE_PANEL spec. An unrecognised value silently falls
+    back to the VM's .env default panel."""
     digest = sha256_of(path)
     started_at = time.time()
     u = urllib.parse.urlsplit(url)
@@ -115,6 +120,8 @@ def upload_file(path, url, sensor, secret, kind="prod", label=None,
             headers["X-Session-Label"] = label
         if notify_email:
             headers["X-Notify-Email"] = notify_email
+        if judge_panel:
+            headers["X-Judge-Panel"] = judge_panel
         try:
             status, body = _post_stream(url, path, headers, timeout)
         except OSError as e:
@@ -171,6 +178,14 @@ def main(argv=None):
                     help="mail the finished report to this address "
                          "(X-Notify-Email header). Overrides the VM's "
                          "NETSEC_NOTIFY_EMAIL fallback for this upload.")
+    ap.add_argument("--panel", default=None,
+                    help="LLM panel preset id (fast_cloud_3 / balanced_4 "
+                         "/ local_only_2 / local_diverse_3 / hybrid_5 / "
+                         "max_6 / single_groq_fast) OR a raw "
+                         "LLM_JUDGE_PANEL spec. Sent as X-Judge-Panel "
+                         "header so the worker uses this panel for "
+                         "just this upload instead of the .env default. "
+                         "Unrecognised value silently falls back to .env.")
     args = ap.parse_args(argv)
 
     if not args.url or not args.sensor or not args.secret:
@@ -186,7 +201,8 @@ def main(argv=None):
                          kind=args.kind, label=args.label,
                          manifest=args.manifest, timeout=args.timeout,
                          retries=args.retries,
-                         notify_email=args.email)
+                         notify_email=args.email,
+                         judge_panel=args.panel)
     if not result["ok"]:
         print(f"error: {result['error']}", file=sys.stderr)
         return 1
