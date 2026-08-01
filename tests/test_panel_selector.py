@@ -70,6 +70,24 @@ def test_choices_for_ui_is_ordered_and_lists_labels():
         assert isinstance(label, str) and label
 
 
+def test_every_installed_local_model_appears_in_some_preset():
+    """No idle model rule: llama3.2 was installed on the VM but never
+    referenced in any preset - that regression must not recur."""
+    installed_local = {"ollama:qwen2.5:3b", "ollama:gemma2:2b",
+                       "ollama:phi3.5", "ollama:llama3.2:3b"}
+    referenced = set()
+    for preset in panel_presets.PRESETS.values():
+        for entry in preset["spec"].split(","):
+            entry = entry.strip()
+            if entry:
+                referenced.add(entry)
+    missing = installed_local - referenced
+    assert not missing, (
+        f"these local models are installed on the VM but no preset "
+        f"references them: {missing}. Either add them to a preset "
+        f"or `ollama rm` them - no idle installed models.")
+
+
 # ---- schema v5 + create_session ------------------------------------------
 
 def _sensor(conn, name="paneltest"):

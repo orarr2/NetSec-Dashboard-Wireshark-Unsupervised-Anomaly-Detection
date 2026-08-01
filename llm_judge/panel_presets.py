@@ -53,37 +53,41 @@ PRESETS = {
                   "max. Use when no cloud key is available or all "
                   "data must stay on the box."),
     },
-    "local_diverse_3": {
-        "label": "Local diverse x3 (qwen + gemma + phi3.5) - ~165 s / candidate",
-        "spec": ("ollama:qwen2.5:3b,ollama:gemma2:2b,ollama:phi3.5"),
-        "wallclock_per_candidate_s": 165,
-        "notes": ("Alibaba + Google + Microsoft locally. Three models "
-                  "compete for 4 vCPU serially: sum of latencies. "
-                  "Use for the highest zero-key diversity."),
+    "local_diverse_4": {
+        "label": "Local diverse x4 (qwen + gemma + phi3.5 + llama3.2) - ~220 s / candidate",
+        "spec": ("ollama:qwen2.5:3b,ollama:gemma2:2b,"
+                 "ollama:phi3.5,ollama:llama3.2:3b"),
+        "wallclock_per_candidate_s": 220,
+        "notes": ("Alibaba + Google + Microsoft + Meta locally. Four "
+                  "models compete for 4 vCPU serially: sum of latencies. "
+                  "Highest zero-key family diversity - one model per "
+                  "major LLM lab."),
     },
-    "hybrid_5": {
-        "label": "Hybrid x5 (2 Groq + Gemini + qwen + gemma) - ~110 s / candidate",
-        "spec": ("groq:llama-3.1-8b-instant,"
-                 "groq:llama-3.3-70b-versatile,"
-                 "gemini:gemini-2.5-flash,"
-                 "ollama:qwen2.5:3b,"
-                 "ollama:gemma2:2b"),
-        "wallclock_per_candidate_s": 110,
-        "notes": ("Full diversity: 3 cloud + 2 local. Wall-clock ≈ "
-                  "sum of the 2 local models. Best resolver stability "
-                  "at 5+ voters."),
-    },
-    "max_6": {
-        "label": "Maximum x6 (2 Groq + Gemini + qwen + gemma + phi) - ~165 s / candidate, SLOW",
+    "hybrid_6": {
+        "label": "Hybrid x6 (2 Groq + Gemini + qwen + gemma + llama3.2) - ~165 s / candidate",
         "spec": ("groq:llama-3.1-8b-instant,"
                  "groq:llama-3.3-70b-versatile,"
                  "gemini:gemini-2.5-flash,"
                  "ollama:qwen2.5:3b,"
                  "ollama:gemma2:2b,"
-                 "ollama:phi3.5"),
+                 "ollama:llama3.2:3b"),
         "wallclock_per_candidate_s": 165,
-        "notes": ("All 6 configured judges. Ollama CPU contention "
-                  "makes this slow (3 local models serial). Only for "
+        "notes": ("Full diversity: 3 cloud + 3 local. Wall-clock ≈ "
+                  "sum of the 3 local models. Best resolver stability "
+                  "at 6+ voters. Adds Meta locally next to Google/Alibaba."),
+    },
+    "max_7": {
+        "label": "Maximum x7 (2 Groq + Gemini + qwen + gemma + phi + llama3.2) - ~220 s / candidate, SLOW",
+        "spec": ("groq:llama-3.1-8b-instant,"
+                 "groq:llama-3.3-70b-versatile,"
+                 "gemini:gemini-2.5-flash,"
+                 "ollama:qwen2.5:3b,"
+                 "ollama:gemma2:2b,"
+                 "ollama:phi3.5,"
+                 "ollama:llama3.2:3b"),
+        "wallclock_per_candidate_s": 220,
+        "notes": ("All 7 configured judges. Ollama CPU contention "
+                  "makes this slow (4 local models serial). Only for "
                   "small captures (<5 candidates) where diversity "
                   "matters more than speed."),
     },
@@ -125,6 +129,6 @@ def valid_spec(spec):
 def choices_for_ui():
     """Return [(id, label)] pairs ordered for a dropdown."""
     ordered = ["fast_cloud_3", "balanced_4", "local_only_2",
-               "local_diverse_3", "hybrid_5", "max_6", "single_groq_fast"]
+               "local_diverse_4", "hybrid_6", "max_7", "single_groq_fast"]
     return [(pid, PRESETS[pid]["label"]) for pid in ordered
             if pid in PRESETS]
