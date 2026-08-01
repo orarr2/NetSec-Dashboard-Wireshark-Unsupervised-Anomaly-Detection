@@ -131,6 +131,17 @@ def build_context(S, findings, assembled):
         "flagged_ip_ids": sorted(flagged_ip_ids),
         "not_flagged_ips": not_flagged,
         "capped_ips": list(assembled["capped"]),
+        # Q1: per-capped-IP stats so the report can triage the tail
+        # without a re-run. Capped candidates are statistical-only
+        # (rule-triggered ones always survive the cap), so iso_score +
+        # volume is the whole picture an analyst needs.
+        "capped_details": [
+            {"ip": ip,
+             "packets": int(ip_agg.loc[ip, "count"]) if ip in ip_agg.index else 0,
+             "iso_score": round(float(ip_agg.loc[ip, "iso_score"]), 3)
+                          if (has_ml and ip in ip_agg.index) else None,
+             "unique_dsts": int(ip_agg.loc[ip, "unique_dsts"]) if ip in ip_agg.index else 0}
+            for ip in assembled["capped"]],
     }
 
 
@@ -541,16 +552,30 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         lines.append("")
 
     if assembled["capped"]:
+        capped_details = ctx.get("capped_details") or []
         lines += [
             "## Capped (statistical-only outliers over the batch limit)",
             "",
-            f"{len(assembled['capped'])} candidate(s) not judged this run: "
-            + ", ".join(f"`{c}`" for c in assembled["capped"][:20])
-            + ("…" if len(assembled["capped"]) > 20 else ""),
-            "",
-            "Raise `LLM_JUDGE_MAX_CANDIDATES` to include them.",
+            f"{len(assembled['capped'])} candidate(s) not judged this run. "
+            "Rule-triggered candidates always survive the cap, so these "
+            "are ML-only outliers ranked below the top "
+            f"{judge_config.MAX_CANDIDATES_PER_BATCH}.",
             "",
         ]
+        if capped_details:
+            lines += ["| IP | Packets | iso_score | Unique dsts |",
+                      "|---|---|---|---|"]
+            for d in capped_details[:20]:
+                iso = d["iso_score"] if d["iso_score"] is not None else "-"
+                lines.append(f"| `{d['ip']}` | {d['packets']} | {iso} "
+                             f"| {d['unique_dsts']} |")
+            if len(capped_details) > 20:
+                lines.append(f"| … {len(capped_details) - 20} more | | | |")
+            lines.append("")
+        else:
+            lines += [", ".join(f"`{c}`" for c in assembled["capped"][:20])
+                      + ("…" if len(assembled["capped"]) > 20 else ""), ""]
+        lines += ["Raise `LLM_JUDGE_MAX_CANDIDATES` to include them.", ""]
 
     # ----- 6.5 Panel participation (the per-judge audit) -----------------
     if stats.get("panel"):

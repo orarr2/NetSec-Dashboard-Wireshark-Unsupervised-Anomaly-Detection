@@ -412,6 +412,32 @@ def test_render_markdown_capped_section():
     assert "10.0.0.0" in md and "10.0.0.19" in md
 
 
+def test_render_markdown_capped_section_with_details_table():
+    """Q1: when the context carries capped_details, the capped section
+    renders a stats table (iso_score + packets) instead of bare IDs -
+    an analyst can triage the tail without re-running with a higher
+    cap."""
+    out = {"stats": {"total": 0, "judged": 0, "cache_hits": 0,
+                     "dropped": 0, "prompt_version": "v",
+                     "model": "fake"},
+           "results": [], "dropped": []}
+    assembled = {"candidates": [],
+                 "capped": ["10.0.0.1", "10.0.0.2"]}
+    ctx = _fake_context(not_flagged_count=0)
+    ctx["capped_details"] = [
+        {"ip": "10.0.0.1", "packets": 4200, "iso_score": -0.061,
+         "unique_dsts": 3},
+        {"ip": "10.0.0.2", "packets": 512, "iso_score": None,
+         "unique_dsts": 1},
+    ]
+    md = judge_cli._render_markdown("x.pcap", out, assembled,
+                                    _fake_client(), context=ctx)
+    assert "## Capped" in md
+    assert "| `10.0.0.1` | 4200 | -0.061 | 3 |" in md
+    # None iso_score renders as "-" not "None"
+    assert "| `10.0.0.2` | 512 | - | 1 |" in md
+
+
 # --------------------------------------------------------------------------
 # CLI end-to-end (mocked pipeline + client) via `main()`
 # --------------------------------------------------------------------------

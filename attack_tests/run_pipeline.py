@@ -54,105 +54,258 @@ sys.path.insert(0, os.path.join(
 from advanced_engines import run_advanced_threats          # noqa: E402
 
 
+CHUNK_ROWS = int(os.environ.get("NETSEC_CHUNK_ROWS", "100000"))
+
+
+def _flag_int(s):
+    try:
+        return int(s, 16)
+    except Exception:
+        return 0
+
+
 def analyze_pcap(path, label):
+    """Stream the capture through tshark in CHUNK_ROWS-packet blocks.
+
+    Q2 (scale): the previous implementation buffered tshark's whole
+    output as one string and parsed it into a single 22-column
+    DataFrame - ~5x the pcap size in RAM (a 500 MB capture peaked at
+    ~3 GB and grew linearly). Every downstream consumer only ever
+    needed either (a) per-IP/per-domain aggregates or (b) the 4-column
+    timeline for the LSTM, so the full frame was pure ballast.
+
+    Now tshark's stdout is fed straight into pandas' chunked reader;
+    each block updates streaming accumulators and is discarded. Peak
+    memory = one block + the aggregates + the 4-column timeline,
+    regardless of capture size. std_len is reconstructed from
+    sum-of-squares (ddof=1, matching the old pandas .agg default).
+    """
     cmd = [TSHARK, "-r", str(path), "-n", "-T", "fields",
            "-E", "header=n", "-E", "separator=|",
            "-E", "occurrence=f", "-E", "quote=n"]
     for f in FIELDS:
         cmd += ["-e", f]
-    raw = subprocess.check_output(cmd, encoding="utf-8", errors="replace",
-                                  stderr=subprocess.DEVNULL)
-    df = pd.read_csv(io.StringIO(raw), sep="|", header=None, names=COLS,
-                     dtype=str, na_filter=False, low_memory=False)
-    df["ts"]  = pd.to_numeric(df["ts"], errors="coerce")
-    df["len"] = pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
-    df = df.dropna(subset=["ts"])
-    # Fold IPv6 into the v4 columns so the per-IP layer sees the whole
-    # capture; on a modern network most of it is v6.
-    _m = (df["ip_src"] == "") & (df["ip6_src"] != "")
-    df.loc[_m, "ip_src"] = df.loc[_m, "ip6_src"]
-    _m = (df["ip_dst"] == "") & (df["ip6_dst"] != "")
-    df.loc[_m, "ip_dst"] = df.loc[_m, "ip6_dst"]
-    t0 = datetime.fromtimestamp(df["ts"].min())
-    t1 = datetime.fromtimestamp(df["ts"].max())
 
-    ips_src   = collections.Counter(df[df["ip_src"] != ""]["ip_src"].tolist())
-    macs      = collections.Counter(df[df["eth_src"] != ""]["eth_src"].tolist())
-    protocols = collections.Counter(df[df["proto"] != ""]["proto"].tolist())
-    bs = df[df["ip_src"] != ""].groupby("ip_src")["len"].sum()
-    bd = df[df["ip_dst"] != ""].groupby("ip_dst")["len"].sum()
-    bytes_src = collections.Counter(bs.to_dict())
-    bytes_dst = collections.Counter(bd.to_dict())
-
-    pair_mask = (df["ip_src"] != "") & (df["ip_dst"] != "")
-    pair_df   = df[pair_mask][["ip_src","ip_dst"]]
-    ip_pairs  = collections.Counter(zip(pair_df["ip_src"], pair_df["ip_dst"]))
-
-    # ----- TCP flag counters: SYN, RST, FIN-only, NULL, Xmas -----
+    ips_src   = collections.Counter()
+    macs      = collections.Counter()
+    protocols = collections.Counter()
+    bytes_src = collections.Counter()
+    bytes_dst = collections.Counter()
+    ip_pairs  = collections.Counter()
     syn_counter  = collections.Counter()
     rst_counter  = collections.Counter()
     fin_counter  = collections.Counter()
     null_counter = collections.Counter()
     xmas_counter = collections.Counter()
-    tcp_mask = (df["tcp_flags"] != "") & (df["ip_src"] != "")
-    if tcp_mask.any():
-        tdf = df[tcp_mask][["ip_src","tcp_flags"]].copy()
-        def _fi(s):
-            try: return int(s, 16)
-            except: return 0
-        tdf["fi"] = tdf["tcp_flags"].map(_fi)
-        # Mask against 0x3F so ECN bits (ECE/CWR) do not hide the SYN.
-        syn_counter  = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x02]["ip_src"].tolist())
-        rst_counter  = collections.Counter(tdf[(tdf["fi"] & 0x04) != 0]["ip_src"].tolist())
-        fin_counter  = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x01]["ip_src"].tolist())
-        null_counter = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x00]["ip_src"].tolist())
-        xmas_counter = collections.Counter(tdf[(tdf["fi"] & 0x3F) == 0x29]["ip_src"].tolist())
-
-    # ----- ARP per IP / MAC -----
     arp_ip_to_macs = collections.defaultdict(set)
     arp_mac_to_ips = collections.defaultdict(set)
-    arp_mask = (df["arp_psrc"] != "") & (df["arp_hwsrc"] != "")
-    if arp_mask.any():
-        for ip, mac in zip(df[arp_mask]["arp_psrc"], df[arp_mask]["arp_hwsrc"]):
-            if ip and ip != "0.0.0.0":
-                arp_ip_to_macs[ip].add(mac)
-                arp_mac_to_ips[mac].add(ip)
-    arp_spoofing_ips  = {ip:m for ip,m in arp_ip_to_macs.items() if len(m) > 1}
-    arp_spoofing_macs = {mac:i for mac,i in arp_mac_to_ips.items() if len(i) > 1}
-
-    # ----- DNS amp (response side, UDP/53) -----
-    dns_amp_per_src = {}
-    _dns_is_resp = df["dns_response"].isin(("1", "True"))
-    amp_mask = _dns_is_resp & (df["udp_sport"] == "53") & (df["ip_src"] != "")
-    if amp_mask.any():
-        sub = df[amp_mask][["ip_src","len"]]
-        g = sub.groupby("ip_src")["len"].agg(["count","sum","mean"])
-        for ip, row in g.iterrows():
-            dns_amp_per_src[ip] = {
-                "count":       int(row["count"]),
-                "total_bytes": int(row["sum"]),
-                "mean_size":   float(row["mean"]),
-            }
-
-    # ----- DNS query stats -----
+    amp_cnt = collections.Counter()
+    amp_sum = collections.Counter()
     dns_q = collections.Counter()
-    dns_mask = (df["dns_qname"] != "") & (df["dns_qname"].str.len() > 3)
-    if dns_mask.any():
-        for q in df[dns_mask]["dns_qname"]:
-            q = q.rstrip(".")
-            if len(q) > 3: dns_q[q] += 1
-    dns_nxdomain = int(((df["dns_rcode"] == "3") & (df["dns_response"] == "True")).sum()
-                     + ((df["dns_rcode"] == "3") & (df["dns_response"] == "1")).sum())
+    dns_nxdomain = 0
+    dst_ports_per_ip = collections.defaultdict(collections.Counter)
+    dns_per_ip       = collections.defaultdict(collections.Counter)
+    http_host_per_ip = collections.defaultdict(collections.Counter)
+    tls_sni_per_ip   = collections.defaultdict(collections.Counter)
+    ip_to_mac        = collections.defaultdict(collections.Counter)
+    agg_cnt   = collections.Counter()
+    agg_bytes = collections.Counter()
+    agg_sumsq = collections.defaultdict(float)
+    agg_dsts  = collections.defaultdict(set)
+    timeline_parts = []
+    n_pkts = 0
+    ts_min = ts_max = None
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL,
+                            encoding="utf-8", errors="replace", text=True)
+    try:
+        reader = pd.read_csv(proc.stdout, sep="|", header=None, names=COLS,
+                             dtype=str, na_filter=False,
+                             chunksize=CHUNK_ROWS)
+        for df in reader:
+            df["ts"]  = pd.to_numeric(df["ts"], errors="coerce")
+            df["len"] = pd.to_numeric(df["len"],
+                                      errors="coerce").fillna(0).astype(int)
+            df = df.dropna(subset=["ts"])
+            if not len(df):
+                continue
+            # Fold IPv6 into the v4 columns so the per-IP layer sees the
+            # whole capture; on a modern network most of it is v6.
+            _m = (df["ip_src"] == "") & (df["ip6_src"] != "")
+            df.loc[_m, "ip_src"] = df.loc[_m, "ip6_src"]
+            _m = (df["ip_dst"] == "") & (df["ip6_dst"] != "")
+            df.loc[_m, "ip_dst"] = df.loc[_m, "ip6_dst"]
+
+            n_pkts += len(df)
+            cmin = float(df["ts"].min()); cmax = float(df["ts"].max())
+            ts_min = cmin if ts_min is None else min(ts_min, cmin)
+            ts_max = cmax if ts_max is None else max(ts_max, cmax)
+
+            ips_src.update(df[df["ip_src"] != ""]["ip_src"].tolist())
+            macs.update(df[df["eth_src"] != ""]["eth_src"].tolist())
+            protocols.update(df[df["proto"] != ""]["proto"].tolist())
+            for ip, b in df[df["ip_src"] != ""].groupby("ip_src")["len"].sum().items():
+                bytes_src[ip] += int(b)
+            for ip, b in df[df["ip_dst"] != ""].groupby("ip_dst")["len"].sum().items():
+                bytes_dst[ip] += int(b)
+
+            pair_mask = (df["ip_src"] != "") & (df["ip_dst"] != "")
+            pair_df = df[pair_mask]
+            if len(pair_df):
+                ip_pairs.update(zip(pair_df["ip_src"], pair_df["ip_dst"]))
+
+            # ----- TCP flag counters: SYN, RST, FIN-only, NULL, Xmas -----
+            tcp_mask = (df["tcp_flags"] != "") & (df["ip_src"] != "")
+            if tcp_mask.any():
+                tdf = df[tcp_mask][["ip_src", "tcp_flags"]].copy()
+                tdf["fi"] = tdf["tcp_flags"].map(_flag_int)
+                # Mask against 0x3F so ECN bits (ECE/CWR) do not hide the SYN.
+                syn_counter.update(tdf[(tdf["fi"] & 0x3F) == 0x02]["ip_src"].tolist())
+                rst_counter.update(tdf[(tdf["fi"] & 0x04) != 0]["ip_src"].tolist())
+                fin_counter.update(tdf[(tdf["fi"] & 0x3F) == 0x01]["ip_src"].tolist())
+                null_counter.update(tdf[(tdf["fi"] & 0x3F) == 0x00]["ip_src"].tolist())
+                xmas_counter.update(tdf[(tdf["fi"] & 0x3F) == 0x29]["ip_src"].tolist())
+
+            # ----- ARP per IP / MAC -----
+            arp_mask = (df["arp_psrc"] != "") & (df["arp_hwsrc"] != "")
+            if arp_mask.any():
+                for ip, mac in zip(df[arp_mask]["arp_psrc"],
+                                   df[arp_mask]["arp_hwsrc"]):
+                    if ip and ip != "0.0.0.0":
+                        arp_ip_to_macs[ip].add(mac)
+                        arp_mac_to_ips[mac].add(ip)
+
+            # ----- DNS amp (response side, UDP/53) -----
+            _dns_is_resp = df["dns_response"].isin(("1", "True"))
+            amp_mask = _dns_is_resp & (df["udp_sport"] == "53") & (df["ip_src"] != "")
+            if amp_mask.any():
+                g = df[amp_mask].groupby("ip_src")["len"].agg(["count", "sum"])
+                for ip, row in g.iterrows():
+                    amp_cnt[ip] += int(row["count"])
+                    amp_sum[ip] += int(row["sum"])
+
+            # ----- DNS query stats -----
+            dns_mask = (df["dns_qname"] != "") & (df["dns_qname"].str.len() > 3)
+            if dns_mask.any():
+                for q in df[dns_mask]["dns_qname"]:
+                    q = q.rstrip(".")
+                    if len(q) > 3:
+                        dns_q[q] += 1
+            dns_nxdomain += int(
+                ((df["dns_rcode"] == "3") & (df["dns_response"] == "True")).sum()
+                + ((df["dns_rcode"] == "3") & (df["dns_response"] == "1")).sum())
+
+            # ----- per-IP aggregation (pair rows only, matches the old
+            # timeline-groupby semantics) -----
+            if len(pair_df):
+                g = pair_df.groupby("ip_src")["len"].agg(["count", "sum"])
+                for ip, row in g.iterrows():
+                    agg_cnt[ip]   += int(row["count"])
+                    agg_bytes[ip] += int(row["sum"])
+                sq = (pair_df["len"].astype(float) ** 2).groupby(
+                    pair_df["ip_src"]).sum()
+                for ip, s in sq.items():
+                    agg_sumsq[ip] += float(s)
+                for ip, d in zip(pair_df["ip_src"], pair_df["ip_dst"]):
+                    agg_dsts[ip].add(d)
+                timeline_parts.append(
+                    pair_df[["ts", "ip_src", "ip_dst", "len"]].rename(
+                        columns={"ts": "time", "ip_src": "src",
+                                 "ip_dst": "dst", "len": "size"}))
+
+            # ----- I2 blob enrichments (per-IP maps consumed by
+            # llm_judge.assemble_candidates). {ip -> Counter} so the
+            # assembler takes .most_common(N) without a packet rescan.
+            # dst_port keys are "<port>/<proto>" so 443/tcp vs 443/udp
+            # stay distinct.
+            tcp_port_mask = (df["tcp_dport"] != "") & (df["ip_src"] != "")
+            if tcp_port_mask.any():
+                for ip, port in zip(df[tcp_port_mask]["ip_src"],
+                                    df[tcp_port_mask]["tcp_dport"]):
+                    dst_ports_per_ip[ip][f"{port}/tcp"] += 1
+            udp_port_mask = (df["udp_dport"] != "") & (df["ip_src"] != "")
+            if udp_port_mask.any():
+                for ip, port in zip(df[udp_port_mask]["ip_src"],
+                                    df[udp_port_mask]["udp_dport"]):
+                    dst_ports_per_ip[ip][f"{port}/udp"] += 1
+
+            # ip_src on a query packet is the CLIENT asking; on a response
+            # it is the resolver. Only client-side queries reveal what the
+            # endpoint wanted to reach.
+            dns_qmask = ((df["dns_qname"] != "") & (df["ip_src"] != "")
+                         & (df["dns_response"] != "1")
+                         & (df["dns_response"] != "True"))
+            if dns_qmask.any():
+                for ip, q in zip(df[dns_qmask]["ip_src"],
+                                 df[dns_qmask]["dns_qname"]):
+                    q = q.rstrip(".")
+                    if q:
+                        dns_per_ip[ip][q] += 1
+
+            http_mask = (df["http_host"] != "") & (df["ip_src"] != "")
+            if http_mask.any():
+                for ip, host in zip(df[http_mask]["ip_src"],
+                                    df[http_mask]["http_host"]):
+                    if host:
+                        http_host_per_ip[ip][host] += 1
+
+            tls_mask = (df["tls_sni"] != "") & (df["ip_src"] != "")
+            if tls_mask.any():
+                for ip, sni in zip(df[tls_mask]["ip_src"],
+                                   df[tls_mask]["tls_sni"]):
+                    if sni:
+                        tls_sni_per_ip[ip][sni] += 1
+
+            # ip_to_mac: {ip -> Counter(mac -> pkt_count)}.
+            # build_local_inventory picks the dominant MAC; also lets
+            # assemble_candidates surface an OUI vendor guess.
+            mac_mask = (df["eth_src"] != "") & (df["ip_src"] != "")
+            if mac_mask.any():
+                for ip, mac in zip(df[mac_mask]["ip_src"],
+                                   df[mac_mask]["eth_src"]):
+                    ip_to_mac[ip][mac] += 1
+    finally:
+        if proc.stdout:
+            proc.stdout.close()
+        rc = proc.wait()
+    if rc != 0 and n_pkts == 0:
+        raise subprocess.CalledProcessError(rc, cmd)
+
+    if ts_min is None:
+        raise ValueError(f"{path}: no parseable packets")
+    t0 = datetime.fromtimestamp(ts_min)
+    t1 = datetime.fromtimestamp(ts_max)
+
+    arp_spoofing_ips  = {ip: m for ip, m in arp_ip_to_macs.items() if len(m) > 1}
+    arp_spoofing_macs = {mac: i for mac, i in arp_mac_to_ips.items() if len(i) > 1}
+    dns_amp_per_src = {ip: {"count": int(amp_cnt[ip]),
+                            "total_bytes": int(amp_sum[ip]),
+                            "mean_size": float(amp_sum[ip]) / amp_cnt[ip]}
+                       for ip in amp_cnt}
     dns_long_queries = [k for k in dns_q if len(k) > 60]
 
-    # ----- per-IP aggregation -----
-    timeline_df = df[pair_mask][["ts","ip_src","ip_dst","len"]].rename(
-        columns={"ts":"time","ip_src":"src","ip_dst":"dst","len":"size"}).reset_index(drop=True)
-    ip_agg = timeline_df.groupby("src").agg(
-        count=("size","count"), total_bytes=("size","sum"),
-        mean_len=("size","mean"), std_len=("size","std"),
-        unique_dsts=("dst","nunique"),
-    ).fillna(0)
+    timeline_df = (pd.concat(timeline_parts, ignore_index=True)
+                   if timeline_parts
+                   else pd.DataFrame(columns=["time", "src", "dst", "size"]))
+
+    # ----- ip_agg from the streaming accumulators. std via sum of
+    # squares with ddof=1 (matches the old pandas .agg("std") + fillna). -----
+    _rows = []
+    for ip in agg_cnt:
+        n = agg_cnt[ip]
+        tot = agg_bytes[ip]
+        mean = tot / n
+        if n > 1:
+            var = (agg_sumsq[ip] - n * mean * mean) / (n - 1)
+            std = math.sqrt(max(var, 0.0))
+        else:
+            std = 0.0
+        _rows.append((ip, n, tot, mean, std, len(agg_dsts[ip])))
+    ip_agg = pd.DataFrame(
+        _rows, columns=["src", "count", "total_bytes", "mean_len",
+                        "std_len", "unique_dsts"]).set_index("src")
+    ip_agg.index.name = "src"
     ip_agg["burst_score"] = ip_agg["count"] / (ip_agg["std_len"] + 1)
     ip_agg["dominance"]   = ip_agg["count"] + ip_agg["total_bytes"] / 1000
     ip_agg["syn_count"]   = ip_agg.index.map(lambda x: syn_counter.get(x, 0))
@@ -161,61 +314,9 @@ def analyze_pcap(path, label):
     ip_agg["null_count"]  = ip_agg.index.map(lambda x: null_counter.get(x, 0))
     ip_agg["xmas_count"]  = ip_agg.index.map(lambda x: xmas_counter.get(x, 0))
 
-    # ----- I2 blob enrichments (per-IP maps consumed by
-    # llm_judge.assemble_candidates). Each is a defaultdict-ish shape:
-    # {ip -> Counter(item -> count)} so the assembler can take .most_common(N)
-    # cheaply without re-scanning the packet frame. All keys stay strings.
-    dst_ports_per_ip = collections.defaultdict(collections.Counter)
-    # dst_port keys are "<port>/<proto>" so 443/tcp vs 443/udp stay distinct.
-    tcp_port_mask = (df["tcp_dport"] != "") & (df["ip_src"] != "")
-    if tcp_port_mask.any():
-        for ip, port in zip(df[tcp_port_mask]["ip_src"], df[tcp_port_mask]["tcp_dport"]):
-            dst_ports_per_ip[ip][f"{port}/tcp"] += 1
-    udp_port_mask = (df["udp_dport"] != "") & (df["ip_src"] != "")
-    if udp_port_mask.any():
-        for ip, port in zip(df[udp_port_mask]["ip_src"], df[udp_port_mask]["udp_dport"]):
-            dst_ports_per_ip[ip][f"{port}/udp"] += 1
-
-    dns_per_ip = collections.defaultdict(collections.Counter)
-    # ip_src on a query packet is the CLIENT asking; on a response, it is
-    # the resolver. Only client-side queries reveal what the endpoint
-    # wanted to reach - attributing responses would credit the DNS
-    # server with everything its clients ever asked about.
-    dns_qmask = ((df["dns_qname"] != "") & (df["ip_src"] != "")
-                 & (df["dns_response"] != "1")
-                 & (df["dns_response"] != "True"))
-    if dns_qmask.any():
-        for ip, q in zip(df[dns_qmask]["ip_src"], df[dns_qmask]["dns_qname"]):
-            q = q.rstrip(".")
-            if q:
-                dns_per_ip[ip][q] += 1
-
-    http_host_per_ip = collections.defaultdict(collections.Counter)
-    http_mask = (df["http_host"] != "") & (df["ip_src"] != "")
-    if http_mask.any():
-        for ip, host in zip(df[http_mask]["ip_src"], df[http_mask]["http_host"]):
-            if host:
-                http_host_per_ip[ip][host] += 1
-
-    tls_sni_per_ip = collections.defaultdict(collections.Counter)
-    tls_mask = (df["tls_sni"] != "") & (df["ip_src"] != "")
-    if tls_mask.any():
-        for ip, sni in zip(df[tls_mask]["ip_src"], df[tls_mask]["tls_sni"]):
-            if sni:
-                tls_sni_per_ip[ip][sni] += 1
-
-    # ip_to_mac: {ip -> Counter(mac -> pkt_count)}. build_local_inventory
-    # picks the dominant MAC. Also lets assemble_candidates surface an OUI
-    # vendor guess without loading the full device classifier.
-    ip_to_mac = collections.defaultdict(collections.Counter)
-    mac_mask = (df["eth_src"] != "") & (df["ip_src"] != "")
-    if mac_mask.any():
-        for ip, mac in zip(df[mac_mask]["ip_src"], df[mac_mask]["eth_src"]):
-            ip_to_mac[ip][mac] += 1
-
     print(f"[{label}] {os.path.basename(path)} | "
           f"{t0:%H:%M:%S}->{t1:%H:%M:%S} | "
-          f"{len(df):,} packets | {len(ips_src)} src-IPs | "
+          f"{n_pkts:,} packets | {len(ips_src)} src-IPs | "
           f"{len(macs)} MACs | protos={dict(protocols.most_common(5))}")
 
     # Second, wider tshark pass for the six MITRE-mapped engines - the
@@ -233,7 +334,10 @@ def analyze_pcap(path, label):
               f"{threats.get('reason')}")
 
     return {
-        "label": label, "df": df, "df_pkts": timeline_df, "n_pkts": len(df),
+        # "df" (the full 22-column frame) is gone - nothing downstream
+        # ever consumed it (verified: only df_pkts is read, by the LSTM),
+        # and dropping it is most of Q2's memory win.
+        "label": label, "df_pkts": timeline_df, "n_pkts": n_pkts,
         "t0": t0, "t1": t1, "ip_agg": ip_agg, "threats": threats,
         "ips_src": ips_src, "bytes_src": bytes_src, "bytes_dst": bytes_dst,
         "protocols": protocols, "macs": macs,
