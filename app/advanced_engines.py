@@ -101,6 +101,7 @@ _ADV_TSHARK_FIELDS = [
     "dns.qry.name", "dns.qry.type", "dns.flags.rcode", "dns.flags.response",
     "arp.opcode", "arp.src.proto_ipv4", "arp.src.hw_mac", "arp.dst.proto_ipv4",
     "tls.handshake.extensions_server_name", "tls.handshake.ja3", "tls.handshake.ja4",
+    "tls.record.version", "tls.handshake.ciphersuite",
     "dhcp.option.dhcp_server_id",
 ]
 _ADV_COLS = [
@@ -109,7 +110,9 @@ _ADV_COLS = [
     "tcp_sport", "tcp_dport", "tcp_flags", "udp_sport", "udp_dport",
     "dns_qname", "dns_qtype", "dns_rcode", "dns_response",
     "arp_opcode", "arp_psrc", "arp_hwsrc", "arp_pdst",
-    "tls_sni", "tls_ja3", "tls_ja4", "dhcp_sid",
+    "tls_sni", "tls_ja3", "tls_ja4",
+    "tls_version", "tls_cipher",
+    "dhcp_sid",
 ]
 
 def _adv_load_pk(pcap_path, label, tshark_path=None):
@@ -537,12 +540,69 @@ def run_advanced_threats(pcap_path, label, tshark_path=None,
         }
         all_signals = _adv_pd.concat(list(per_engine.values()), ignore_index=True)
         signals_fused, device_risk = _adv_fuse(all_signals)
+        # Per-IP TLS versions + ciphers summary (I3 enrichment). Feeds
+        # the LLM candidate blob so the model can flag SSLv3 / TLS 1.0
+        # or a known-weak cipher on a candidate. Cheap - just a groupby
+        # on the already-loaded PK DataFrame.
+        tls_versions_by_ip = _adv_tls_summary_by_ip(PK)
         return {
             "available": True,
             "n_packets":  int(len(PK)),
             "per_engine": {k: v.to_dict("records") for k, v in per_engine.items()},
             "all_signals": signals_fused.to_dict("records") if len(signals_fused) else [],
             "device_risk": device_risk.to_dict("records"),
+            "tls_versions_by_ip": tls_versions_by_ip,
         }
     except Exception as e:
         return {"available": False, "reason": f"{type(e).__name__}: {e}"}
+
+
+# Human-readable TLS version mapping (RFC 5246, RFC 8446)
+_TLS_VER_LABEL = {
+    "0x0300": "SSLv3",   # deprecated, insecure
+    "0x0301": "TLS 1.0", # deprecated, weak
+    "0x0302": "TLS 1.1", # deprecated
+    "0x0303": "TLS 1.2", # ok
+    "0x0304": "TLS 1.3", # preferred
+}
+_TLS_WEAK_VERSIONS = {"SSLv3", "TLS 1.0", "TLS 1.1"}
+# Cipher suites known to be weak - abbreviated list. Full list can grow
+# with time; this catches the most common RC4/NULL/EXPORT footguns.
+_TLS_WEAK_CIPHERS_HEX = {
+    "0x0004", "0x0005",  # RC4 (deprecated)
+    "0x0001", "0x0002",  # NULL (no encryption)
+    "0x0003",            # RSA_EXPORT_WITH_RC4_40_MD5
+    "0x0006",            # RSA_EXPORT_WITH_RC2_CBC_40_MD5
+    "0x0008", "0x0009",  # RSA_EXPORT_WITH_DES40 / DES_CBC
+    "0x000A",            # 3DES (weak by modern standards)
+}
+
+
+def _adv_tls_summary_by_ip(PK):
+    """Return {ip: {versions: [{label, count}...], weak_cipher_count: N,
+    has_weak_version: bool}} per source IP. None-safe on missing columns."""
+    if not len(PK) or "tls_version" not in PK.columns:
+        return {}
+    tls = PK[(PK["tls_version"] != "") & (PK["ip_src"] != "")]
+    if not len(tls):
+        return {}
+    out = {}
+    for ip, grp in tls.groupby("ip_src"):
+        ver_counts = grp["tls_version"].value_counts().to_dict()
+        versions = []
+        has_weak = False
+        for hex_ver, cnt in sorted(ver_counts.items(),
+                                    key=lambda kv: -kv[1])[:5]:
+            label = _TLS_VER_LABEL.get(hex_ver.lower(), hex_ver)
+            if label in _TLS_WEAK_VERSIONS:
+                has_weak = True
+            versions.append({"version": label, "count": int(cnt)})
+        weak_cipher_count = 0
+        if "tls_cipher" in grp.columns:
+            for ch in grp["tls_cipher"]:
+                if str(ch).lower() in _TLS_WEAK_CIPHERS_HEX:
+                    weak_cipher_count += 1
+        out[ip] = {"versions": versions,
+                   "weak_cipher_count": weak_cipher_count,
+                   "has_weak_version": has_weak}
+    return out

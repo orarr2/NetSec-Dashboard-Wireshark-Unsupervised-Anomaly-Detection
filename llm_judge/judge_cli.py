@@ -634,13 +634,22 @@ def _build_panel():
 
 
 def analyze_and_judge(pcap_path, label="S1", verbose=True,
-                      return_session=False):
+                      return_session=False, baseline_conn=None,
+                      current_session_id=None):
     """Run the pipeline + judge; returns (out, assembled, client, context).
 
     return_session=True appends the raw session dict and the rule
     findings to the tuple - (out, assembled, client, context, S,
     findings) - so the VM worker can persist them without re-running
     the pipeline. The default stays the 4-tuple for existing callers.
+
+    baseline_conn: optional sqlite3 connection to the history DB. When
+    passed (the worker path), assemble_candidates gets a per-IP
+    baseline_history block ("has this IP been seen? how long ago?
+    prior verdict summary"). Not passed on the CLI / dashboard path,
+    where every candidate's history stays at the null defaults.
+    current_session_id: the session_id currently being analysed, so
+    history lookup excludes it (a candidate is not its own history).
     """
     _validate_committee_config()
     panel = None
@@ -667,6 +676,27 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     adv_signals = judge_core.threats_to_advanced_signals(S.get("threats"))
     device_ctx = judge_core.local_inv_to_device_context(
         S.get("_local_inv") or S.get("local_inv"))
+    # L5: attach baseline_history so the LLM sees "have we judged this
+    # IP before, and what did we call it". Only when a DB conn was
+    # passed (worker path). Never raises: a failed lookup lands as
+    # historyless for that IP.
+    if baseline_conn is not None:
+        try:
+            from server import baseline as _bl
+            ips = set(S.get("ips_src") or {})
+            S["baseline_history"] = {
+                ip: _bl.lookup_history(baseline_conn, ip,
+                                        exclude_session_id=current_session_id)
+                for ip in ips}
+            # Drop the None entries so downstream code doesn't have to
+            # distinguish "we looked and found nothing" from "we didn't
+            # look" - both map to the null-default block via _history_for.
+            S["baseline_history"] = {k: v for k, v in
+                                      S["baseline_history"].items() if v}
+        except Exception as e:
+            if verbose:
+                print(f"[cli] baseline_history lookup skipped: {e}",
+                      flush=True)
     assembled = judge_core.assemble_candidates(
         S, findings, advanced_signals=adv_signals, device_context=device_ctx)
     context = build_context(S, findings, assembled)

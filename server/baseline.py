@@ -94,6 +94,56 @@ def get_baseline(conn, device_key):
     return out
 
 
+def lookup_history(conn, ip, exclude_session_id=None, now=None):
+    """L5: build a compact history block for one IP: has the pipeline
+    judged this IP in any prior finished session, when was it first
+    seen, and what was the prior verdict distribution.
+
+    Returns None if the IP has never been seen (or only in the current
+    session), so `assemble_candidates` can fall back to the null
+    defaults - the SYSTEM_PROMPT teaches null=unknown, which is exactly
+    what "we have no prior data on this IP" means.
+
+    Never raises. If the query throws (older schema, malformed row),
+    returns None and the candidate lands as historyless.
+    """
+    try:
+        q = ("SELECT v.session_id, v.verdict, s.finished_at "
+             "FROM verdicts v JOIN sessions s ON s.id = v.session_id "
+             "WHERE v.candidate_id = ? AND s.status = 'done'")
+        params = [ip]
+        if exclude_session_id is not None:
+            q += " AND v.session_id != ?"
+            params.append(exclude_session_id)
+        q += " ORDER BY s.finished_at ASC"
+        rows = conn.execute(q, params).fetchall()
+        if not rows:
+            return None
+        first_at = rows[0]["finished_at"]
+        counts = {"benign": 0, "suspicious": 0, "malicious": 0}
+        for r in rows:
+            v = r["verdict"]
+            if v in counts:
+                counts[v] += 1
+        total = sum(counts.values())
+        summary_parts = [f"{n}/{total} {k}" for k, n in counts.items()
+                         if n > 0]
+        summary = " · ".join(summary_parts) if summary_parts else None
+        days = None
+        if first_at:
+            try:
+                first = datetime.fromisoformat(first_at.replace("Z", "+00:00"))
+                now = now or datetime.now(timezone.utc)
+                days = int((now - first).total_seconds() / 86400)
+            except Exception:
+                days = None
+        return {"seen_before": True,
+                "days_since_first_seen": days,
+                "prior_verdict_summary": summary}
+    except Exception:
+        return None
+
+
 def compare_session(conn, session_id, z_threshold=3.0):
     """Score a session's per-IP features against each device's baseline.
     Returns [{"ip", "feature", "value", "baseline_mean", "z"}] for every

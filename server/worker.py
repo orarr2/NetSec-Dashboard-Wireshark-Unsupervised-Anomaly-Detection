@@ -121,11 +121,17 @@ def build_map_report(conn, S, out_path, wigle_fn=None):
     return report_map.render(located, out_path)
 
 
-def _default_analyze(pcap_path, label):
-    """analyze_fn contract: (out, assembled, client, context, S, findings)."""
+def _default_analyze(pcap_path, label, baseline_conn=None,
+                     current_session_id=None):
+    """analyze_fn contract: (out, assembled, client, context, S, findings).
+    baseline_conn (L5) is an optional DB connection so the judge sees
+    each candidate's prior-session history. current_session_id excludes
+    the running session from the history lookup."""
     from llm_judge import judge_cli
     return judge_cli.analyze_and_judge(pcap_path, label=label or "S1",
-                                       return_session=True)
+                                       return_session=True,
+                                       baseline_conn=baseline_conn,
+                                       current_session_id=current_session_id)
 
 
 def _default_md(pcap_path, out, assembled, client, context):
@@ -189,8 +195,18 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
                 f"(need at least {_MIN_PCAP_HEADER_BYTES} for the libpcap "
                 f"file header). Nothing to analyze.")
 
-        out, assembled, client, context, S, findings = analyze_fn(
-            pcap_path, job.get("label"))
+        # L5: pass the DB conn + session_id so the LLM candidate blob
+        # gets a baseline_history block per IP. analyze_fn contract
+        # accepts baseline_conn/current_session_id; injected stubs
+        # in tests ignore them.
+        try:
+            out, assembled, client, context, S, findings = analyze_fn(
+                pcap_path, job.get("label"),
+                baseline_conn=conn, current_session_id=sid)
+        except TypeError:
+            # older analyze_fn signature (positional only) - fall back
+            out, assembled, client, context, S, findings = analyze_fn(
+                pcap_path, job.get("label"))
         if not isinstance(S, dict):
             S = {}
 

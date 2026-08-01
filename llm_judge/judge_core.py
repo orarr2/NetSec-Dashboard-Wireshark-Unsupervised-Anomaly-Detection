@@ -130,6 +130,17 @@ Enrichment blocks the blob may include (each field may be null = unknown):
 - traffic.bytes_in / .bytes_out / .upload_ratio: directional bytes and
   the upload share. upload_ratio near 1.0 with meaningful bytes_out and
   a public destination is a data-exfiltration shape.
+- tls.versions / .has_weak_version / .weak_cipher_count: the TLS
+  versions this IP negotiated (with counts) and whether any weak
+  cipher was used. A modern device using only TLS 1.0/SSLv3 is a
+  strong sign of compromised or misconfigured client - corroborates
+  advanced_signals.tls_anomaly if that fired.
+- baseline_history.seen_before / .days_since_first_seen /
+  .prior_verdict_summary: has the pipeline judged this IP in an
+  earlier session? A first-time IP with malicious signals is more
+  alarming than a familiar one; a familiar IP that was benign in 20
+  prior sessions and suddenly looks malicious is more alarming than
+  one that has always looked suspicious.
 
 Worked examples (abbreviated input -> correct output):
 
@@ -454,6 +465,54 @@ def _websites_for(S, ip):
     }
 
 
+_EMPTY_TLS = {"versions": None, "weak_cipher_count": None,
+              "has_weak_version": None}
+
+
+def _tls_for(S, ip):
+    """Return the TLS summary block for one candidate IP - which TLS
+    versions the IP negotiated + any weak-cipher count. Consumed from
+    S['threats']['tls_versions_by_ip'] (populated by run_advanced_threats).
+    Returns all-null defaults when the pipeline observed no TLS traffic
+    for this IP (SYSTEM_PROMPT teaches null = unknown)."""
+    threats = S.get("threats") or {}
+    if not isinstance(threats, dict) or not threats.get("available"):
+        return dict(_EMPTY_TLS)
+    by_ip = threats.get("tls_versions_by_ip") or {}
+    entry = by_ip.get(ip)
+    if not entry:
+        return dict(_EMPTY_TLS)
+    return {
+        "versions": entry.get("versions") or None,
+        "weak_cipher_count": (entry.get("weak_cipher_count")
+                              if entry.get("weak_cipher_count") is not None
+                              else None),
+        "has_weak_version": bool(entry.get("has_weak_version")),
+    }
+
+
+_EMPTY_HISTORY = {"seen_before": None, "days_since_first_seen": None,
+                  "prior_verdict_summary": None}
+
+
+def _history_for(S, ip):
+    """Return the baseline_history block for one candidate IP: has this
+    IP been seen in any prior session? If so, how long ago and what was
+    the panel's summary verdict last time? Consumed from
+    S['baseline_history'][ip] which the worker populates from the DB
+    at analyze time (see server/worker.py::_attach_baseline_history).
+    Returns null defaults when no history is attached."""
+    hist_map = S.get("baseline_history") or {}
+    entry = hist_map.get(ip)
+    if not entry:
+        return dict(_EMPTY_HISTORY)
+    return {
+        "seen_before": bool(entry.get("seen_before")),
+        "days_since_first_seen": entry.get("days_since_first_seen"),
+        "prior_verdict_summary": entry.get("prior_verdict_summary"),
+    }
+
+
 def _traffic_for(S, ip):
     """Build the 'traffic' block: top dst ports + directional byte
     totals for one candidate IP. bytes_src/bytes_dst come from the
@@ -691,6 +750,14 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
             # the pipeline collected nothing for this IP.
             "websites": _websites_for(S, ip),
             "traffic": _traffic_for(S, ip),
+            # L4: TLS versions + weak cipher summary. Populated from the
+            # advanced-engines TLS pass. All null when the IP had no
+            # TLS traffic.
+            "tls": _tls_for(S, ip),
+            # L5: baseline history - has the pipeline judged this IP in a
+            # prior session? Empty when the worker did not attach
+            # S['baseline_history'] (dashboard path or first-time IP).
+            "baseline_history": _history_for(S, ip),
             "enrichments": {"is_private": _is_private(ip),
                             "reverse_dns": None, "asn": None,
                             "baseline_seen_before": None},
@@ -727,6 +794,8 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
             # owner, so both blocks are the null defaults.
             "websites": dict(_EMPTY_WEB),
             "traffic": dict(_EMPTY_TRAFFIC),
+            "tls": dict(_EMPTY_TLS),
+            "baseline_history": dict(_EMPTY_HISTORY),
             "enrichments": {"is_private": None, "reverse_dns": None,
                             "asn": None, "baseline_seen_before": None},
             "trigger_reasons": ["flood_rule"],

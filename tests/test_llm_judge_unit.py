@@ -241,6 +241,58 @@ def test_assemble_device_context_lightweight_oui_and_hostname():
         assert "apple" in dev["oui_vendor"].lower()
 
 
+def test_assemble_tls_block_populated_from_threats():
+    """L4: candidate TLS block reflects S['threats']['tls_versions_by_ip']."""
+    S = make_session()
+    ip = "192.168.1.10"
+    S["threats"] = {
+        "available": True,
+        "tls_versions_by_ip": {
+            ip: {"versions": [{"version": "TLS 1.0", "count": 5},
+                              {"version": "TLS 1.2", "count": 10}],
+                 "weak_cipher_count": 2,
+                 "has_weak_version": True}
+        }}
+    out = judge_core.assemble_candidates(S, make_findings())
+    tls = out["candidates"][0]["tls"]
+    assert tls["has_weak_version"] is True
+    assert tls["weak_cipher_count"] == 2
+    assert tls["versions"][0]["version"] == "TLS 1.0"
+
+
+def test_assemble_tls_block_null_when_no_threats():
+    """No threats.tls_versions_by_ip -> tls block is all null."""
+    S = make_session()
+    out = judge_core.assemble_candidates(S, make_findings())
+    tls = out["candidates"][0]["tls"]
+    assert tls == {"versions": None, "weak_cipher_count": None,
+                   "has_weak_version": None}
+
+
+def test_assemble_history_populated_from_S():
+    """L5: candidate baseline_history block reflects S['baseline_history']."""
+    S = make_session()
+    ip = "192.168.1.10"
+    S["baseline_history"] = {ip: {"seen_before": True,
+                                   "days_since_first_seen": 14,
+                                   "prior_verdict_summary":
+                                       "12/15 benign · 3/15 suspicious"}}
+    out = judge_core.assemble_candidates(S, make_findings())
+    h = out["candidates"][0]["baseline_history"]
+    assert h["seen_before"] is True
+    assert h["days_since_first_seen"] == 14
+    assert "12/15 benign" in h["prior_verdict_summary"]
+
+
+def test_assemble_history_null_when_first_time_ip():
+    """No baseline_history entry for an IP -> null defaults."""
+    S = make_session()
+    out = judge_core.assemble_candidates(S, make_findings())
+    h = out["candidates"][0]["baseline_history"]
+    assert h == {"seen_before": None, "days_since_first_seen": None,
+                 "prior_verdict_summary": None}
+
+
 def test_assemble_session_candidate_gets_empty_enrichment_blocks():
     """The flood session-scope candidate has no per-IP owner so websites
     and traffic land as the null defaults, not as some other IP's data."""
@@ -254,6 +306,11 @@ def test_assemble_session_candidate_gets_empty_enrichment_blocks():
                                  "top_dns_queries": None}
     assert sess["traffic"] == {"top_dst_ports": None, "bytes_in": None,
                                 "bytes_out": None, "upload_ratio": None}
+    assert sess["tls"] == {"versions": None, "weak_cipher_count": None,
+                           "has_weak_version": None}
+    assert sess["baseline_history"] == {"seen_before": None,
+                                          "days_since_first_seen": None,
+                                          "prior_verdict_summary": None}
 
 
 def test_assemble_cap_keeps_rule_triggered_first():
