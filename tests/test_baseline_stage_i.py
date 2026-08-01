@@ -67,6 +67,24 @@ def test_baseline_computed_from_prod_only(conn):
     assert base["features"]["features"]["count"]["mean"] == 100.0
 
 
+def test_baseline_window_covers_the_observed_period(conn):
+    """The stored window must describe the observations behind the
+    baseline. Stamping both ends with `now` would record every 30-day
+    baseline as a zero-length window."""
+    from datetime import timedelta
+    for _ in range(3):
+        sid = _session(conn)
+        _feat(conn, sid, "10.0.0.5", count=100)
+    assert baseline.compute_baselines(conn, now=NOW, days=30) == 1
+
+    base = baseline.get_baseline(conn, "10.0.0.5")
+    start = datetime.fromisoformat(base["window_start"])
+    end = datetime.fromisoformat(base["window_end"])
+    assert end == NOW
+    assert start == NOW - timedelta(days=30)
+    assert (end - start).days == 30
+
+
 def test_self_telemetry_excluded_from_baseline(conn):
     for _ in range(3):
         sid = _session(conn)

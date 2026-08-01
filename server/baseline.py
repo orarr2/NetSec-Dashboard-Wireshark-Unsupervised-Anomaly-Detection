@@ -61,7 +61,11 @@ def compute_baselines(conn, days=None, now=None, min_sessions=2):
     for r in rows:
         by_device.setdefault(r["ip"], []).append(r)
 
-    window_start = now.isoformat(timespec="seconds")
+    # The stored window must describe the observations the baseline was
+    # actually computed from - `start` (now - days), not `now`. Stamping
+    # both ends with `now` records every 30-day baseline as a zero-length
+    # window, which misreports the provenance to anything that reads it.
+    window_start = start
     written = 0
     for device, observations in by_device.items():
         if len(observations) < min_sessions:
