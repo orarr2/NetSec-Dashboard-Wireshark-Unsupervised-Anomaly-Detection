@@ -84,10 +84,23 @@ def _tshark_text(rows):
 
 
 def _parse_with_cli_pipeline(raw, monkeypatch):
-    """Drive run_pipeline.analyze_pcap with canned tshark output."""
+    """Drive run_pipeline.analyze_pcap with canned tshark output.
+
+    Q2 moved the parser from one check_output() blob to a streaming
+    Popen + chunked read - the fake now impersonates the process object
+    (stdout pipe + wait) instead of the old one-shot helper."""
+    import io as _io
     import run_pipeline as rp
-    monkeypatch.setattr(rp.subprocess, "check_output",
-                        lambda *a, **kw: raw)
+
+    class _FakeProc:
+        def __init__(self):
+            self.stdout = _io.StringIO(raw)
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(rp.subprocess, "Popen",
+                        lambda *a, **kw: _FakeProc())
     return rp.analyze_pcap("fake.pcap", "S1")
 
 

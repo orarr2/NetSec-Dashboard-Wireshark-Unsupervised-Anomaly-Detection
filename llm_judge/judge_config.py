@@ -107,6 +107,19 @@ LLM_JUDGE_PANEL_QUORUM = os.environ.get("LLM_JUDGE_PANEL_QUORUM",
 LLM_JUDGE_GUARDRAIL_ESCAPE = os.environ.get("LLM_JUDGE_GUARDRAIL_ESCAPE",
                                              "1").lower() not in ("0", "false")
 
+# Q3 (scale): pack this many candidates into ONE LLM call during the
+# panel's initial-verdict round. 1 = off (per-candidate calls, the
+# original behavior). At 5, a 50-candidate capture costs each judge 10
+# calls instead of 50 - the fixed system prompt is paid once per batch,
+# roughly halving tokens and cutting wall-clock ~5x. The batch is a
+# pure accelerator: candidates already in cache are skipped, and any
+# batch failure (parse error, missing/invalid element, provider
+# rejecting the array schema) silently falls back to the per-candidate
+# path for exactly the affected candidates - never worse than off.
+# Debate rounds stay per-candidate regardless (they only fire on
+# disagreement, a minority).
+LLM_JUDGE_BATCH_SIZE = int(os.environ.get("LLM_JUDGE_BATCH_SIZE", "1"))
+
 # Named endpoint profiles (spec section 6.1, decision IDX-05). Each profile
 # is an OpenAI-compatible host that can appear in a panel by name, so one
 # panel can mix several providers (Groq + Gemini + local Ollama) - which a

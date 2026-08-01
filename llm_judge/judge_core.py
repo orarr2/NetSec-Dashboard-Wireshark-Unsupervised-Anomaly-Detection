@@ -64,6 +64,39 @@ VERDICT_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Q3 (scale): response schema for a batched call - one verdict object
+# per candidate, each echoing its candidate_id so responses map back
+# even when the model reorders or drops entries.
+BATCH_VERDICT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdicts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "candidate_id": {"type": "string"},
+                    **VERDICT_SCHEMA["properties"],
+                },
+                "required": ["candidate_id"] + VERDICT_SCHEMA["required"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["verdicts"],
+    "additionalProperties": False,
+}
+
+BATCH_PROMPT_SUFFIX = """
+
+## Batch mode
+This request carries SEVERAL candidates as {"candidates": [...]}. Judge
+each candidate INDEPENDENTLY, exactly as if it were the only one in the
+request - never let one candidate's signals bleed into another's
+verdict. Return {"verdicts": [...]} with EXACTLY one entry per
+candidate, each echoing that candidate's candidate_id verbatim, in the
+same order as the input."""
+
 SYSTEM_PROMPT = """You are a network-security triage analyst. You receive a JSON blob
 describing one candidate (an IP, a flow, or the whole session) that at
 least one unsupervised detector or deterministic rule has flagged. Your job:
@@ -1143,6 +1176,77 @@ def _verdict_from_client(cand, client, cache, prompt_version):
     return verdict, latency_ms, False, None
 
 
+def _batched_verdicts_from_client(cands, client, cache, prompt_version):
+    """Q3: several candidates through ONE LLM call. Returns
+    {candidate_id: (verdict, latency_ms_share, False, None)} for the
+    fresh, successfully-validated subset ONLY.
+
+    The batch is a pure accelerator with graceful degradation baked
+    into the contract: cached candidates are skipped here (the panel
+    loop serves them from cache), and every possible miss - the whole
+    call failing, the response not parsing, an element failing
+    validation, the model dropping or hallucinating a candidate_id -
+    just leaves that candidate OUT of the returned dict, so the panel
+    loop falls back to the ordinary per-candidate call for exactly the
+    affected candidates. Worst case equals batching off, never worse.
+
+    Verdicts are cached under the same per-candidate fingerprint the
+    single path uses, so a later re-run hits cache identically either
+    way. Latency is attributed as an equal share of the one call."""
+    fresh = []
+    for cand in cands:
+        fp = fingerprint(cand, prompt_version, client.model_id)
+        if cache.get(fp) is None:
+            fresh.append(cand)
+    if len(fresh) < 2:
+        return {}  # nothing to gain from a batched call
+    items, latency_ms, last_err = None, 0, None
+    for _attempt in (1, 2):  # same retry contract as the single path
+        try:
+            t0 = time.perf_counter()
+            raw = client.judge(SYSTEM_PROMPT + BATCH_PROMPT_SUFFIX,
+                               json.dumps({"candidates": fresh}, indent=2),
+                               schema=BATCH_VERDICT_SCHEMA)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            parsed = json.loads(raw)
+            items = parsed["verdicts"]
+            if not isinstance(items, list):
+                raise JudgeValidationError("verdicts is not a list")
+            break
+        except Exception as e:
+            last_err, items = e, None
+            if getattr(e, "permanent", False):
+                break
+    if items is None:
+        print(f"[panel] batch call failed on {client.model_id} "
+              f"({last_err}) - those candidates fall back to "
+              f"per-candidate calls", flush=True)
+        return {}
+    share = max(latency_ms // len(fresh), 1)
+    by_id = {c.get("candidate_id"): c for c in fresh}
+    out = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        cid = item.pop("candidate_id", None)
+        cand = by_id.get(cid)
+        if cand is None or cid in out:
+            continue  # hallucinated or duplicated id -> single-call fallback
+        try:
+            verdict = validate_verdict(item)
+        except Exception:
+            continue  # this one falls back to a per-candidate call
+        verdict.update(evaluate_evidence(verdict, cand))
+        try:
+            cache.put(fingerprint(cand, prompt_version, client.model_id),
+                      prompt_version, verdict, client.model_id, share)
+        except Exception as e:
+            print(f"[judge] WARNING: cache write failed ({e}) - "
+                  f"continuing with the uncached verdict", flush=True)
+        out[cid] = (verdict, share, False, None)
+    return out
+
+
 def judge_candidates(candidates, client=None, cache_db=None,
                      prompt_version=None, verbose=True):
     """Judge a candidate batch. Returns
@@ -1613,17 +1717,25 @@ def resolve_panel(positions, quorum=None):
 
 
 def judge_candidates_panel(candidates, clients, cache_db=None,
-                           prompt_version=None, verbose=True, debate=None):
+                           prompt_version=None, verbose=True, debate=None,
+                           batch_size=None):
     """Panel variant of judge_candidates: every candidate is judged by all
     `clients` independently; disputes go through one debate round (when
     `debate`); a deterministic resolver picks the effective verdict.
 
     Same return shape as judge_candidates, plus per-result `panel` blocks
     and a per-model `panel_report` in stats (the participation audit: what
-    each judge received, answered, revised and got wrong-or-right)."""
+    each judge received, answered, revised and got wrong-or-right).
+
+    batch_size (Q3): when > 1, the initial-verdict round prefetches
+    verdicts in batched calls of that many candidates per call (default
+    from LLM_JUDGE_BATCH_SIZE). Any batch miss falls back to the
+    per-candidate path - see _batched_verdicts_from_client."""
     prompt_version = prompt_version or judge_config.PROMPT_VERSION
     if debate is None:
         debate = judge_config.LLM_JUDGE_DEBATE
+    if batch_size is None:
+        batch_size = judge_config.LLM_JUDGE_BATCH_SIZE
     if not judge_config.LLM_JUDGE_ENABLED:
         if verbose:
             print("[panel] LLM_JUDGE_ENABLED=0 - skipping all candidates")
@@ -1657,12 +1769,41 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
         max_workers=max(len(clients), 1),
         thread_name_prefix="panel-judge")
     try:
+        # Q3: batched prefetch of initial verdicts. One worker per judge,
+        # each walking its slices sequentially - wall-clock is the
+        # slowest judge's ceil(N/batch) calls instead of N. The main
+        # loop below consumes prefetched entries lookup-first; anything
+        # missing (cache hit, batch failure, dropped element) flows
+        # through _verdict_from_client exactly as before.
+        prefetched = {}
+        if batch_size > 1 and len(candidates) > 1:
+            def _prefetch_for(cl):
+                got = {}
+                for j in range(0, len(candidates), batch_size):
+                    for cid, tup in _batched_verdicts_from_client(
+                            candidates[j:j + batch_size], cl, cache,
+                            prompt_version).items():
+                        got[(cl.model_id, cid)] = tup
+                return got
+            for got in _pool.map(_prefetch_for, clients):
+                prefetched.update(got)
+            if verbose and prefetched:
+                print(f"[panel] batch prefetch: {len(prefetched)} "
+                      f"verdicts ({batch_size}/call) across "
+                      f"{len(clients)} judges", flush=True)
+
         for i, cand in enumerate(candidates, 1):
             positions = []
-            client_results = list(_pool.map(
-                lambda cl: _verdict_from_client(cand, cl, cache,
-                                                prompt_version),
-                clients))
+
+            def _get_verdict(cl, _cand=cand):
+                hit = prefetched.get((cl.model_id,
+                                      _cand.get("candidate_id")))
+                if hit is not None:
+                    return hit
+                return _verdict_from_client(_cand, cl, cache,
+                                            prompt_version)
+
+            client_results = list(_pool.map(_get_verdict, clients))
             for cl, (verdict, latency, was_cached, err) in zip(
                     clients, client_results):
                 r = report[cl.model_id]
