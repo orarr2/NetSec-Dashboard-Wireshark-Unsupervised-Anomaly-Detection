@@ -610,12 +610,13 @@ def test_render_markdown_panel_sections(tmp_path):
     out["analyst_commentary"] = None
     md = judge_cli._render_markdown(
         "x.pcap", out, {"candidates": cands, "capped": []}, clients[0])
-    assert "| **Panel** |" in md
+    # S1 restructure: panel identity lives in the exec summary line,
+    # disputes and health are appendix subsections.
+    assert "**Panel**: m-a + m-b" in md
     assert "### Panel disputes" in md
-    assert "## Panel participation" in md
+    assert "### Panel health" in md
     assert "`m-a`" in md and "`m-b`" in md
     assert "⚖" in md
-    assert "Debate positions" in md
 
 
 def test_render_markdown_panel_shows_failed_judge(tmp_path):
@@ -626,8 +627,12 @@ def test_render_markdown_panel_shows_failed_judge(tmp_path):
     md = judge_cli._render_markdown(
         "x.pcap", out, {"candidates": [scan_candidate()], "capped": []},
         clients[0])
-    assert "_failed_" in md
-    assert "failure examples" in md
+    # S1: raw failure examples are gone from the report - the failed
+    # judge shows as 0/N answered in Panel health with a classified
+    # cause, and the health line never leaks the raw exception text.
+    assert "### Panel health" in md
+    assert "0/1" in md
+    assert "api down" in md or "RuntimeError" not in md
 
 
 # --- commentary provider routing regression (panel path) ------------------

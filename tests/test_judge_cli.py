@@ -160,17 +160,22 @@ def test_render_markdown_has_expected_sections():
     md = judge_cli._render_markdown("attack_tests/pcaps/tcp_syn_scan.pcap",
                                     out, assembled, client,
                                     context=_fake_context())
-    assert md.startswith("# Judge verdicts")
+    # S1 restructure: exec summary first, ONE candidate table, appendix.
+    assert md.startswith("# Security report")
     assert "tcp_syn_scan.pcap" in md
-    assert "## Pipeline stats" in md
-    assert "## Top verdict" in md
-    assert "## Triaged queue" in md
-    # 'How to interpret' was cut: the same legend used to reprint on
-    # every email. It lives in docs/LLM_JUDGE_SPEC.md now.
+    assert "## Executive summary" in md
+    assert "## All candidates" in md
+    assert "### Pipeline stats" in md          # appendix, not page 1
     assert "## How to interpret" not in md
-    assert "| # | Candidate |" in md   # triaged table header
+    # the old duplicated sections are gone
+    assert "## Triaged queue" not in md
+    assert "Reasoning per candidate" not in md
+    assert "| # | Candidate |" in md           # the one table's header
     for r in out["results"]:
         assert r["candidate_id"] in md
+    # exec summary comes before the table, table before appendix
+    assert md.index("## Executive summary") < md.index("## All candidates")
+    assert md.index("## All candidates") < md.index("## Appendix")
     assert judge_config.PROMPT_VERSION in md
     assert client.model_id in md
 
@@ -206,7 +211,8 @@ def test_render_markdown_not_flagged_is_one_line_summary():
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=ctx)
     assert "## Not queued for judgment" not in md
-    assert "Pipeline also analyzed **4 additional IPs**" in md
+    # S1: the count line moved into the appendix's pipeline stats
+    assert "4 additional IPs analyzed with no flags" in md
     assert "verdicts.json" in md
     # individual IPs are no longer printed - they belong in the JSON
     for entry in ctx["not_flagged_ips"]:
@@ -224,7 +230,7 @@ def test_render_markdown_singular_ip_line():
     ctx = _fake_context(not_flagged_count=1)
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=ctx)
-    assert "Pipeline also analyzed **1 additional IP**" in md
+    assert "1 additional IP analyzed with no flags" in md
     assert "additional IPs" not in md  # no plural
 
 
@@ -334,12 +340,11 @@ def test_first_sentence_helpers():
                   max_chars=100)) <= 100
 
 
-def test_render_markdown_reasoning_lives_below_the_queue_as_a_list():
-    """Reasoning is out of the triaged-queue table (was overflowing the
-    9-column layout on PDF / phone email). It renders as a compact
-    numbered list right below the queue - one line per candidate - so a
-    `|` in the reasoning survives verbatim (no escaping needed) and the
-    queue table stays 8 columns."""
+def test_render_markdown_reasoning_pipe_cannot_break_the_table():
+    """S1: reasoning now lives IN the consolidated table's Why column.
+    A literal `|` inside the model's reasoning would split the cell and
+    shift every column after it - so pipes are swapped for a middot and
+    the row keeps exactly 8 columns."""
     out = {
         "stats": {"total": 1, "judged": 1, "cache_hits": 0, "dropped": 0,
                   "prompt_version": "v", "model": "fake"},
@@ -357,18 +362,13 @@ def test_render_markdown_reasoning_lives_below_the_queue_as_a_list():
     md = judge_cli._render_markdown("x.pcap", out, assembled,
                                     _fake_client(), context=_fake_context())
 
-    # Queue table row has exactly 8 columns (# candidate verdict category
-    # confidence priority flag action), no reasoning column.
     table_row = [ln for ln in md.splitlines()
                  if "`1.2.3.4`" in ln and ln.startswith("|")][0]
-    assert table_row.count("|") == 9  # 8 columns + trailing edge
-    assert "before" not in table_row  # reasoning NOT in the queue row
-
-    # Reasoning shows as `**Reasoning per candidate**` (bold, not a
-    # heading - it is not a top-level section) followed by a numbered
-    # list. `|` inside the reasoning is preserved verbatim.
-    assert "**Reasoning per candidate**" in md
-    assert "1. `1.2.3.4` - before | after pipe" in md
+    # 8 columns (# candidate verdict conf action votes flag why)
+    # -> exactly 9 pipe characters incl. the edges; the reasoning's own
+    # pipe was replaced so it cannot add a 10th
+    assert table_row.count("|") == 9, table_row
+    assert "before · after pipe" in table_row
 
 
 def test_render_markdown_empty_batch():
@@ -465,16 +465,97 @@ def test_main_writes_json_and_markdown(tmp_path):
     assert data["context"]["n_packets"] == 2020
 
     md = (tmp_path / "verdicts.md").read_text(encoding="utf-8")
-    assert "# Judge verdicts" in md
+    assert "# Security report" in md
     assert "sample.pcap" in md
-    assert "## Pipeline stats" in md
-    assert "## Triaged queue" in md  # replaced 'How to interpret'
+    assert "### Pipeline stats" in md
+    assert "## All candidates" in md  # the one consolidated table
 
 
 def test_main_returns_nonzero_when_pcap_missing(tmp_path):
     rc = judge_cli.main([str(tmp_path / "does-not-exist.pcap"),
                          "--output", str(tmp_path / "verdicts.json")])
     assert rc == 2
+
+
+# --------------------------------------------------------------------------
+# S1: executive summary (email body) + error hygiene
+# --------------------------------------------------------------------------
+def test_render_exec_summary_is_short_and_has_the_essentials():
+    """The email body: bottom line, key findings, panel, PDF pointer -
+    and nothing else. A manager reads this in 20 seconds."""
+    out, assembled, client = _judged_batch()
+    md = judge_cli.render_exec_summary("sample.pcap", out,
+                                       _fake_context())
+    assert md.startswith("# Security report")
+    assert "## Executive summary" in md
+    assert "attached as PDF" in md
+    # short: an exec summary must stay way under the old full report
+    assert len(md.splitlines()) < 40
+    # none of the full-report sections leak into the email body
+    assert "## All candidates" not in md
+    assert "## Appendix" not in md
+
+
+def test_exec_summary_counts_verdicts():
+    out, assembled, client = _judged_batch()
+    md = judge_cli.render_exec_summary("s.pcap", out, _fake_context())
+    from collections import Counter
+    c = Counter(r["verdict"]["verdict"] for r in out["results"])
+    if c.get("malicious") or c.get("suspicious"):
+        assert (f"**{c.get('malicious', 0)} malicious · "
+                f"{c.get('suspicious', 0)} suspicious") in md
+    else:
+        assert "judged benign" in md
+
+
+def test_failure_causes_classifies_and_never_leaks_raw():
+    """Raw provider errors (org ids, marketing URLs) must never reach
+    the report - only classified causes."""
+    raw = ('OpenAI-compatible call failed: HTTP Error 429: Too Many '
+           'Requests - {"error":{"message":"Rate limit reached for model '
+           'x in organization org_SECRET123 on tokens per minute (TPM): '
+           'Limit 8000. Need more tokens? Upgrade to Dev Tier today at '
+           'https://console.groq.com"}}')
+    causes = judge_cli._failure_causes([raw])
+    assert causes == ["rate throttle (TPM)"]
+    joined = " ".join(causes)
+    assert "org_SECRET123" not in joined
+    assert "Upgrade" not in joined
+
+
+def test_failure_causes_tpd_and_json():
+    assert judge_cli._failure_causes(
+        ["429 ... tokens per day (TPD): Limit 100000"]) == ["daily quota"]
+    assert judge_cli._failure_causes(
+        ["400 json_validate_failed for model"]) == [
+            "JSON format unsupported"]
+
+
+def test_render_markdown_no_raw_failure_examples():
+    """Panel health renders classified causes, never the raw examples."""
+    out, assembled, client = _judged_batch()
+    out["stats"]["panel"] = True
+    out["stats"]["models"] = ["m-a", "m-b"]
+    out["stats"]["panel_report"] = {
+        "m-a": {"assigned": 4, "valid_verdicts": 4, "failures": 0,
+                "failure_examples": [], "debates": 0, "revised": 0,
+                "agreed_with_final": 4, "cache_hits": 0,
+                "mean_latency_ms": 900},
+        "m-b": {"assigned": 4, "valid_verdicts": 1, "failures": 3,
+                "failure_examples": [
+                    "HTTP 429 org_SECRET tokens per minute (TPM) "
+                    "Upgrade to Dev Tier today"],
+                "debates": 0, "revised": 0, "agreed_with_final": 1,
+                "cache_hits": 0, "mean_latency_ms": 300},
+    }
+    md = judge_cli._render_markdown("x.pcap", out, assembled, client,
+                                    context=_fake_context())
+    assert "### Panel health" in md
+    assert "rate throttle (TPM)" in md
+    assert "org_SECRET" not in md
+    assert "Upgrade to Dev Tier" not in md
+    # the degraded judge is flagged in the exec summary too
+    assert "degraded" in md
 
 
 # --------------------------------------------------------------------------
@@ -560,7 +641,7 @@ def test_main_includes_commentary_in_json_and_markdown(tmp_path):
     assert "analyst_commentary" in data
     assert "DNS amplification" in data["analyst_commentary"]
     md = (tmp_path / "verdicts.md").read_text(encoding="utf-8")
-    assert "## Analyst commentary" in md
+    # S1: commentary folded into the executive summary as a blockquote
+    # (own section was noise) - still before the appendix's stats.
     assert "> Overall the capture is dominated by" in md
-    # The commentary must appear before the pipeline stats section
-    assert md.index("## Analyst commentary") < md.index("## Pipeline stats")
+    assert md.index("> Overall the capture") < md.index("### Pipeline stats")

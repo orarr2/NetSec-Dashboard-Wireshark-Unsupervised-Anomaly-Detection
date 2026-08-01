@@ -244,6 +244,7 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
         os.makedirs(rep_dir, exist_ok=True)
         paths = {"json": os.path.join(rep_dir, "verdicts.json"),
                  "md": os.path.join(rep_dir, "verdicts.md"),
+                 "summary": os.path.join(rep_dir, "summary.md"),
                  "html": os.path.join(rep_dir, "report.html"),
                  "pdf": os.path.join(rep_dir, "report.pdf")}
 
@@ -252,6 +253,18 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
         md = md_fn(pcap_path, out, assembled, client, context)
         with open(paths["md"], "w", encoding="utf-8") as f:
             f.write(md)
+        # Executive summary = the notification email's whole body. The
+        # full report travels only as the PDF attachment - nobody reads
+        # a 7-page wall of text inside an email client.
+        try:
+            from llm_judge import judge_cli
+            summary_md = judge_cli.render_exec_summary(pcap_path, out,
+                                                       context)
+            with open(paths["summary"], "w", encoding="utf-8") as f:
+                f.write(summary_md)
+        except Exception as e:
+            print(f"[worker] summary render skipped: {e}", flush=True)
+            paths.pop("summary", None)
         session = db.get_session(conn, sid)
         html = report_html.render(session, md,
                                   extra={"reconciliation": recon})

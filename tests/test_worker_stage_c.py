@@ -248,11 +248,15 @@ def test_report_pdf_degrades_without_weasyprint(tmp_path):
     assert not (tmp_path / "r.pdf").exists()
 
 
-def test_report_html_injects_header():
+def test_report_html_injects_provenance_footer():
+    """S1: provenance moved to the BOTTOM - the first thing a reader
+    sees must be the executive summary, not a sha256."""
     session = {"id": 5, "label": "S1", "kind": "prod", "sha256": "ff" * 32,
                "orig_name": "c.pcap", "size_bytes": 10,
                "queued_at": "2026-07-30", "prompt_version": "v0.3.0"}
     html = report_html.render(session, "# T\n\nbody text")
-    assert html.index("Session provenance") < html.index("body text")
+    assert html.index("body text") < html.index("Session provenance")
     assert "ff" * 32 in html
     assert html.count("<body") == 1
+    # footer still inside the document, not appended after </html>
+    assert html.index("Session provenance") < html.index("</body>")

@@ -301,63 +301,243 @@ def _first_n_sentences(text, n=2, max_chars=380):
 
 
 # --------------------------------------------------------------------------
-def _render_markdown(pcap_path, out, assembled, client, context=None):
-    """Turn a judged batch into a GitHub-Issue-ready markdown report."""
-    stats = out["stats"]
-    ctx = context or {}
-    commentary = out.get("analyst_commentary")
-    lines = [
-        f"# Judge verdicts - `{os.path.basename(pcap_path)}`",
-        "",
-        "| | |",
-        "|---|---|",
-        f"| **PCAP** | `{pcap_path}` |",
-        f"| **Generated** | {datetime.now(timezone.utc).isoformat(timespec='seconds')} |",
-        f"| **Provider** | `{judge_config.LLM_JUDGE_PROVIDER}` |",
-        f"| **Model** | `{client.model_id}` |",
-        f"| **Prompt version** | `{judge_config.PROMPT_VERSION}` |",
-        f"| **Rule guardrail** | {'on' if judge_config.RULE_GUARDRAIL else 'off'} |",
-        f"| **Candidates judged** | {stats['judged']} · dropped: {stats['dropped']} · capped: {len(assembled['capped'])} |",
-    ]
-    if stats.get("committee"):
-        lines.append(
-            f"| **Committee** | `{stats['model']}` + `{stats.get('model_b')}` "
-            f"· {stats.get('needs_review', 0)} need human review |")
-    if stats.get("panel"):
-        lines.append(
-            f"| **Panel** | {' + '.join(f'`{m}`' for m in stats['models'])} "
-            f"· debate {'on' if stats.get('debate_enabled') else 'off'} "
-            f"· {stats.get('debated_candidates', 0)} debated "
-            f"· {stats.get('needs_review', 0)} need human review |")
-        if stats.get("panel_init_failures"):
-            excluded = ", ".join(f"`{f['entry']}`"
-                                 for f in stats["panel_init_failures"])
-            lines.append(f"| **Excluded judges** | {excluded} "
-                         f"(failed to initialize; details in run log) |")
-    lines.append("")
+def _failure_causes(examples):
+    """Collapse raw provider error strings into short human causes.
 
-    # ----- 0. Analyst commentary (top of report - the human read) --------
-    # Capped at 2 sentences. The LLM's original 5-6-sentence version is
-    # persisted in verdicts.json under `analyst_commentary`; the emailed
-    # copy is deliberately the elevator-pitch cut.
-    if commentary:
+    The report must NEVER show raw error bodies (org ids, marketing
+    links, full JSON) - a manager-facing document classifies, it does
+    not dump. Full raw examples stay in verdicts.json for ops."""
+    text = " ".join(str(e) for e in examples)
+    causes = []
+    if "tokens per minute" in text or "(TPM)" in text:
+        causes.append("rate throttle (TPM)")
+    if "tokens per day" in text or "(TPD)" in text or "quota" in text.lower():
+        causes.append("daily quota")
+    if "json_validate_failed" in text or "json_schema" in text:
+        causes.append("JSON format unsupported")
+    if "timeout" in text.lower() or "timed out" in text.lower():
+        causes.append("timeout")
+    if not causes and examples:
+        first = str(examples[0]).split(" - ")[0]
+        causes.append(first[:60])
+    return causes
+
+
+def _votes_cell(r):
+    """One compact phrase for how the panel arrived at this verdict."""
+    p = r.get("panel")
+    if not p:
+        c = r.get("committee")
+        if c:
+            return "⚖ split" if c.get("needs_human_review") else "2/2"
+        return "-"
+    judges = p.get("judges") or []
+    valid = [j for j in judges if not j.get("failed")]
+    if not valid:
+        return "-"
+    if len(valid) == 1:
+        return "1 judge"
+    if p.get("needs_human_review"):
+        return f"{len(valid)} split ⚖"
+    if any(j.get("revised") for j in valid):
+        return f"{len(valid)} agreed in debate"
+    return f"{len(valid)}/{len(valid)} unanimous"
+
+
+def _panel_health_rows(stats):
+    """[(model, assigned, valid, mean_latency_str, cause_str, degraded)]"""
+    pr = stats.get("panel_report") or {}
+    rows = []
+    for m in stats.get("models") or []:
+        row = pr.get(m) or {}
+        assigned = int(row.get("assigned") or 0)
+        valid = int(row.get("valid_verdicts") or 0)
+        ml = row.get("mean_latency_ms")
+        ml_s = f"{ml} ms" if ml is not None else "-"
+        causes = _failure_causes(row.get("failure_examples") or [])
+        degraded = assigned > 0 and valid < assigned / 2
+        rows.append((m, assigned, valid, ml_s,
+                     ", ".join(causes) if causes else "-", degraded))
+    return rows
+
+
+def exec_summary_lines(pcap_name, out, ctx=None, for_email=False):
+    """The manager-facing read: bottom line, key findings, who judged.
+
+    Shared by the report's first page and the notification email body -
+    the email shows ONLY this (for_email=True adds the closing
+    'full report attached' line); the PDF continues into the
+    consolidated table and appendix."""
+    stats = out.get("stats") or {}
+    results = out.get("results") or []
+    ctx = ctx or {}
+    counts = {}
+    for r in results:
+        v = r["verdict"]["verdict"]
+        counts[v] = counts.get(v, 0) + 1
+    n_mal = counts.get("malicious", 0)
+    n_sus = counts.get("suspicious", 0)
+    n_ben = counts.get("benign", 0)
+
+    lines = ["## Executive summary", ""]
+
+    if not results:
+        lines += ["**No candidates required judgment** - the detectors "
+                  "did not flag anything in this capture.", ""]
+    else:
+        if n_mal or n_sus:
+            headline = (f"**{n_mal} malicious · {n_sus} suspicious · "
+                        f"{n_ben} benign** out of {len(results)} "
+                        f"analyzed candidates.")
+        else:
+            headline = (f"**All {len(results)} flagged candidates judged "
+                        f"benign** - statistical outliers with no attack "
+                        f"pattern.")
+        lines += [headline, ""]
+
+        findings = [r for r in results
+                    if r["verdict"]["verdict"] in ("malicious",
+                                                   "suspicious")]
+        if findings:
+            lines += ["**Key findings:**", ""]
+            for r in findings[:5]:
+                v = r["verdict"]
+                reason = _first_sentence(v["reasoning"], max_chars=180)
+                lines.append(
+                    f"- `{r['candidate_id']}` - **{v['verdict'].upper()}**"
+                    f" ({v['category']}, confidence {v['confidence']:.2f},"
+                    f" {_votes_cell(r)}) - {reason}"
+                    f" **Action: {v['recommended_action']}.**")
+            if len(findings) > 5:
+                lines.append(f"- … and {len(findings) - 5} more - see the "
+                             f"candidate table.")
+            lines.append("")
+
+    if ctx:
+        protos = ", ".join(f"{k}" for k in list(ctx.get(
+            "top_protocols") or {})[:3])
+        mins = round((ctx.get("duration_s") or 0) / 60)
         lines += [
-            "## Analyst commentary",
-            "",
-            f"> {_first_n_sentences(commentary, n=2)}",
+            f"**Capture**: {ctx.get('n_packets', 0):,} packets over "
+            f"~{mins} min · {ctx.get('total_ips', 0)} IPs · "
+            f"top protocols: {protos}.",
             "",
         ]
 
-    # ----- 0.5 Consensus summary (panel mode only) ----------------------
-    # A one-look answer to 'how did the panel arrive at these verdicts?'.
-    # Counts up unanimous-first-round, agreed-after-debate, still-split
-    # candidates; adds a per-candidate agreement table so a reader can
-    # tell at a glance which judges lined up on what without scrolling
-    # into Panel disputes or the debate transcripts below.
-    if stats.get("panel") and out["results"]:
-        lines += _render_consensus_summary(out["results"], stats)
+    if stats.get("panel"):
+        models = stats.get("models") or []
+        short = [m.split("/")[-1] for m in models]
+        n_res = len(results)
+        unanimous = sum(1 for r in results
+                        if _votes_cell(r).endswith("unanimous"))
+        agreed = sum(1 for r in results
+                     if _votes_cell(r).endswith("debate"))
+        single = sum(1 for r in results if _votes_cell(r) == "1 judge")
+        parts = [f"{unanimous}/{n_res} unanimous"]
+        if agreed:
+            parts.append(f"{agreed} agreed in debate")
+        if stats.get("needs_review"):
+            parts.append(f"{stats['needs_review']} need human review")
+        if single:
+            parts.append(f"{single} judged by one model")
+        lines.append(f"**Panel**: {' + '.join(short)} · "
+                     + " · ".join(parts) + ".")
+        degraded = [(m, a, vld, cause) for m, a, vld, _, cause, deg
+                    in _panel_health_rows(stats) if deg]
+        for m, a, vld, cause in degraded:
+            lines.append(f"- _{m.split('/')[-1]} degraded: {vld}/{a} "
+                         f"valid answers ({cause}) - remaining judges "
+                         f"covered._")
+        lines.append("")
+    elif stats.get("model"):
+        lines += [f"**Judge**: {stats['model']}.", ""]
 
-    # ----- 2. Pipeline stats ---------------------------------------------
+    commentary = out.get("analyst_commentary")
+    if commentary and not str(commentary).startswith("("):
+        lines += [f"> {_first_n_sentences(commentary, n=2)}", ""]
+
+    if for_email:
+        lines += ["---", "",
+                  "The full report - every candidate, votes, reasoning "
+                  "and pipeline detail - is attached as PDF.", ""]
+    return lines
+
+
+def render_exec_summary(pcap_path, out, context=None):
+    """Standalone executive summary (markdown) - the email body."""
+    name = os.path.basename(pcap_path)
+    lines = [f"# Security report - `{name}`", ""]
+    lines += exec_summary_lines(name, out, context, for_email=True)
+    return "\n".join(lines) + "\n"
+
+
+def _render_markdown(pcap_path, out, assembled, client, context=None):
+    """Judged batch -> the full report (markdown source for HTML/PDF).
+
+    Structure (rebuilt 2026-08-01 after user feedback that the old
+    report was an unreadable salad - same 15 candidates rendered four
+    times and three pages of raw 429 dumps):
+
+      1. Executive summary - bottom line, key findings, panel health.
+      2. ONE consolidated candidate table - rank, verdict, confidence,
+         action, votes, one-line reason. No other per-candidate list.
+      3. Appendix - pipeline stats, panel health table, disputes (only
+         when any), dropped/capped, run metadata.
+
+    Raw provider errors NEVER appear - _failure_causes classifies them
+    ('rate throttle (TPM)', 'daily quota', ...); full bodies stay in
+    verdicts.json for ops."""
+    stats = out["stats"]
+    ctx = context or {}
+    results = out.get("results") or []
+    lines = [f"# Security report - `{os.path.basename(pcap_path)}`", ""]
+
+    # ----- 1. Executive summary -----------------------------------------
+    lines += exec_summary_lines(os.path.basename(pcap_path), out, ctx)
+
+    # ----- 2. The one candidate table -----------------------------------
+    if results:
+        lines += [
+            "## All candidates (ranked by priority)",
+            "",
+            "| # | Candidate | Verdict | Conf | Action | Votes | ⚑ | Why |",
+            "|--:|---|---|--:|---|---|:-:|---|",
+        ]
+        for i, r in enumerate(results, 1):
+            v = r["verdict"]
+            flags = ("⚑" if r.get("guardrail") else "") \
+                + ("⚖" if ((r.get("committee") or r.get("panel") or {})
+                           .get("needs_human_review")) else "")
+            # a literal | inside the reasoning would split the table
+            # cell - swap for a middot (escaping with \| renders as the
+            # backslash in some email clients)
+            why = _first_sentence(v["reasoning"],
+                                  max_chars=110).replace("|", "·")
+            lines.append(
+                f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
+                f"{v['confidence']:.2f} | {v['recommended_action']} | "
+                f"{_votes_cell(r)} | {flags} | {why} |")
+        lines.append("")
+        if any(r.get("guardrail") for r in results):
+            lines += [
+                "> ⚑ = rule guardrail overrode a benign model verdict "
+                "on a candidate whose deterministic rule fired. Raw model "
+                "verdict is preserved in `verdicts.json`.",
+                "",
+            ]
+    else:
+        lines += [
+            "## No verdicts",
+            "",
+            "The pipeline produced no flagged candidates - nothing to judge. "
+            "This is either a clean capture or the detectors did not fire; "
+            "check `analyze.log` in the artifact for the pipeline output.",
+            "",
+        ]
+
+    # ----- 3. Appendix ---------------------------------------------------
+    lines += ["## Appendix", ""]
+
     if ctx:
         protos = ", ".join(f"{k} {v:,}"
                            for k, v in ctx["top_protocols"].items())
@@ -375,186 +555,115 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                 f"**{rules['arp_spoofing_ips']} ARP-multi-MAC IP(s)**")
         rule_line = " · ".join(rule_hits) if rule_hits \
             else "no deterministic rule fired"
-
-        # Compact 2-line summary. What used to take 6 bullets now reads
-        # as one traffic line + one detectors line - same information,
-        # a third of the vertical space.
         iso_word = "anomaly" if ml["isolation_forest_anomalies"] == 1 \
             else "anomalies"
         cluster_word = "cluster" if ml["dbscan_clusters"] == 1 \
             else "clusters"
         cluster_note = "" if ml["dbscan_meaningful"] \
             else " (clustering not meaningful)"
-        detectors = (f"ML: {ml['isolation_forest_anomalies']} IF "
-                     f"{iso_word} · {ml['dbscan_noise']} DBSCAN noise "
-                     f"({ml['dbscan_clusters']} {cluster_word}"
-                     f"{cluster_note}) · Rules: {rule_line}")
-        traffic = (f"{ctx['n_packets']:,} packets over "
-                   f"{ctx['duration_s']}s · {ctx['total_ips']} IPs · "
-                   f"{ctx['total_macs']} MACs · top: {protos}")
         lines += [
-            "## Pipeline stats",
+            "### Pipeline stats",
             "",
-            f"- **Traffic**: {traffic}",
-            f"- **Detectors**: {detectors}",
+            f"- **Traffic**: {ctx['n_packets']:,} packets over "
+            f"{ctx['duration_s']}s · {ctx['total_ips']} IPs · "
+            f"{ctx['total_macs']} MACs · top: {protos}",
+            f"- **Detectors**: ML: {ml['isolation_forest_anomalies']} IF "
+            f"{iso_word} · {ml['dbscan_noise']} DBSCAN noise "
+            f"({ml['dbscan_clusters']} {cluster_word}{cluster_note}) · "
+            f"Rules: {rule_line}",
         ]
         for s in rules.get("scan_alerts_summary") or []:
             lines.append(f"  - {s}")
-        lines.append("")
-
-    # ----- 3. Top verdict -----------------------------------------------
-    if out["results"]:
-        top = out["results"][0]
-        v = top["verdict"]
-        lines += [
-            "## Top verdict",
-            "",
-            f"**`{top['candidate_id']}`** - **{v['verdict'].upper()}** "
-            f"({v['category']}, confidence {v['confidence']:.2f})",
-            "",
-            f"> {v['reasoning']}",
-            "",
-        ]
-
-    # ----- 4. Triaged queue ---------------------------------------------
-    if out["results"]:
-        lines += [
-            "## Triaged queue (ranked by ensemble priority)",
-            "",
-            "| # | Candidate | Verdict | Category | Confidence | Priority | ⚑ | Action |",
-            "|--:|---|---|---|--:|--:|:-:|---|",
-        ]
-        for i, r in enumerate(out["results"], 1):
-            v = r["verdict"]
-            flags = ("⚑" if r.get("guardrail") else "") \
-                + ("⚖" if ((r.get("committee") or r.get("panel") or {})
-                           .get("needs_human_review")) else "")
+        not_flagged = ctx.get("not_flagged_ips") or []
+        if not_flagged:
             lines.append(
-                f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
-                f"{v['category']} | {v['confidence']:.2f} | {r['priority']:.3f} | "
-                f"{flags} | {v['recommended_action']} |"
-            )
+                f"- {len(not_flagged)} additional IP"
+                f"{'' if len(not_flagged) == 1 else 's'} analyzed with no "
+                f"flags (full list in `verdicts.json`)")
         lines.append("")
 
-        # Reasoning as a numbered list of one-sentence summaries. The
-        # full paragraph the LLM produced lives in verdicts.json under
-        # results[i].verdict.reasoning.
-        lines += ["**Reasoning per candidate**", ""]
-        for i, r in enumerate(out["results"], 1):
-            reasoning = _first_sentence(r["verdict"]["reasoning"])
-            lines.append(f"{i}. `{r['candidate_id']}` - {reasoning}")
+    if stats.get("panel"):
+        lines += [
+            "### Panel health",
+            "",
+            "| Judge | Answered | Mean latency | Issues |",
+            "|---|---|--:|---|",
+        ]
+        for m, assigned, valid, ml_s, cause, deg in _panel_health_rows(stats):
+            mark = " ⚠" if deg else ""
+            lines.append(f"| `{m}` | {valid}/{assigned}{mark} | {ml_s} "
+                         f"| {cause} |")
         lines.append("")
-        if any(r.get("guardrail") for r in out["results"]):
-            lines += [
-                "> ⚑ = rule guardrail overrode a benign model verdict "
-                "on a candidate whose deterministic rule fired. Raw model "
-                "verdict is preserved in `verdicts.json`.",
-                "",
-            ]
-        panel_review = [r for r in out["results"]
-                        if (r.get("panel") or {}).get("needs_human_review")]
-        if panel_review:
-            models = stats.get("models") or []
-            # Drop the Note column - every row said the same thing
-            # ("judges disagree after debate; using the more severe
-            # verdict"), which is exactly what the ⚖ flag already means.
-            lines += [
-                "### Panel disputes",
-                "",
-                "| Candidate | " + " | ".join(f"`{m}`" for m in models)
-                + " | Effective |",
-                "|---|" + "---|" * len(models) + "---|",
-            ]
-            for r in panel_review:
-                by_model = {j["model"]: j for j in r["panel"]["judges"]}
-                cells = []
-                for m in models:
-                    j = by_model.get(m)
-                    if j is None or j.get("failed"):
-                        cells.append("_failed_")
-                    else:
-                        jv = j["verdict"]
-                        cell = f"{jv['verdict']} ({jv['confidence']})"
-                        if j.get("revised"):
-                            cell += " ↺"
-                        cells.append(cell)
-                lines.append(
-                    f"| `{r['candidate_id']}` | " + " | ".join(cells)
-                    + f" | **{r['verdict']['verdict']}** |")
-            lines.append("")
-            rebutted = [
-                (r["candidate_id"], j)
-                for r in panel_review for j in r["panel"]["judges"]
-                if j.get("rebuttal")]
-            if rebutted:
-                lines += ["**Debate positions** (first sentence only; full "
-                          "rebuttals in `verdicts.json`)", ""]
-                for cand_id, j in rebutted:
-                    lines.append(
-                        f"- `{cand_id}` - `{j['model']}` "
-                        f"({j['stance']}): {_first_sentence(j['rebuttal'])}")
-                lines.append("")
+        if stats.get("panel_init_failures"):
+            excluded = ", ".join(f"`{f['entry']}`"
+                                 for f in stats["panel_init_failures"])
+            lines += [f"_Excluded at startup: {excluded} (failed to "
+                      f"initialize; details in the run log)._", ""]
 
-        review = [r for r in out["results"]
-                  if (r.get("committee") or {}).get("needs_human_review")]
-        if review:
-            lines += [
-                "> ⚖ = the two committee judges disagreed (or one failed); "
-                "the more-severe verdict is shown and the candidate is "
-                "flagged for human review. Both raw verdicts are in "
-                "`verdicts.json` under `committee`.",
-                "",
-                "### Committee disputes",
-                "",
-                "| Candidate | Judge A | Judge B | Effective |",
-                "|---|---|---|---|",
-            ]
-            for r in review:
-                c = r["committee"]
-                ja = c.get("judge_a") or {}
-                jb = c.get("judge_b") or {}
-                a_txt = (f"{ja.get('verdict')} ({ja.get('confidence')})"
-                         if not ja.get("failed") else "_failed_")
-                b_txt = (f"{jb.get('verdict')} ({jb.get('confidence')})"
-                         if not jb.get("failed") else "_failed_")
-                lines.append(
-                    f"| `{r['candidate_id']}` | {a_txt} | {b_txt} | "
-                    f"**{r['verdict']['verdict']}** |")
-            lines.append("")
-    else:
+    panel_review = [r for r in results
+                    if (r.get("panel") or {}).get("needs_human_review")]
+    if panel_review:
+        models = stats.get("models") or []
         lines += [
-            "## No verdicts",
+            "### Panel disputes",
             "",
-            "The pipeline produced no flagged candidates - nothing to judge. "
-            "This is either a clean capture or the detectors did not fire; "
-            "check `analyze.log` in the artifact for the pipeline output.",
-            "",
+            "| Candidate | " + " | ".join(f"`{m.split('/')[-1]}`"
+                                          for m in models)
+            + " | Effective |",
+            "|---|" + "---|" * len(models) + "---|",
         ]
+        for r in panel_review:
+            by_model = {j["model"]: j for j in r["panel"]["judges"]}
+            cells = []
+            for m in models:
+                j = by_model.get(m)
+                if j is None or j.get("failed"):
+                    cells.append("_failed_")
+                else:
+                    jv = j["verdict"]
+                    cell = f"{jv['verdict']} ({jv['confidence']})"
+                    if j.get("revised"):
+                        cell += " ↺"
+                    cells.append(cell)
+            lines.append(
+                f"| `{r['candidate_id']}` | " + " | ".join(cells)
+                + f" | **{r['verdict']['verdict']}** |")
+        lines.append("")
 
-    # ----- 5. Not queued for judgment (one line, not a table) -----------
-    # The full "we looked at these" audit is in verdicts.json for anyone
-    # who wants it; the email report only needs the count so the reader
-    # knows the pipeline did not silently skip them.
-    not_flagged = (ctx.get("not_flagged_ips") or []) if ctx else []
-    if not_flagged:
+    review = [r for r in results
+              if (r.get("committee") or {}).get("needs_human_review")]
+    if review:
         lines += [
-            f"_Pipeline also analyzed **{len(not_flagged)} additional IP"
-            f"{'' if len(not_flagged) == 1 else 's'}** with no flags - see "
-            f"`verdicts.json` for the full list._",
+            "### Committee disputes",
             "",
+            "| Candidate | Judge A | Judge B | Effective |",
+            "|---|---|---|---|",
         ]
+        for r in review:
+            c = r["committee"]
+            ja = c.get("judge_a") or {}
+            jb = c.get("judge_b") or {}
+            a_txt = (f"{ja.get('verdict')} ({ja.get('confidence')})"
+                     if not ja.get("failed") else "_failed_")
+            b_txt = (f"{jb.get('verdict')} ({jb.get('confidence')})"
+                     if not jb.get("failed") else "_failed_")
+            lines.append(
+                f"| `{r['candidate_id']}` | {a_txt} | {b_txt} | "
+                f"**{r['verdict']['verdict']}** |")
+        lines.append("")
 
-    # ----- 6. Dropped / Capped ------------------------------------------
     if out["dropped"]:
-        lines += ["## Dropped by the provider (after 1 retry)", ""]
+        lines += ["### Dropped by the provider (after 1 retry)", ""]
         for d in out["dropped"]:
-            lines.append(f"- `{d['candidate_id']}` - {d['error']}")
+            causes = _failure_causes([d["error"]])
+            lines.append(f"- `{d['candidate_id']}` - "
+                         + (", ".join(causes) if causes else "error"))
         lines.append("")
 
     if assembled["capped"]:
         capped_details = ctx.get("capped_details") or []
         lines += [
-            "## Capped (statistical-only outliers over the batch limit)",
+            "### Capped (statistical-only outliers over the batch limit)",
             "",
             f"{len(assembled['capped'])} candidate(s) not judged this run. "
             "Rule-triggered candidates always survive the cap, so these "
@@ -577,40 +686,20 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                       + ("…" if len(assembled["capped"]) > 20 else ""), ""]
         lines += ["Raise `LLM_JUDGE_MAX_CANDIDATES` to include them.", ""]
 
-    # ----- 6.5 Panel participation (the per-judge audit) -----------------
-    if stats.get("panel"):
-        pr = stats["panel_report"]
-        # Caption dropped: the column headers (Valid / Failures / Debates
-        # / Revised / Agreed with final) are self-explaining, and the
-        # caption used to add ~4 lines of the same explanation on every
-        # report. Anyone who needs it once can read llm_judge/README.md.
-        lines += [
-            "## Panel participation",
-            "",
-            "| Model | Received | Valid | Failures | Debates | Revised | "
-            "Agreed with final | Cache hits | Mean latency |",
-            "|---|--:|--:|--:|--:|--:|--:|--:|--:|",
-        ]
-        for m in stats["models"]:
-            row = pr[m]
-            ml = (f"{row['mean_latency_ms']} ms"
-                  if row["mean_latency_ms"] is not None else "-")
-            lines.append(
-                f"| `{m}` | {row['assigned']} | {row['valid_verdicts']} | "
-                f"{row['failures']} | {row['debates']} | {row['revised']} | "
-                f"{row['agreed_with_final']} | {row['cache_hits']} | {ml} |")
-        lines.append("")
-        examples = [(m, pr[m]["failure_examples"]) for m in stats["models"]
-                    if pr[m]["failure_examples"]]
-        for m, ex in examples:
-            lines.append(f"- `{m}` failure examples: "
-                         + "; ".join(ex[:3]))
-        if examples:
-            lines.append("")
+    # ----- Run metadata (compact, last) ---------------------------------
+    meta = [
+        f"generated {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+        f"prompt {judge_config.PROMPT_VERSION}",
+        f"guardrail {'on' if judge_config.RULE_GUARDRAIL else 'off'}",
+        f"judged {stats['judged']}",
+    ]
+    if out["dropped"]:
+        meta.append(f"dropped {stats['dropped']}")
+    if assembled["capped"]:
+        meta.append(f"capped {len(assembled['capped'])}")
+    lines += ["### Run metadata", "",
+              "_" + " · ".join(meta) + "_", ""]
 
-    # The "How to interpret" legend used to live here and repeated on
-    # every email. It moved to docs/LLM_JUDGE_SPEC.md - a reader who
-    # needs the definitions once does not need them again on every run.
     return "\n".join(lines) + "\n"
 
 

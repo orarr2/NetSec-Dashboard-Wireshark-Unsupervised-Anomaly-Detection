@@ -285,6 +285,14 @@ class OpenAICompatClient:
                            self._MAX_WAIT_S)
                 time.sleep(wait)
 
+    # Reasoning models emit a thinking block before the answer; on Groq
+    # the block bleeds into JSON-mode output and json_validate_failed
+    # kills every call (measured: qwen3.6-27b failed 15/16 in session
+    # 13). reasoning_format=hidden strips it server-side. The parameter
+    # is REJECTED by non-reasoning models (llama: 400 "not supported"),
+    # so it is sent only to model families known to need it.
+    _REASONING_HIDDEN_MARKERS = ("qwen3", "deepseek-r1", "qwq")
+
     def _payload(self, system_prompt, user_content, response_format):
         payload = {
             "model": self.model_id,
@@ -298,6 +306,9 @@ class OpenAICompatClient:
         }
         if response_format is not None:
             payload["response_format"] = response_format
+        if any(m in self.model_id.lower()
+               for m in self._REASONING_HIDDEN_MARKERS):
+            payload["reasoning_format"] = "hidden"
         return payload
 
     def judge(self, system_prompt, user_content, schema=None):

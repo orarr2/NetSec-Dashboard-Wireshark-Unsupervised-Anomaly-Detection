@@ -187,15 +187,21 @@ def deliver(session, out, report_paths, env=None, send_fn=None,
     subject = _subject_for(session)
     hook = (env.get("N8N_WEBHOOK_URL") or "").strip()
 
+    # Email body = the executive summary when the worker rendered one
+    # (summary.md); the full report rides ONLY as the PDF attachment.
+    # Falls back to the full markdown for old sessions that predate the
+    # summary file - an email with too much text beats an empty one.
     body_md = None
-    md_path = (report_paths or {}).get("md") if isinstance(report_paths,
-                                                          dict) else None
-    if md_path and os.path.isfile(md_path):
-        try:
-            with open(md_path, encoding="utf-8") as f:
-                body_md = f.read()
-        except Exception as e:
-            body_md = f"(could not read markdown report: {e})"
+    rp = report_paths if isinstance(report_paths, dict) else {}
+    for key in ("summary", "md"):
+        p = rp.get(key)
+        if p and os.path.isfile(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    body_md = f.read()
+                break
+            except Exception as e:
+                body_md = f"(could not read markdown report: {e})"
 
     if not recipient:
         # No SMTP recipient - offer n8n as the sole channel, or noop.
