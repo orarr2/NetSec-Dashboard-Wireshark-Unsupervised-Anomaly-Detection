@@ -263,19 +263,25 @@ If `N8N_WEBHOOK_URL` is configured, an email lands within a few seconds
 of the worker finishing.
 
 **B. From the dashboard button.** Load a PCAP in the notebook. In the
-sidebar, click **Send S1 to n8n Alert**. Today that button uses `scp`
-over Tailscale to drop the file into `NETSEC_REMOTE_INCOMING` on the
-VM. Set `NETSEC_REMOTE_HOST` / `NETSEC_REMOTE_USER` / `NETSEC_SSH_KEY`
-before clicking - the button reports "set NETSEC_REMOTE_HOST" until
-they are configured, and refuses to send until the stack responds on
-`:5678` and `:8765`. (The dashboard's HTTP-through-ingest path is
-scaffolded in `server/dashboard_client.py` but not yet wired to a
-callback; the scp button is the working path today.)
+sidebar, type the address you want the report mailed to, pick an LLM
+panel preset, and click **Send S1 to VM (mail report)**. The button
+signs the capture and streams it to the ingest API over Tailscale
+(`server/dashboard_client.py`), exactly like `tools/upload_pcap.py`
+does from the shell. Set `NETSEC_INGEST_URL` / `NETSEC_SENSOR_ID` /
+`NETSEC_SENSOR_SECRET` in the shell that launches the notebook - until
+they are set the button reports `set NETSEC_INGEST_URL` and sends
+nothing.
 
-**C. From GitHub Actions.** Fork the repo and drop a PCAP into
-`incoming/`. The `analyze-pcap.yml` workflow runs the full pipeline
-against a local Ollama and opens a GitHub Issue with the verdict table.
-This is completely independent of your VM.
+A capture the VM has already analysed is deduplicated by SHA-256: the
+upload returns the existing session instead of queueing the same work
+twice, and the button says so.
+
+**C. GitHub Actions is not an ingest path.** The `analyze-pcap.yml`
+workflow that watched an `incoming/` folder was retired - the 25 MB
+Actions upload cap made it useless for real captures, and the VM path
+covers every case it did. What remains under `.github/` is `ci.yml`:
+tests plus the notebook-to-module sync check. Nothing about analysing
+your own captures depends on GitHub.
 
 ---
 
@@ -289,11 +295,18 @@ Change these in `deploy/.env`, then `docker compose restart worker`
   models silently; a failing judge is reported).
 - `LLM_JUDGE_MAX_CANDIDATES` - flagged candidates judged per PCAP.
   **Default `40`**. Free tiers with tight per-minute token budgets
-  (Groq: ~12 000 TPM) may need this lower - drop to `10` on a bursty
+  need this lower - measured on Groq's free tier 2026-08, the
+  per-minute ceiling is 6 000 tokens for `llama-3.1-8b-instant` and
+  8 000 for the `gpt-oss` models, so a 30-candidate capture spends
+  most of its wall-clock waiting out 429s. Drop to `10` on a bursty
   key.
+- `LLM_JUDGE_BATCH_SIZE` - candidates packed into one call.
+  **Default `1`.** A 5-candidate batch measures ~5 500 tokens, which
+  does not fit the free-tier per-minute ceilings above, so raising it
+  there just converts one throttled call into per-candidate retries.
 - `LLM_JUDGE_TIMEOUT_S` - per-request timeout in seconds. **Default
-  `300`** in code; the Actions workflow overrides to `600` for cold
-  local models.
+  `300`** in code; raise to `600` when a cold local Ollama model has
+  to load before its first answer.
 - `NETSEC_MAX_UPLOAD_GB` - single-file ceiling on the ingest endpoint.
   Default `10`.
 - `NETSEC_ENABLE_SHODAN=1` (plus `SHODAN_API_KEY`) - external-peer
