@@ -201,6 +201,9 @@ result; skips until the first one exists).
 | `LLM_JUDGE_EP_<NAME>_BASE_URL` / `_MODEL` / `_KEY_ENV` | - | Named endpoint profile (see the Providers section). Any number of profiles; referenced in a panel as `<name>:<model>`. |
 | `LLM_JUDGE_PANEL` | - | Expert panel: comma-separated judges (`model` or `provider:model`), min 2 distinct; empty = off. Wins over `LLM_JUDGE_PROVIDER` for the run |
 | `LLM_JUDGE_DEBATE` | `1` | `0` skips the debate round (plain N-way vote) |
+| `LLM_JUDGE_PANEL_QUORUM` | `majority` | How a split panel resolves. `majority`: a strict majority (>50%) of valid judges picks the label; with no majority the most severe side wins and the candidate is flagged `needs_human_review`. `fail-safe`: the most severe label always wins on any split (pre-v0.5 behaviour) |
+| `LLM_JUDGE_GUARDRAIL_ESCAPE` | `1` | Narrow escape hatch for the rule guardrail: a `benign` verdict at confidence >= 0.85 citing whitelisted evidence (public resolver / anycast / known cloud provider) is let through instead of escalated. Every bypass is recorded as `guardrail_bypassed`. `0` overrides every benign-on-fired-rule |
+| `LLM_JUDGE_BATCH_SIZE` | `1` | Candidates packed into one call during the panel's initial round. `1` = per-candidate. Bigger batches mean fewer but larger requests: a 5-candidate batch measures ~5.5k tokens, and Groq's free tier allows 6-8k per minute, so on that tier nearly every batch is throttled and falls back to per-candidate calls anyway. Raise only where the per-minute budget comfortably exceeds `batch_size x ~1.1k` tokens |
 | `LLM_JUDGE_COMMITTEE` | `0` | Legacy two-judge committee mode. Superseded by `LLM_JUDGE_PANEL` |
 | `LLM_JUDGE_COMMITTEE_MODEL_B` | `llama-3.1-8b-instant` | Second model for the legacy committee |
 | `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` disables the benign-override guardrail |
