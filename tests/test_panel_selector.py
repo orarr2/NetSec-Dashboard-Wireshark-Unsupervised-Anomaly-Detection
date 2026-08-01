@@ -160,3 +160,77 @@ def test_build_panel_falls_back_to_env_when_no_override(monkeypatch):
 
     judge_cli._build_panel()  # no override
     assert seen == ["groq:x,groq:y"]
+
+
+# ---- worker path resolves preset id -> spec (ingest stores raw header) ----
+
+def _resolve_via_analyze(monkeypatch, override_value):
+    """Drive judge_cli.analyze_and_judge just far enough to record the
+    spec it ends up calling _build_panel with. We stub everything past
+    the panel resolution so the pipeline never actually runs.
+
+    Returns the spec string that _build_panel was called with (or
+    the sentinel "<env_fallback>" if _build_panel was called with no
+    override at all, which means the env LLM_JUDGE_PANEL kicks in).
+    """
+    from llm_judge import judge_cli, judge_config
+
+    seen = {}
+
+    def _fake_build(spec_override=None):
+        seen["spec"] = spec_override
+        # any 2 fake clients so downstream single-panel init passes
+        class _C:
+            def __init__(self, mid): self.model_id = mid
+        return [("groq", "x"), ("groq", "y")], [_C("x"), _C("y")], []
+
+    def _fake_validate():
+        return None
+
+    monkeypatch.setattr(judge_cli, "_build_panel", _fake_build)
+    monkeypatch.setattr(judge_cli, "_validate_committee_config", _fake_validate)
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL",
+                        "groq:env-default-a,groq:env-default-b")
+
+    # analyze_and_judge imports run_pipeline lazily - swap it out
+    fake_rp = type("rp", (), {})()
+    fake_rp.analyze_pcap = lambda p, lbl: {"packets": [], "meta": {}}
+    fake_rp.run_ml_on_session = lambda s: None
+    fake_rp.run_security_scans = lambda s: []
+    monkeypatch.setitem(sys.modules, "run_pipeline", fake_rp)
+
+    # break the loop early - anything after panel resolution can raise
+    def _bail(*a, **kw):
+        raise RuntimeError("stop-after-resolution")
+    monkeypatch.setattr(judge_cli, "assemble_candidates", _bail, raising=False)
+
+    try:
+        judge_cli.analyze_and_judge("dummy.pcap", label="T",
+                                    verbose=False,
+                                    panel_spec_override=override_value)
+    except Exception:
+        pass  # expected - we bail after resolution
+    return seen.get("spec", "<env_fallback>")
+
+
+def test_worker_resolves_preset_id_to_spec(monkeypatch):
+    """Ingest stores the raw header ('fast_cloud_3'); the worker turns
+    it into the spec string before building the panel."""
+    resolved = _resolve_via_analyze(monkeypatch, "fast_cloud_3")
+    fast_spec = panel_presets.preset_by_id("fast_cloud_3")["spec"]
+    assert resolved == fast_spec
+
+
+def test_worker_accepts_raw_spec_unchanged(monkeypatch):
+    """A raw spec (with colons) passes through untouched."""
+    raw = "groq:llama-3.1-8b-instant,gemini:gemini-2.5-flash"
+    resolved = _resolve_via_analyze(monkeypatch, raw)
+    assert resolved == raw
+
+
+def test_worker_falls_back_when_preset_id_unknown(monkeypatch):
+    """Unknown preset id -> silent fallback to env default. Never lose a run
+    because of a UI typo in the dashboard dropdown."""
+    resolved = _resolve_via_analyze(monkeypatch, "nonsense_preset_xyz")
+    # env default fell through
+    assert resolved is None or resolved == "groq:env-default-a,groq:env-default-b"

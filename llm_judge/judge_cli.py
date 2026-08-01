@@ -659,11 +659,25 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     """
     _validate_committee_config()
     panel = None
-    # N1: the dashboard drop-down sends its picked spec as
-    # panel_spec_override; if set (even to "" for single-judge),
-    # it wins over the .env LLM_JUDGE_PANEL default for this run.
-    effective_spec = (panel_spec_override
-                      if panel_spec_override is not None
+    # N1: the dashboard drop-down sends its picked spec (or a preset
+    # id) as panel_spec_override. Ingest stores the raw header value
+    # (see server/ingest_api.py) because ingest's image has no
+    # llm_judge; the worker path resolves preset id -> spec here.
+    # A stringified id ("fast_cloud_3") without a colon is treated as
+    # a preset name; a spec ("groq:..." / "ollama:...") wins as-is.
+    # Bad id / bad spec silently falls back to .env - never lose a run.
+    from . import panel_presets as _pp
+    resolved_override = panel_spec_override
+    if isinstance(resolved_override, str) and resolved_override and ":" not in resolved_override:
+        preset = _pp.preset_by_id(resolved_override.strip())
+        if preset is not None:
+            resolved_override = preset["spec"]
+        else:
+            resolved_override = None  # unknown id -> fall through to env
+    elif isinstance(resolved_override, str) and resolved_override and not _pp.valid_spec(resolved_override):
+        resolved_override = None
+    effective_spec = (resolved_override
+                      if resolved_override is not None
                       else judge_config.LLM_JUDGE_PANEL)
     if effective_spec:
         panel = _build_panel(spec_override=effective_spec)  # fail fast

@@ -92,23 +92,20 @@ def create_app(db_path=None, data_root=None):
             if valid_address(x_notify_email):
                 notify_email = x_notify_email.strip()
 
-        # N1: per-upload judge panel override. The dashboard drops a
-        # preset id in X-Judge-Panel; ingest resolves it to a spec
-        # string. An unrecognised id or bad spec silently falls back
-        # to the .env default (LLM_JUDGE_PANEL) - a UI typo must not
-        # lose a large PCAP.
+        # N1: per-upload judge panel override. Store the raw header
+        # value (preset id like "fast_cloud_3" or a raw LLM_JUDGE_PANEL
+        # spec). The worker resolves preset id -> spec at dequeue via
+        # llm_judge.panel_presets - ingest_api's image does not carry
+        # llm_judge on PYTHONPATH by design (small image, no PyTorch).
+        # A UI typo (unrecognised id / junk spec) silently falls back
+        # to the .env default LLM_JUDGE_PANEL - never lose a PCAP.
         judge_panel_override = None
         if x_judge_panel:
-            try:
-                from llm_judge import panel_presets
-                preset = panel_presets.preset_by_id(x_judge_panel.strip())
-                if preset is not None:
-                    judge_panel_override = preset["spec"]
-                elif panel_presets.valid_spec(x_judge_panel.strip()):
-                    # allow raw spec strings for advanced users / tests
-                    judge_panel_override = x_judge_panel.strip()
-            except Exception:
-                pass
+            candidate = x_judge_panel.strip()
+            # cheap sanity cap: reject nothing plausible, drop clearly
+            # abusive lengths so a malicious header can't bloat the DB
+            if 0 < len(candidate) <= 512:
+                judge_panel_override = candidate
 
         conn = _conn()
         try:
