@@ -1,5 +1,7 @@
 # ארכיטקטורת ה-VM המנתחת - מדריך עומק
 
+<div dir="rtl">
+
 מסמך זה מסביר לעומק מה קיים על המכונה הוירטואלית שמשמשת כמנתחת PCAP-ים
 מרוחקת בפרויקט הזה. הוא כתוב עבור מי שרוצה להבין **מה** רץ שם, **למה**
 זה רץ שם, **איך** הוא מדבר עם שאר הרכיבים, ו**מה קורה** לקובץ PCAP
@@ -9,7 +11,13 @@
 מוקדמת עם Docker, HMAC, Tailscale, worker queue, sqlite migration, או
 retention.
 
+**עדכון אחרון:** ‏2026-08-01 (‏prompt v0.4.0, ‏פאנל של 4 שופטים, ‏schema v4).
+
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## תוכן העניינים
 
@@ -29,8 +37,15 @@ retention.
 14. [נתונים טכניים: זיכרון, CPU, אחסון](#14-נתונים-טכניים-זיכרון-cpu-אחסון)
 15. [גישה ל-VM](#15-גישה-ל-vm)
 16. [Troubleshooting](#16-troubleshooting)
+17. [הוספת ספק LLM חדש לפאנל](#17-הוספת-ספק-llm-חדש-לפאנל)
+18. [מצבי כשל ומה קורה בכל אחד](#18-מצבי-כשל-ומה-קורה-בכל-אחד)
+19. [היסטוריית גרסאות ה-prompt](#19-היסטוריית-גרסאות-ה-prompt)
+
+</div>
 
 ---
+
+<div dir="rtl">
 
 ## 1. רקע: מה זו בעצם "מכונה מנתחת"
 
@@ -52,12 +67,18 @@ retention.
 יותר של הניתוח - הוא מבצע *אותו* קוד ‏(דרך מודול משותף `app/advanced_engines.py`
 שחולץ במיוחד למטרה זו).
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 2. סקירה על-על של הארכיטקטורה
 
 הארכיטקטורה בנויה מ-**ארבע שכבות** שמדברות אחת עם השנייה ברשת פרטית
 (‏Tailscale, שנסביר בקרוב):
+
+</div>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -105,6 +126,8 @@ retention.
 
 ---
 
+<div dir="rtl">
+
 ## 3. שכבת התקשורת: Tailscale
 
 **מה זה Tailscale?** שירות שבונה רשת פרטית מוצפנת בין המכשירים של
@@ -132,7 +155,26 @@ retention.
 מותקנת ומופעלת: `systemctl is-enabled netfilter-persistent`. אם יוצא
 `enabled`, הכללים ייטענו אוטומטית בכל אתחול מקובץ `/etc/iptables/rules.v4`.
 
+**קוד המפתח של iptables של ה-VM** (‏אחרי `bootstrap.sh`):
+
+</div>
+
+```bash
+# רק Tailscale + SSH נכנסים; שאר האינטרנט נדחה
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -i tailscale0 -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited
+```
+
+<div dir="rtl">
+
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 4. שירותי המערכת - מה רץ ב-VM
 
@@ -142,13 +184,13 @@ retention.
 
 **Docker Compose כרגע מרים 5 שירותים:**
 
-| שירות | מה זה עושה | חייב? |
-|---|---|---|
-| `ingest_api` | מקבל PCAP-ים מהמשתמשים בבקשת HTTP חתומה, שומר לדיסק, מכניס לתור לניתוח | ✅ קריטי |
-| `worker` | קורא מהתור, מריץ את ה-pipeline המלא, כותב תוצאות, שולח מייל | ✅ קריטי |
-| `retention` | job יומי - מוחק PCAP-ים ישנים, מבצע VACUUM ל-DB, שומר גיבויים | ✅ מומלץ |
-| `n8n` | פלטפורמת אוטומציה - fallback אם SMTP נכשל | אופציונלי |
-| `ollama` | מריץ מודלי LLM מקומית על ה-VM (‏zero-key) | אופציונלי |
+| שירות | מה זה עושה | חייב? | סטטוס נוכחי |
+|---|---|---|---|
+| `ingest_api` | מקבל PCAP-ים מהמשתמשים בבקשת HTTP חתומה, שומר לדיסק, מכניס לתור לניתוח | ✅ קריטי | Up 13h+ |
+| `worker` | קורא מהתור, מריץ את ה-pipeline המלא, כותב תוצאות, שולח מייל | ✅ קריטי | Up (‏מתחדש בעת deploy) |
+| `retention` | job יומי - מוחק PCAP-ים ישנים, מבצע VACUUM ל-DB, שומר גיבויים | ✅ מומלץ | Up 24h+ |
+| `n8n` | פלטפורמת אוטומציה - fallback אם SMTP נכשל | אופציונלי | Up 2d+ |
+| `ollama` | מריץ מודלי LLM מקומית על ה-VM (‏zero-key, ‏qwen2.5:3b טעון) | אופציונלי אבל נדרש לפאנל 4-שופטים | Up |
 
 **מה זה container בפועל?** תהליך Linux שרואה רק את הקבצים שדחפו אליו
 (‏ה-Dockerfile מגדיר איזה), לא רואה תהליכים אחרים במערכת, ומחובר לרשת
@@ -157,16 +199,25 @@ retention.
 של docker מתרגמת את זה ל-IP הפנימי).
 
 **איך רואים מה רץ עכשיו?**
+
+</div>
+
 ```bash
 docker compose ps
 ```
+
+<div dir="rtl">
 
 תראה טבלה של השירותים החיים, כמה זמן הם למעלה, ואילו פורטים הם
 פורסים. פורטים בפורמט `100.68.246.54:8766->8766/tcp` פירושם: השירות
 מקשיב על פורט 8766 של ה-container, ומנופה ל-IP של Tailscale של
 ה-VM על פורט 8766 מבחוץ.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 5. Ingest API - נקודת הכניסה של PCAP
 
@@ -202,13 +253,33 @@ docker compose ps
    ונוצרת רשומה חדשה בטבלת `sessions` במסד הנתונים עם `status='queued'`.
 6. תשובת ה-API מחזירה `session_id` (‏מספר רץ).
 
+**קוד המפתח של חתימת ה-HMAC** (‏מ-`tools/upload_pcap.py`, ‏משותף עם ‏`server/auth.py`):
+
+</div>
+
+```python
+def _signature(secret, file_sha256, sensor_id, timestamp):
+    # server/auth.py::upload_signature - the exact mirror
+    import hmac, hashlib
+    msg = f"{file_sha256}:{sensor_id}:{int(timestamp)}"
+    return hmac.new(secret.encode("utf-8"),
+                    msg.encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+```
+
+<div dir="rtl">
+
 ### דדופ אוטומטית
 
 אם המשתמש מעלה את *אותו* קובץ פעם שנייה (‏אותו sha256 בדיוק), במקום
 לקבל כפילות ה-API מזהה את זה ומחזיר את ה-session שכבר קיים עם דגל
 `duplicate: true`. חוסך זמן ניתוח וזיכרון דיסק.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 6. Worker - מנוע הניתוח שרץ מאחורי הקלעים
 
@@ -216,6 +287,8 @@ docker compose ps
 במקום זאת, הוא בודק **תור** ‏(queue) של משימות ומטפל בכל אחת בסדר.
 
 ### לולאת ה-worker
+
+</div>
 
 ```
 כל 10 שניות:
@@ -226,6 +299,8 @@ docker compose ps
   5. שלח מייל למשתמש (אם הזין כתובת).
   6. סמן status='done' או 'error'.
 ```
+
+<div dir="rtl">
 
 ### מה עובר ה-PCAP במהלך הניתוח
 
@@ -293,7 +368,45 @@ docker compose ps
 של ingest, הבקשה תעבור timeout. כך שאנחנו מקבלים תשובה מהירה ("קיבלתי
 את הקובץ, session=3"), והמשתמש יכול לסגור את הלפטופ - הניתוח ימשיך.
 
+### הפעלת ה-pipeline - קטע קוד מרכזי מ-`server/worker.py`
+
+</div>
+
+```python
+# Simplified skeleton of server/worker.py::run_once
+def run_once(conn, analyze_fn=None, md_fn=None):
+    row = db.claim_next_job(conn)   # atomic dequeue: queued -> running
+    if row is None:
+        return None                  # nothing to do this cycle
+    sid = row["session_id"]
+    pcap_path = row["storage_path"]
+    try:
+        # Delegate to the injected pipeline (real one = judge_cli.analyze_and_judge)
+        out, assembled, client, context, S, findings = (analyze_fn or
+            _default_analyze_and_judge)(pcap_path, label=row["label"],
+                                         return_session=True)
+        results.write_all(conn, sid, S, findings, out, client, context)
+        report_html.render(conn, sid, out, context, md_fn=md_fn)
+        report_pdf.render(conn, sid)
+        _notify(conn, sid, row["notify_email"], out, context)
+        db.mark_done(conn, sid, n_pkts=S["n_pkts"],
+                     n_ips=len(S["ips_src"]))
+    except Exception as e:
+        db.mark_error(conn, sid, str(e))
+        raise
+```
+
+<div dir="rtl">
+
+**עיקרון הבידוד**: `analyze_fn` ו-`md_fn` הן dependency injection. ב-tests
+מזריקים stubs שלא דורשים tshark/LLM/GPU. ב-production הם נטענים ממודולי
+`judge_cli` ו-`report_html` בפועל.
+
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 7. Retention - שירות תחזוקה שוטף
 
@@ -320,7 +433,11 @@ docker compose ps
 כי ה-worker עסוק בניתוחים ולא צריך להאט בגלל שידוד ניקיון. הפרדה
 מאפשרת ל-retention לרוץ בפעם אחת ביום, בלילה, בזמן שלרוב אין עומס.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 8. Ollama - LLM מקומי חופשי (אופציונלי)
 
@@ -346,36 +463,66 @@ limits, כל התעבורה נשארת פנימית.
 - Volume בשם `ollama_models` שומר את המודלים שהורדנו - נשארים גם
   אחרי `docker compose down`.
 
+### המודל הנוכחי שרץ בפאנל: `qwen2.5:3b`
+
+לאחר בדיקות (‏אוגוסט 2026):
+- **qwen2.5:3b נבחר** - ‏1.9GB, ‏מדויק על scan candidates, ‏~55s per verdict
+- **llama3.2:3b נפסל** - ‏2GB, ‏hallucinated benign על scan (‏חובה
+  לפעיל את הguardrail)
+- **מודלים 7B+ נפסלו** - איטיים מדי (‏~50s לverdict *לפני* שכל מודל
+  אחר מוסיף עומס RAM)
+
 ### להוריד מודל
 
+</div>
+
 ```bash
-docker exec deploy-ollama-1 ollama pull llama3.1:8b
-docker exec deploy-ollama-1 ollama pull qwen2.5:7b
-docker exec deploy-ollama-1 ollama pull gemma2:9b
+docker exec deploy-ollama-1 ollama pull qwen2.5:3b     # 1.9 GB - הנוכחי בפאנל
+docker exec deploy-ollama-1 ollama pull llama3.2:3b    # אלטרנטיבה, פחות מדויק
+docker exec deploy-ollama-1 ollama pull qwen2.5:14b    # אם יש GPU בעתיד
 ```
 
-כל אחד ~5-6 GB, לוקח כ-3 דקות דרך רשת Oracle.
+<div dir="rtl">
+
+כל אחד ~1-6 GB, לוקח כ-1-3 דקות דרך רשת Oracle.
 
 ### להפעיל בפאנל
 
-ב-`.env` על ה-VM:
+ב-`.env` על ה-VM (‏זו ההגדרה הנוכחית):
+
+</div>
+
+```bash
+LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:llama-3.3-70b-versatile,ollama:qwen2.5:3b,gemini:gemini-2.5-flash
 ```
-LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,ollama:llama3.1,ollama:qwen2.5
-```
+
+<div dir="rtl">
 
 אז `docker compose up -d --force-recreate worker` כדי לאסוף את השינוי.
 
 ### בענייני ביצועים
 
-CPU-only inference על ARM 24GB:
-- `llama3.1:8b`: ~2.5 tokens/sec = ~30-45 שניות per verdict
-- `qwen2.5:7b`: ~3 tokens/sec = ~25-35 שניות per verdict
-- `gemma2:9b`: ~2 tokens/sec = ~40-55 שניות per verdict
+CPU-only inference על ARM Neoverse-N1 4-vCPU, 24GB RAM ‏(‏מדוד):
+
+| מודל | RAM | Tokens/sec | ‏זמן per verdict |
+|---|---|---|---|
+| `qwen2.5:3b` (‏נוכחי) | ~2.4 GB | ~15-20 | ~53s |
+| `llama3.2:3b` | ~2.5 GB | ~15-18 | ~55s |
+| `llama3.1:8b` | ~4.9 GB | ~2.5 | ~30-45s |
+| `qwen2.5:7b` | ~4.7 GB | ~3 | ~25-35s |
+| `gemma2:9b` | ~5.4 GB | ~2 | ~40-55s |
 
 כלומר איטי משמעותית מ-Groq (‏~1 שנייה/verdict) אבל בחינם ובלי rate
-limits.
+limits. גיוון הבחירה בין qwen ל-llama נקבע לפי דיוק - qwen מדויק יותר
+על scan candidates של ה-benchmark שלנו.
 
 ---
+
+</div>
+
+---
+
+<div dir="rtl">
 
 ## 9. מסד הנתונים - SQLite ומעברי-סכמה
 
@@ -408,6 +555,29 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
 - **v4**: הרחבת `panel_audit` ב-4 עמודות ‏(`stance`, `rebuttal`,
   `revised`, `needs_review`) + התחלת רישום per-candidate rows.
 
+**קוד המפתח של ה-migration** (‏מ-`server/db.py`):
+
+</div>
+
+```python
+def migrate(conn):
+    """Idempotent schema migration. Uses PRAGMA user_version as the version
+    counter so downgrades are detectable and reruns are safe."""
+    v = conn.execute("PRAGMA user_version").fetchone()[0]
+    if v < 1: conn.executescript(_SCHEMA_V1); v = 1
+    if v < 2: conn.executescript(_SCHEMA_V2); v = 2
+    if v < 3: conn.executescript(_SCHEMA_V3); v = 3
+    if v < 4: conn.executescript(_SCHEMA_V4); v = 4
+    if v > SCHEMA_VERSION:
+        raise RuntimeError(
+            f"DB is at schema v{v}, code only knows v{SCHEMA_VERSION}. "
+            "Downgrade is not supported - restore an older backup.")
+    conn.execute(f"PRAGMA user_version = {v}")
+    conn.commit()
+```
+
+<div dir="rtl">
+
 ### הטבלאות בגדול
 
 | טבלה | מטרה |
@@ -431,6 +601,8 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
 
 ---
 
+<div dir="rtl">
+
 ## 10. ה-Panel של השופטים - LLM-as-Judge
 
 ### הרעיון
@@ -439,21 +611,81 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
 **וועדה** של מודלים שונים שכל אחד מגיע ממשפחה שונה, ומחייבים אותם
 להסכים - או להסביר למה הם חולקים.
 
+### 4 השופטים הנוכחיים ב-VM (‏אוגוסט 2026)
+
+הפאנל שרץ עכשיו על ה-VM ‏(`deploy/.env` ← `LLM_JUDGE_PANEL`):
+
+| # | Provider | מודל | ‏פורמט מפתח | ‏Latency ב-VM | ‏Free-tier |
+|---|---|---|---|---|---|
+| 1 | Groq | `llama-3.1-8b-instant` | ‏Groq key ‏(`gsk_...`) | ~500ms | 100k tokens/day |
+| 2 | Groq | `llama-3.3-70b-versatile` | ‏אותו key | ~700ms | 100k tokens/day |
+| 3 | Ollama (‏local) | `qwen2.5:3b` | ‏zero-key | ~55s (‏CPU-only ARM) | ‏מקומי - ‏unlimited |
+| 4 | Gemini | `gemini-2.5-flash` | ‏AI Studio ‏(`AQ...` ‏Bearer) | ~1-2s | 15 RPM, ‏1M tokens/day |
+
+**Wall-clock של הפאנל = max(‏כל 4)** ‏(‏ThreadPoolExecutor רץ במקביל).
+qwen2.5:3b הוא bottleneck על ARM CPU ‏(~55s per verdict), אז candidate
+בודד לוקח כדקה. ב-PCAP עם 5 candidates: ‏~5 דקות end-to-end.
+
+**למה davka 4 שופטים?** ‏(‏decision IDX-06):
+- **diversity**: ‏שני מודלי Meta (‏Llama 8B ו-70B) ‏+ ‏Google (‏Gemini) ‏+ ‏Alibaba (‏Qwen).
+  כל אחד מאומן על corpus שונה, ומגיע לverdict מזוית אחרת. גיוון כזה
+  מקטין את הסיכוי שכולם יטעו יחד באותה טעות.
+- **Fault-tolerance**: ‏אפילו אם 2 שופטים נופלים ‏(‏rate-limit, timeout,
+  ‏broken model), ה-resolver עדיין מקבל 2 verdicts תקפים ומסוגל להכריע.
+- **Free-tier headroom**: ‏Groq נותן 100k tokens ליום *לכל מודל* - שני
+  Groq שונים = כפל quota. Ollama בכלל לא סופר. Gemini עוד 1M tokens.
+
 ### שלבי הפאנל
 
 **סיבוב 1 - עמדות עצמאיות (במקביל):**
 כל שופט מקבל את ה-candidate בלי לדעת מה אמרו האחרים, ומחזיר:
+
+</div>
+
 ```json
 {"verdict": "malicious",
  "category": "arp_mitm",
  "confidence": 0.9,
- "evidence_features": [...],
+ "evidence_features": ["rule_signals.arp_multi_mac", "features.count"],
  "reasoning": "..."}
 ```
+
+<div dir="rtl">
 
 הקריאות ל-N השופטים רצות במקביל דרך `ThreadPoolExecutor`, אז wall-clock
 = max(A, B, C, D) במקום sum. עם 4 שופטים ב-Groq, זמן הריצה נשאר כמו
 של השופט האיטי ביותר.
+
+**קטע קוד מרכזי מ-`llm_judge/judge_core.py` (‏פונקציה `judge_candidates_panel`):**
+
+</div>
+
+```python
+_pool = concurrent.futures.ThreadPoolExecutor(
+    max_workers=max(len(clients), 1),
+    thread_name_prefix="panel-judge")
+try:
+    for i, cand in enumerate(candidates, 1):
+        # Round 1: fan out per candidate to N judges in parallel.
+        client_results = list(_pool.map(
+            lambda cl: _verdict_from_client(cand, cl, cache, prompt_version),
+            clients))
+        # ... build positions[] with each judge's verdict + status
+        valid = [p for p in positions if p["verdict"] is not None]
+        did_debate = False
+        if (debate and len(valid) >= 2
+                and _panel_disagrees([p["verdict"] for p in valid])):
+            did_debate = True
+            # Round 2: each judge sees peers' analyses, revises or defends.
+            debate_results = list(_pool.map(_one_debate, valid))
+            # ... update each position with revised verdict + stance + rebuttal
+        effective, info = resolve_panel(positions)
+        # ... write to DB (panel_audit rows per candidate + per judge)
+finally:
+    _pool.shutdown(wait=True)
+```
+
+<div dir="rtl">
 
 **Check for disagreement:**
 `_panel_disagrees()` בודק אם ה-labels או ה-categories שונים בין
@@ -468,6 +700,17 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
 
 גם הסיבוב הזה במקביל.
 
+**דוגמת debate rebuttal אמיתית** (‏session 6, ‏xmas scan, ‏v0.4.0):
+`llama-3.3-70b-versatile` (‏stance: maintain):
+
+> *"Analysts 1 and 3 agree the scan rule fired, but 'suspicious'
+> underestimates the threat; 1000 XMAS packets against one destination
+> is a clear malicious indicator."*
+
+`qwen2.5:3b` (‏stance: revise):
+
+> *"The high burst score suggests a more sophisticated attack."*
+
 **Resolver (‏דטרמיניסטי, בלי LLM):**
 לאחר סיבוב 2, `resolve_panel()` מקבל את כל העמדות ומחליט מה ה-verdict
 "האפקטיבי" של הפאנל. הכללים:
@@ -480,22 +723,105 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
 | רק שופט אחד הצליח | ה-verdict שלו | ✅ (uncorroborated) |
 | כולם נכשלו | ה-candidate נופל ל-`dropped` | - |
 
+**הקוד המדויק של ה-resolver** ‏(‏מ-`judge_core.py`):
+
+</div>
+
+```python
+def resolve_panel(positions):
+    valid = [p for p in positions if p["verdict"] is not None]
+    if not valid:
+        return None, {"agreement": False, "needs_human_review": True,
+                      "note": "every panel judge failed"}
+    if len(valid) == 1:
+        return dict(valid[0]["verdict"]), {
+            "agreement": False, "needs_human_review": True,
+            "note": "only one panel judge returned a valid verdict"}
+    labels = {p["verdict"]["verdict"] for p in valid}
+    cats = {p["verdict"]["category"] for p in valid}
+    if len(labels) == 1 and len(cats) == 1:            # ← consensus
+        eff = max(valid, key=lambda p: p["verdict"]["confidence"])
+        return dict(eff["verdict"]), {"agreement": True,
+                                       "needs_human_review": False,
+                                       "note": None}
+    if len(labels) == 1:                                # ← same label, split cat
+        eff = max(valid, key=lambda p: p["verdict"]["confidence"])
+        return dict(eff["verdict"]), {
+            "agreement": False, "needs_human_review": True,
+            "note": "judges agree on the verdict but dispute the category"}
+    worst = max(labels, key=lambda v: SEVERITY[v])      # ← labels split
+    side = [p for p in valid if p["verdict"]["verdict"] == worst]
+    eff = max(side, key=lambda p: p["verdict"]["confidence"])
+    return dict(eff["verdict"]), {
+        "agreement": False, "needs_human_review": True,
+        "note": "judges disagree after debate; using the more severe verdict"}
+```
+
+<div dir="rtl">
+
 **המאפיין הקריטי:** אין `while` בשום מקום. אחרי סיבוב הדיון היחיד,
 resolver מחליט וזה נגמר. **אין לופ אינסופי**. הפער שנשאר מסתובב בעולם
 כ-⚖ REVIEW = נדרש עין אנושית.
 
 ### הפעלה
 
-**LLM_JUDGE_PANEL** ‏ב-`.env`:
-```
-LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,openai_compat:openai/gpt-oss-20b
+**LLM_JUDGE_PANEL** ‏ב-`.env` על ה-VM (‏ההגדרה הנוכחית):
+
+</div>
+
+```bash
+LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:llama-3.3-70b-versatile,ollama:qwen2.5:3b,gemini:gemini-2.5-flash
 ```
 
-ריק = single-judge mode (הצינור פשוט קורא ל-`OPENAI_COMPAT_MODEL` פעם
+<div dir="rtl">
+
+**ריק** = single-judge mode (הצינור פשוט קורא ל-`OPENAI_COMPAT_MODEL` פעם
 אחת בלי resolver ובלי דיון).
 
 **LLM_JUDGE_DEBATE=0** ל-single-round only (‏פאנל בלי דיון - כל שופט
 מצביע פעם אחת, resolver מכריע ישר).
+
+**עלות בפועל** (‏מדוד על ‏session 6, ‏xmas_scan, ‏candidate בודד):
+- Groq llama-8b: ‏~460ms, ‏~1200 tokens (‏prompt+response)
+- Groq llama-70b: ‏~715ms, ‏~1200 tokens
+- Ollama qwen 3b: ‏~52700ms (‏CPU-bound), ‏~1200 tokens (‏חופשי)
+- Gemini flash: ‏~1500ms (‏באזור הצפוני), ‏~1300 tokens
+
+**סך הכל טוקנים ליום** על 5 sessions * 3 candidates ממוצע = ‏~18k tokens/day
+per Groq model, ‏רחוק מ-100k limit.
+
+### קוד מרכזי - בניית ה-clients
+
+מ-`llm_judge/llm_clients.py`, ‏פונקציה `make_panel_clients`:
+
+</div>
+
+```python
+def make_panel_clients(entries, verdict_schema=None):
+    """Build one client per (provider, model) panel entry.
+
+    Construction failures (e.g. the anthropic package missing for a claude
+    entry) do not abort the whole panel: the failed entry is recorded and
+    the remaining judges carry on - the panel's whole point is surviving
+    the loss of one expert. Returns (clients, init_failures) where
+    init_failures is [{"entry", "error"}].
+    """
+    clients, init_failures = [], []
+    for provider, model in entries:
+        try:
+            clients.append(make_client(provider=provider,
+                                       verdict_schema=verdict_schema,
+                                       model=model))
+        except Exception as e:
+            init_failures.append({"entry": f"{provider}:{model}",
+                                  "error": str(e)})
+    return clients, init_failures
+```
+
+<div dir="rtl">
+
+**הרעיון בקוד הזה**: אם 1 מ-4 שופטים לא מצליח להיבנות (‏חסר מפתח, ‏פרויקט לא
+מוגדר, ‏מודל לא נמצא) - שאר ה-3 עדיין רצים. הפאנל שורד את אובדן של יחיד.
 
 ### מה בדיוק שולחים לשופטים? (‏Prompt + Blob + Verdict)
 
@@ -503,6 +829,8 @@ LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,openai_compat:openai/gpt-o
 5 IPs חשודים, ‏5 קריאות מקבילות לכל שופט. מה שרואה השופט:
 
 **‏1. פרומפט המערכת (‏זהה לכל השופטים, לכל candidate, לא משתנה בזמן ריצה):**
+
+</div>
 
 ```
 You are a network-security triage analyst. You receive a JSON blob
@@ -520,6 +848,8 @@ least one unsupervised detector or deterministic rule has flagged.
    into the matching attack category and do NOT return "benign".
 ```
 
+<div dir="rtl">
+
 בנוסף מצטרפים ‏(‏1) ה-schema של ה-verdict, ‏(‏2) cheat-sheet של 7 הקטגוריות,
 ו-(‏3) שתי דוגמאות מעובדות (‏SYN scan → malicious, ‏ML anomaly → benign).
 
@@ -528,11 +858,17 @@ least one unsupervised detector or deterministic rule has flagged.
 
 **‏2. הבלוב של ה-candidate (‏JSON per-IP, ‏זה כל מה שהשופט רואה על ה-IP):**
 
+</div>
+
 ```json
 {
   "candidate_id": "192.168.1.10",
   "kind": "ip",
-  "session_context": {"duration_s": 0.1, "total_packets": 2000, "total_ips": 2},
+  "session_context": {
+    "duration_s": 0.1, "total_packets": 2000, "total_ips": 2,
+    "iso_timestamp": "2026-08-01T09:41:00",
+    "hour_of_day": 9, "day_of_week": "Sat"
+  },
   "features": {
     "mean_len": 54.0, "std_len": 0.0, "count": 1000.0, "burst_score": 1000.0,
     "unique_dsts": 1.0, "syn_count": 0.0, "rst_count": 0.0, "fin_count": 0.0,
@@ -548,16 +884,31 @@ least one unsupervised detector or deterministic rule has flagged.
   },
   "advanced_signals": {"beaconing": null, "dns_tunneling": null,
                        "dga": null, "tls_anomaly": null, "fusion_score": null},
-  "device_context": {"category": "unknown", "hostname": null, "oui_vendor": null},
+  "device_context": {"category": "unknown",
+                     "hostname": "orarr-macbook.local",
+                     "oui_vendor": "Apple, Inc."},
+  "websites": {
+    "top_http_hosts": null,
+    "top_tls_sni": [{"host": "cloudflare.com", "count": 87}],
+    "top_dns_queries": [{"host": "evil-c2.duckdns.org", "count": 128}]
+  },
+  "traffic": {
+    "top_dst_ports": [{"port_proto": "443/tcp", "count": 900}],
+    "bytes_in": 3000000, "bytes_out": 1000000, "upload_ratio": 0.25
+  },
   "enrichments": {"is_private": true, "reverse_dns": null,
                   "asn": null, "baseline_seen_before": null},
   "trigger_reasons": ["scan_rule"]
 }
 ```
 
+<div dir="rtl">
+
 **מקור אמת:** `llm_judge/judge_core.py` - הפונקציה `assemble_candidates`.
 
 **‏3. תשובת השופט (‏verdict schema):**
+
+</div>
 
 ```json
 {
@@ -570,11 +921,13 @@ least one unsupervised detector or deterministic rule has flagged.
 }
 ```
 
-השרתי עמידים מאומתים ב-`validate_verdict` - מנרמל ל-1 שורה, חותך את
-reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כל דבר מחוץ
-לenums.
+<div dir="rtl">
 
-**מקור אמת מלא (‏עם דוגמאות ולכידויות):** [`docs/LLM_INTERFACE.md`](LLM_INTERFACE.md).
+השדות ב-verdict מאומתים ב-`validate_verdict` - מנרמל ל-1 שורה, חותך את
+reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כל דבר מחוץ
+ל-enums.
+
+**מקור אמת מלא (‏עם דוגמאות ותוצאות):** [`docs/LLM_INTERFACE.md`](LLM_INTERFACE.md).
 
 ### מה נוסף לשופט ב-I2 (‏2026-08-01, ‏prompt v0.4.0)
 
@@ -593,15 +946,53 @@ reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כ�
 
 **PROMPT_VERSION** קפץ מ-v0.3.0 ל-v0.4.0 → כל ה-cache verdicts יתחדשו.
 
+### קטע קוד - איך ה-enrichment של websites נבנה
+
+מ-`llm_judge/judge_core.py`, ‏פונקציה `_websites_for`:
+
+</div>
+
+```python
+def _websites_for(S, ip):
+    """Build the 'websites' block for one candidate IP from S maps."""
+    http_c = (S.get("http_host_per_ip") or {}).get(ip)
+    sni_c  = (S.get("tls_sni_per_ip") or {}).get(ip)
+    dns_c  = (S.get("dns_per_ip") or {}).get(ip)
+    # Drop mDNS/.arpa noise from top DNS queries - the LLM cares about
+    # external browsing, not local service discovery.
+    if dns_c:
+        dns_c = {k: v for k, v in dns_c.items()
+                 if k and not k.endswith(".local")
+                 and not k.endswith(".arpa")
+                 and not k.endswith(".in-addr.arpa")
+                 and not k.startswith("_")}
+    return {
+        "top_http_hosts": _top_n_from_counter(http_c, 5, "host"),
+        "top_tls_sni":   _top_n_from_counter(sni_c, 5, "host"),
+        "top_dns_queries": _top_n_from_counter(dns_c, 5, "host"),
+    }
+```
+
+<div dir="rtl">
+
+**עיקרון חשוב**: אם הפייפליין לא ראה HTTP/TLS/DNS על ה-IP הזה בכלל -
+השדה חוזר `null` ולא `[]`. הפרומפט מלמד את ה-LLM שnull = ‏unknown, אז
+`null` על websites לא מטעה אותו לחשוב שה-IP "שקט" אלא ש"אנחנו לא יודעים".
+
 ### מה עדיין חסר (‏פתוח)
 
 - `device_context.category` on worker path - דורש extraction של
-  `classify_local_device` מ-`dashboard_module.py` ‏(~380 שורות). הlwlwl
-  ורק hostname+vendor נטענים כרגע ב-VM.
+  `classify_local_device` מ-`dashboard_module.py` ‏(~380 שורות). הקטגוריה
+  ‏(‏Mobile / Desktop / IoT) עדיין `"unknown"` על ה-VM; רק hostname+vendor
+  נטענים כרגע.
 - TLS versions + weak ciphers - `tls_anomaly` engine כרגע מחזיר רק score.
 - Baseline history (‏האם ה-IP הזה חדש?) - יש טבלת baseline אבל לא מזרימים.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 11. Sensors ו-HMAC - איך זיהוי מכריע מי רשאי להעלות
 
@@ -658,7 +1049,11 @@ c.commit()"
 
 ואז ליצור sensor חדש עם שם אחר.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 12. Retention ו-Data Lifecycle
 
@@ -693,7 +1088,11 @@ c.commit()"
 - הגיבויים של ה-DB יורדים ל-`/srv/netsec/db/backups/backup_YYYYMMDD.db`,
   ‏14 גיבויים לפי `RETENTION_BACKUP_KEEP=14`.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 13. Reconciliation - זיהוי תעבורת המערכת עצמה
 
@@ -728,7 +1127,11 @@ Allow list נאיבי היה אומר "התעלם מ-100.68.246.54". אבל אם
 reconciliation אנחנו רק "מפחיתים תעבורה שאנחנו יודעים שנוצרה על ידינו",
 לא "מכבים את ה-VM מהמעקב". כל תעבורה של ה-VM שאיננה בטבלה עדיין נבדקת.
 
+</div>
+
 ---
+
+<div dir="rtl">
 
 ## 14. נתונים טכניים: זיכרון, CPU, אחסון
 
@@ -741,7 +1144,7 @@ reconciliation אנחנו רק "מפחיתים תעבורה שאנחנו יוד�
 | דיסק | 96 GB (boot volume) |
 | Bandwidth | 10 Gbps (הוא ה-oracle limit) |
 
-**צריכת זיכרון בפועל** (‏מבוססת על מדידה):
+**צריכת זיכרון בפועל** (‏מבוססת על מדידה, ‏אוגוסט 2026 עם פאנל 4 שופטים):
 
 | container | RAM | CPU idle | CPU בעומס |
 |---|---|---|---|
@@ -749,30 +1152,38 @@ reconciliation אנחנו רק "מפחיתים תעבורה שאנחנו יוד�
 | `worker` | 413 MB | 0% | 40-70% במהלך parse+ML |
 | `retention` | 15 MB | 0% | ~5% פעם ביום |
 | `n8n` | ~200 MB | 0% | - |
-| `ollama` (עם llama3.1:8b טעון) | ~5 GB | 0% | ~350% (‏3.5 CPU cores) בעת inference |
+| `ollama` (‏‏qwen2.5:3b טעון) | ~2.4 GB | ~50 MB | ~350% (‏3.5 CPU cores) בעת inference |
 
-**סה"כ בזמן idle:** ~700 MB. **בזמן ניתוח פעיל:** ~1.5 GB.
-עם Ollama פעיל: +5 GB לכל מודל טעון.
+**סה"כ בזמן idle:** ~1.7 GB. **בזמן ניתוח פעיל:** ~3-4 GB.
+עם Ollama בinference: ‏עוד ~2 GB לזמן ריצה של מודל אחד.
 
 **דיסק בפועל** (‏אחרי חודש שימוש):
 - `/srv/netsec/data/pcap/`: ~2 GB (‏PCAPs של 7 ימים)
 - `/srv/netsec/data/fields/`: ~50 MB (‏gzipped exports)
 - `/srv/netsec/reports/`: ~100 MB (‏HTMLs + PDFs)
 - `/srv/netsec/db/`: 2-5 MB (‏SQLite) + ~30 MB backups
-- Docker images (ollama_models, כשמותקן): ~16 GB
+- Docker images (ollama_models, ‏qwen2.5:3b + לפעמים llama3.2:3b): ~4 GB
 - Docker layers (worker, ingest, retention, n8n): ~15 GB
 - מערכת Ubuntu + Tailscale + kernel: ~4 GB
-- **סה"כ:** ~40 GB מתוך 96 = 42% ‏(‏עם Ollama מלא).
+- **סה"כ:** ~25 GB מתוך 96 = 26% ‏(‏עם qwen2.5:3b בלבד).
+
+</div>
 
 ---
+
+<div dir="rtl">
 
 ## 15. גישה ל-VM
 
 ### SSH
 
+</div>
+
 ```bash
 ssh -i C:\path\to\netsec-agent.key\ssh-key-2026-07-12.key ubuntu@100.68.246.54
 ```
+
+<div dir="rtl">
 
 **שיפור נוח:** להוסיף לקובץ `~/.ssh/config`:
 ```
@@ -855,7 +1266,7 @@ docker compose ps
 
 ### שגיאת `no such column: notify_email`
 
-- ה-DB לא עלה למvרסת סכמה 3 או 4. `docker compose exec ingest_api
+- ה-DB לא עלה לגרסת סכמה 3 או 4. `docker compose exec ingest_api
   python3 -c "from server import db; c=db.connect(); print(c.execute('PRAGMA user_version').fetchone())"` → צריך להיות `(4,)`.
 - אם קטן מ-4: הקוד עדכני אבל ה-DB לא מיגר. בדוק `docker compose logs
   worker | grep -i migrate`.
@@ -867,7 +1278,167 @@ docker compose ps
 - `docker exec deploy-worker-1 curl -sS http://ollama:11434/api/tags`
   - האם ה-worker רואה את ה-Ollama container?
 
+### שופט בפאנל מחזיר "The request is suspicious"
+
+- זה סימן ש-Google (‏Gemini) חסם את הבקשה. קורה בעיקר עם AI Studio.
+- אם המפתח AQ.-format: וודא שהוא נשלח כ-`Authorization: Bearer` header
+  (‏לא כ-`?key=` parameter) - אצלנו זו התנהגות ברירת המחדל של `OpenAICompatClient`.
+- אם המפתח בפורמט AIza (‏מ-Google Cloud Console): צריך שהאISo יכלול את
+  Generative Language API ברשימת ה-restricted APIs, או שיהיה unrestricted.
+
+### הפאנל תקוע "judging..." זמן ארוך
+
+- זה יכול לקרות אם מודל שבור (‏למשל `allam-2-7b`) מחזיר 400 שוב ושוב.
+  התיקון של H3 מ-2026-08-01 סימן 4xx כ-`permanent` ומדלג על retry loop.
+- לוודא שהקוד עדכני: `docker exec deploy-worker-1 grep "permanent" /app/llm_judge/llm_clients.py`
+- אם 0 → צריך `git pull && docker compose build worker` + ‏restart.
+
+</div>
+
 ---
+
+<div dir="rtl">
+
+## 17. הוספת ספק LLM חדש לפאנל
+
+רוצים להוסיף ספק חדש (‏Cerebras, ‏OpenRouter, ‏Anthropic, ‏DeepSeek)?
+הפרויקט תוכנן ‏mecanismo של **endpoint profiles** ‏(‏decision IDX-05) שמאפשר
+להוסיף ספק ב-3 שורות ב-`.env`, בלי לגעת בקוד.
+
+### 3 השורות שדרוש להוסיף לספק חדש
+
+</div>
+
+```bash
+LLM_JUDGE_EP_<NAME>_BASE_URL=<the-openai-compat-endpoint>
+LLM_JUDGE_EP_<NAME>_MODEL=<default-model-name>
+LLM_JUDGE_EP_<NAME>_KEY_ENV=<NAME_OF_ENV_VAR_HOLDING_KEY>
+<THE_ENV_VAR>=<actual-key>
+```
+
+<div dir="rtl">
+
+`<NAME>` הופך לאותיות קטנות ולpanel spec: `<name>:model`.
+
+### דוגמה 1 - Cerebras (‏כבר מוגדר ב-`.env.example`)
+
+</div>
+
+```bash
+LLM_JUDGE_EP_CEREBRAS_BASE_URL=https://api.cerebras.ai/v1
+LLM_JUDGE_EP_CEREBRAS_MODEL=llama-3.3-70b
+LLM_JUDGE_EP_CEREBRAS_KEY_ENV=CEREBRAS_API_KEY
+CEREBRAS_API_KEY=csk_xxxxxxxxxxxx
+```
+
+<div dir="rtl">
+
+ואז ב-`LLM_JUDGE_PANEL`: להוסיף `cerebras:llama-3.3-70b`.
+
+### דוגמה 2 - OpenRouter (‏כבר מוגדר, ‏חינם בחלק מהמודלים)
+
+</div>
+
+```bash
+LLM_JUDGE_EP_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+LLM_JUDGE_EP_OPENROUTER_MODEL=deepseek/deepseek-r1:free
+LLM_JUDGE_EP_OPENROUTER_KEY_ENV=OPENROUTER_API_KEY
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
+```
+
+<div dir="rtl">
+
+### מה שכן צריך לוודא לפני שמוסיפים
+
+1. **OpenAI-compatible chat endpoint** - הספק חייב לתמוך במסלול
+   `POST /chat/completions` עם המבנה הסטנדרטי.
+2. **JSON response format** - עדיף שהספק תומך ב-`response_format: json_object`.
+   אם רק ב-`json_schema` - עדיין יעבוד אצלנו (‏יש fallback ל-json_object).
+3. **מפתח לא בפורמט מוזר** - `Authorization: Bearer <key>` הוא הדפולט.
+   אם הספק דורש `X-Api-Key` או משהו אחר - צריך לגעת בקוד.
+
+### הקוד שרץ מאחורי הקלעים
+
+`llm_judge/judge_config.py::endpoint_profiles` סורק את `.env` על כל
+`LLM_JUDGE_EP_<NAME>_BASE_URL` ובונה dict של profiles. `judge_cli._build_panel`
+קורא את `LLM_JUDGE_PANEL`, ואם רואה prefix מסוג `cerebras:` - מחפש את
+ה-profile ומרים `OpenAICompatClient` עם ה-base_url המתאים.
+
+</div>
+
+---
+
+<div dir="rtl">
+
+## 18. מצבי כשל ומה קורה בכל אחד
+
+מטריקס של תקלות אפשריות ואיך המערכת מגיבה:
+
+| מצב כשל | מה קורה |
+|---|---|
+| **שופט 1 מ-4 נופל** (‏429 permanent, ‏bad key, ‏timeout) | resolver מקבל 3 verdicts, ‏מכריע כרגיל, ‏מסמן `⚖ REVIEW` אם השופט שנפל היה חשוב |
+| **2 מ-4 נופלים** | resolver מקבל 2 verdicts, ‏אם מסכימים - ‏consensus; ‏אם חולקים - ‏חמור יותר עם `⚖ REVIEW` |
+| **3 מ-4 נופלים** | resolver מקבל 1 verdict, ‏מסמן `needs_review=True` עם note "‏only one panel judge returned a valid verdict" |
+| **כל 4 נופלים** | ה-candidate נכנס ל-`dropped` list, ‏לא מופיע בדוח, ‏ה-worker ממשיך לcandidates הבאים |
+| **worker נהרג באמצע ניתוח** (‏OOM, ‏docker restart) | ה-session נשאר `status='running'` עד שהstale reclaimer שם `queued` שוב (‏אחרי `NETSEC_STALE_RUNNING_S=3600` שניות) |
+| **ingest_api מקבל חתימה לא תקפה** | מחזיר 401 מיד, ‏לא שומר קובץ, ‏לא יוצר session |
+| **PCAP corrupt / empty** | worker זורק שגיאה מוקדם (‏`_MIN_PCAP_HEADER_BYTES = 24`), ‏session מסומן `error`, ‏מייל לא נשלח |
+| **DB נעול** (‏שני processes מנסים לכתוב) | WAL mode - כותב אחד, קורא רב-מפעילים בו זמנית. ‏SQLite עצמו queues writes |
+| **הדיסק מתמלא > 85%** | retention מתחיל מחיקה אגרסיבית של PCAP-ים ישנים |
+| **הדיסק מתמלא > 95%** | ingest_api יכול להיכשל בכתיבה - PCAPs חדשים ידחו עם 507 Insufficient Storage |
+| **Groq TPD limit** (‏100k tokens ליום) | 429 עם retry logic. אם באמת מיצה - השופט נופל, ‏אחרים ממשיכים |
+| **Gemini quota depleted** | 429 "prepayment credits depleted". ‏מטופל אותו דבר כ-permanent 4xx (‏‏‏‏השופט נופל, אחרים ממשיכים) |
+| **Ollama container down** | worker רואה connection refused, ‏השופט הזה נופל, ‏אחרים ממשיכים |
+| **Tailscale down על ה-VM** | לפטופ לא יכול לשלוח PCAP חדש, ‏אבל ה-worker ממשיך לעבד sessions בתור |
+| **SMTP fail** | ‏(‏Google, ‏incorrect app-password, ‏quota) → נופל ל-`n8n` webhook אם מוגדר |
+| **כל ההזרימו טוב, אבל LLM מחזיר "benign" על scan** | ‏`RULE_GUARDRAIL=1` מעלה אוטומטית ל-`suspicious` עם ה-category של החוק שירה |
+
+**עיקרון הכללי**: כל שכבה fail-safe. אף כישלון בודד לא מפיל את כל
+המערכת. אף לוגיקה לא צריכה שתתערב יד אנושית בזמן ריצה - הכל מטופל.
+
+</div>
+
+---
+
+<div dir="rtl">
+
+## 19. היסטוריית גרסאות ה-prompt
+
+הפרומפט המערכתי (`SYSTEM_PROMPT` ‏ב-`llm_judge/judge_core.py`) עובר גרסאות
+מסודרות. גרסת הפרומפט היא חלק מ-cache fingerprint - ‏bump = ‏cache
+invalidation אוטומטי.
+
+| גרסה | תאריך | שינוי מרכזי |
+|---|---|---|
+| **v0.1.0** | 2026-06 | פרומפט בסיסי - ‏verdict/category/confidence/reasoning בלבד |
+| **v0.2.0** | 2026-07 | הוספת cheat sheet לקטגוריות + 2 worked examples |
+| **v0.2.5** | 2026-07 | הוספת `evidence_features` + `recommended_action` |
+| **v0.3.0** | 2026-07 | הוספת כלל HIGH-PRECISION rules + rule guardrail |
+| **v0.4.0** | 2026-08-01 | **הנוכחי**. ‏הוספת פסקאות על 5 בלוקים חדשים ב-blob: session_context.time, device_context, websites, traffic |
+
+**כשbump את הגרסה:** ‏(‏מ-`llm_judge/judge_config.py`)
+
+</div>
+
+```python
+PROMPT_VERSION = "v0.4.0"  # I2: blob enrichments (time, device, websites, traffic)
+```
+
+<div dir="rtl">
+
+**מה קורה אחרי bump:**
+- ‏כל cache verdicts הופכים ל-stale (‏fingerprint כולל את PROMPT_VERSION)
+- ‏בהעלאה הבאה של PCAP: השופטים נקראים מחדש, אבל עם הבלוב החדש ‏(‏מכיל
+  את השדות שהוספנו)
+- ‏אם השופטים משנים verdict בעקבות מידע חדש - ‏זה מופיע ב-debate audit
+
+</div>
+
+---
+
+<div dir="rtl">
 
 *המסמך מתעדכן ככל שהמערכת מתפתחת. שינויי סכמה גדולים או שירותים
 חדשים - נוספים לסעיפים הרלוונטיים.*
+
+</div>

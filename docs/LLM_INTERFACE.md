@@ -323,22 +323,37 @@ splits use fail-safe severity and set `needs_human_review=True`).
 ## 6. Panel wall-clock and where time goes
 
 Measured on the production VM (Oracle ARM 4 vCPU / 24 GB) with the
-default 3-judge panel:
+**current 4-judge panel** (activated 2026-08-01):
 
 | Judge | Round 1 latency | Notes |
 |---|---|---|
-| `groq:llama-3.1-8b-instant` | ~500 ms | Groq HTTP + inference |
-| `groq:llama-3.3-70b-versatile` | ~700 ms | Groq HTTP + inference |
-| `ollama:qwen2.5:3b` | ~53 s | Local CPU-only inference |
+| `groq:llama-3.1-8b-instant` | ~500 ms | Groq HTTP + inference, 100k tok/day free |
+| `groq:llama-3.3-70b-versatile` | ~700 ms | Groq HTTP + inference, 100k tok/day free |
+| `ollama:qwen2.5:3b` | ~53 s | Local CPU-only inference on ARM (bottleneck) |
+| `gemini:gemini-2.5-flash` | ~1-2 s | Google AI Studio Bearer-auth, 15 RPM / 1M tok/day free |
 
 Panel wall-clock per candidate = **max(all judges)** because the panel
-runs them concurrently through a `ThreadPoolExecutor`. So a full 3-judge
-run costs ~53 s per candidate, dominated by qwen. A 5-candidate PCAP
-takes ~4-5 minutes end to end.
+runs them concurrently through a `ThreadPoolExecutor`. So a full 4-judge
+run still costs ~53 s per candidate, dominated by qwen (the three
+network judges finish and idle waiting for the local model). A 5-candidate
+PCAP takes ~4-5 minutes end to end.
 
 If a judge fails (permanent 4xx, timeout, all retries exhausted), the
 panel keeps running with the survivors; the effective verdict is still
 produced and the failed judge is recorded in the participation report.
+Concretely: with any 1 or 2 of the 4 judges down, `resolve_panel` still
+returns a verdict; only if all 4 fail does the candidate land in
+`dropped`.
+
+**Why 4 and not 5 or 6?** Diminishing returns on diversity - two Groq
+models (both Meta Llama family) give a strong "modern instruction-tuned
+LLM" baseline; Gemini adds a genuinely different training corpus (Google
+DeepMind); Qwen adds an out-of-family (Alibaba) local check that also
+covers the "what if all cloud providers are down" case. Adding a 5th
+model on Groq would double-count the family bias; adding a 5th slow
+local model would push wall-clock past 2 minutes per candidate. The
+4-judge config is the diversity-cost sweet spot documented in
+`docs/VM_ARCHITECTURE_HE.md` section 10.
 
 ---
 

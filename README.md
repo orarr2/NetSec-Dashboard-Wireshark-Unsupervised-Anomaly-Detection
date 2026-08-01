@@ -186,7 +186,14 @@ live in `deploy/`.
   judges run (one, two, or many free providers: Groq, Gemini, Cerebras,
   OpenRouter, GitHub Models, plus a free local Ollama). Every judge you
   pick runs and all verdicts come back by email - there is no automatic
-  fallback that swaps models behind your back.
+  fallback that swaps models behind your back. **Current production
+  panel on the reference VM is 4 judges**: `groq:llama-3.1-8b-instant`,
+  `groq:llama-3.3-70b-versatile`, `ollama:qwen2.5:3b` (local, CPU-only,
+  ~55 s/verdict on ARM 24GB), and `gemini:gemini-2.5-flash` (Google
+  AI Studio Bearer-auth). The ThreadPoolExecutor runs all four in
+  parallel so wall-clock ≈ max(judges), not sum. Full breakdown +
+  code in `docs/VM_ARCHITECTURE_HE.md` section 10 and the exact prompt
+  in `docs/LLM_INTERFACE.md`.
 - **Consumers (Tier 3)** - the notebook (as a remote client *or* a fully
   offline local analyzer), email, and n8n alerts.
 
