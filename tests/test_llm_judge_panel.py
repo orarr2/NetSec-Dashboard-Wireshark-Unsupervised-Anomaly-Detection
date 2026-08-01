@@ -222,6 +222,123 @@ def test_panel_cache_is_thread_safe(tmp_path):
 # --------------------------------------------------------------------------
 # parse_panel_spec
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# SCIENTIFIC_AUDIT 3.2: majority resolver
+# --------------------------------------------------------------------------
+def _pos(model, label, category="port_scan", conf=0.9):
+    return {"model": model, "verdict": verdict(label, category, conf),
+            "stance": None, "rebuttal": None, "revised": False,
+            "failed": False, "cached": False, "latency_ms": 0, "error": None}
+
+
+def test_resolver_majority_wins_over_hallucination(monkeypatch):
+    """SCIENTIFIC_AUDIT 3.2: with 3 judges (2 benign + 1 malicious), the
+    default majority mode picks benign - one hallucinating "malicious"
+    should NOT outvote two "benign" peers. Fail-safe mode still picks
+    malicious."""
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL_QUORUM", "majority")
+    positions = [_pos("m-a", "benign", "benign_anomaly", 0.6),
+                 _pos("m-b", "benign", "benign_anomaly", 0.7),
+                 _pos("m-c", "malicious", "port_scan", 0.9)]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "benign"
+    assert info["needs_human_review"] is False
+    assert "majority" in info["note"] and "2/3" in info["note"]
+
+
+def test_resolver_fail_safe_mode_still_takes_worst(monkeypatch):
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL_QUORUM", "fail-safe")
+    positions = [_pos("m-a", "benign", "benign_anomaly", 0.6),
+                 _pos("m-b", "benign", "benign_anomaly", 0.7),
+                 _pos("m-c", "malicious", "port_scan", 0.9)]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "malicious"
+    assert info["needs_human_review"] is True
+
+
+def test_resolver_no_majority_falls_back_to_fail_safe(monkeypatch):
+    """4 judges split 2-2: no strict majority (>50% would need 3),
+    so majority mode ALSO falls back to fail-safe with human review."""
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL_QUORUM", "majority")
+    positions = [_pos("m-a", "benign", "benign_anomaly", 0.6),
+                 _pos("m-b", "benign", "benign_anomaly", 0.7),
+                 _pos("m-c", "malicious", "port_scan", 0.9),
+                 _pos("m-d", "malicious", "port_scan", 0.8)]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "malicious"  # fail-safe
+    assert info["needs_human_review"] is True
+
+
+def test_resolver_3_way_split_falls_back_to_fail_safe(monkeypatch):
+    """3 judges, all different labels: no majority possible - fail-safe."""
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL_QUORUM", "majority")
+    positions = [_pos("m-a", "benign", "benign_anomaly", 0.6),
+                 _pos("m-b", "suspicious", "port_scan", 0.7),
+                 _pos("m-c", "malicious", "port_scan", 0.9)]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "malicious"  # most severe
+    assert info["needs_human_review"] is True
+
+
+def test_resolver_majority_preserves_consensus_and_single_paths(monkeypatch):
+    """Majority mode does not touch the consensus / single-judge / same-label
+    branches - those pre-date the fix and must keep working identically."""
+    monkeypatch.setattr(judge_config, "LLM_JUDGE_PANEL_QUORUM", "majority")
+    # consensus - all agree
+    positions = [_pos("m-a", "malicious", "port_scan", 0.6),
+                 _pos("m-b", "malicious", "port_scan", 0.9)]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "malicious"
+    assert info["agreement"] is True and info["needs_human_review"] is False
+    # single valid judge
+    positions = [_pos("m-a", "malicious", "port_scan", 0.9),
+                 {"model": "m-b", "verdict": None, "stance": None,
+                  "rebuttal": None, "revised": False, "failed": True,
+                  "cached": False, "latency_ms": 0, "error": "boom"}]
+    eff, info = judge_core.resolve_panel(positions)
+    assert eff["verdict"] == "malicious"
+    assert info["needs_human_review"] is True
+    assert "only one" in info["note"]
+
+
+# --------------------------------------------------------------------------
+# SCIENTIFIC_AUDIT 3.7: evidence_valid diagnostic
+# --------------------------------------------------------------------------
+def test_evaluate_evidence_all_paths_resolve():
+    cand = scan_candidate()
+    v = verdict()
+    v["evidence_features"] = ["rule_signals.scan_alerts",
+                              "rule_signals.scan_alerts[0].count",
+                              "features.syn_count"]
+    result = judge_core.evaluate_evidence(v, cand)
+    assert result["evidence_valid"] is True
+    assert result["evidence_invalid_features"] == []
+
+
+def test_evaluate_evidence_flags_made_up_paths():
+    cand = scan_candidate()
+    v = verdict()
+    v["evidence_features"] = ["features.syn_count",             # ok
+                              "rule_signals.made_up_field",      # bad
+                              "advanced_signals.beaconing.score", # bad - null
+                              "features.does_not_exist"]         # bad
+    result = judge_core.evaluate_evidence(v, cand)
+    assert result["evidence_valid"] is False
+    assert "rule_signals.made_up_field" in result["evidence_invalid_features"]
+    assert "advanced_signals.beaconing.score" in result["evidence_invalid_features"]
+    assert "features.does_not_exist" in result["evidence_invalid_features"]
+    assert "features.syn_count" not in result["evidence_invalid_features"]
+
+
+def test_evaluate_evidence_never_rejects_verdict():
+    """Diagnostic only - even 100% invalid citations must not throw."""
+    v = verdict()
+    v["evidence_features"] = ["nonsense[99].deep.path", "utter.garbage"]
+    result = judge_core.evaluate_evidence(v, scan_candidate())
+    assert result["evidence_valid"] is False
+    assert len(result["evidence_invalid_features"]) == 2
+
+
 def test_parse_panel_spec_variants():
     assert judge_core.parse_panel_spec(
         "m-large, m-small", default_provider="openai_compat") == [

@@ -87,6 +87,16 @@ LLM_JUDGE_PANEL = os.environ.get("LLM_JUDGE_PANEL", "").strip()
 LLM_JUDGE_DEBATE = os.environ.get("LLM_JUDGE_DEBATE",
                                   "1").lower() not in ("0", "false")
 
+# Panel resolution policy when judges split on the verdict label.
+# "majority" (default v0.5) requires strict majority (>50%) to pick a label;
+#     without a majority, falls back to fail-safe (most severe wins) and
+#     flags needs_human_review. This is SCIENTIFIC_AUDIT 3.2 - one
+#     hallucinating judge in a 3+ panel should not outvote two peers.
+# "fail-safe" (pre-v0.5 behavior) always takes the most severe label on
+#     any label split. Set this when you want the paranoid default.
+LLM_JUDGE_PANEL_QUORUM = os.environ.get("LLM_JUDGE_PANEL_QUORUM",
+                                         "majority").lower()
+
 # Named endpoint profiles (spec section 6.1, decision IDX-05). Each profile
 # is an OpenAI-compatible host that can appear in a panel by name, so one
 # panel can mix several providers (Groq + Gemini + local Ollama) - which a

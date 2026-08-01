@@ -266,6 +266,61 @@ def validate_verdict(obj):
     }
 
 
+def _resolve_evidence_path(candidate, path):
+    """Walk a dotted path (e.g. "rule_signals.scan_alerts[0].count") over
+    the candidate blob. Returns True if the path resolves to a non-None
+    value, False otherwise. Never raises - a malformed path is just
+    invalid evidence.
+    """
+    import re
+    if not path or not isinstance(candidate, dict):
+        return False
+    node = candidate
+    # Split on dots but keep [N] indices attached
+    for part in path.split("."):
+        m = re.match(r"^([^\[]+)(\[(\d+)\])?$", part.strip())
+        if not m:
+            return False
+        key = m.group(1)
+        idx = m.group(3)
+        if isinstance(node, dict):
+            if key not in node:
+                return False
+            node = node[key]
+        else:
+            return False
+        if idx is not None:
+            try:
+                i = int(idx)
+                if not isinstance(node, list) or i >= len(node):
+                    return False
+                node = node[i]
+            except (ValueError, TypeError):
+                return False
+    return node is not None
+
+
+def evaluate_evidence(verdict, candidate):
+    """SCIENTIFIC_AUDIT 3.7: check that every evidence_features citation
+    resolves to a field that exists (and is non-None) in the candidate
+    blob. Diagnostic only - never rejects a verdict. Returns a dict:
+
+        {"evidence_valid": bool,
+         "evidence_invalid_features": [list of paths that did not resolve]}
+
+    Attach this to the verdict (or the panel judge row) so a CI job can
+    trend "how often does the model cite made-up feature names".
+    """
+    if not verdict or "evidence_features" not in verdict:
+        return {"evidence_valid": True, "evidence_invalid_features": []}
+    invalid = []
+    for path in verdict["evidence_features"]:
+        if not _resolve_evidence_path(candidate, str(path)):
+            invalid.append(str(path))
+    return {"evidence_valid": len(invalid) == 0,
+            "evidence_invalid_features": invalid}
+
+
 # --------------------------------------------------------------------------
 # Candidate assembly (spec section 4.1 / 4.2).
 # --------------------------------------------------------------------------
@@ -865,6 +920,10 @@ def _verdict_from_client(cand, client, cache, prompt_version):
             raw = client.judge(SYSTEM_PROMPT, json.dumps(cand, indent=2))
             latency_ms = int((time.perf_counter() - t0) * 1000)
             verdict = validate_verdict(json.loads(raw))
+            # SCIENTIFIC_AUDIT 3.7: attach evidence-faithfulness diagnostic
+            # (never rejects; a CI job can trend the rate of hallucinated
+            # citations over time)
+            verdict.update(evaluate_evidence(verdict, cand))
             break
         except Exception as e:
             last_err, verdict = e, None
@@ -1285,21 +1344,28 @@ def _debate_from_client(cand, own_verdict, peers, client, cache,
     return dict(own_verdict), "maintain", None, latency_ms, False, last_err
 
 
-def resolve_panel(positions):
+def resolve_panel(positions, quorum=None):
     """Deterministic resolution of post-debate positions (no LLM call).
 
     positions: [{"model": id, "verdict": dict|None, ...}] - one per panel
     judge, verdict None when that judge failed both rounds.
+    quorum: "majority" (default) or "fail-safe". Overrides
+        judge_config.LLM_JUDGE_PANEL_QUORUM when set.
 
-    Policy (fail-safe, mirrors the committee):
-      - one valid verdict            -> use it, needs review (uncorroborated)
-      - all agree on label+category  -> consensus, highest confidence wins
-      - same label, category split   -> highest confidence wins, needs review
-      - label split                  -> most severe label wins (highest
-                                        confidence within it), needs review
+    Policy:
+      - one valid verdict          -> use it, needs review (uncorroborated)
+      - all agree on label+category -> consensus, highest confidence wins
+      - same label, category split -> highest confidence wins, needs review
+      - label split + majority mode + strict majority (>50%) agrees on a
+        label -> use majority's label, highest confidence within it
+      - label split + fail-safe mode OR no majority -> most severe label
+        wins, needs review (SCIENTIFIC_AUDIT 3.2: one hallucinating judge
+        should NOT outvote two peers in a 3+ panel)
     Returns (effective_verdict|None, info). None only when every judge
     failed.
     """
+    if quorum is None:
+        quorum = judge_config.LLM_JUDGE_PANEL_QUORUM
     valid = [p for p in positions if p["verdict"] is not None]
     if not valid:
         return None, {"agreement": False, "needs_human_review": True,
@@ -1320,6 +1386,23 @@ def resolve_panel(positions):
         return dict(eff["verdict"]), {
             "agreement": False, "needs_human_review": True,
             "note": "judges agree on the verdict but dispute the category"}
+    # Labels split. Majority mode (SCIENTIFIC_AUDIT 3.2) tries strict
+    # majority first before the fail-safe: with 3+ judges, one
+    # hallucinating "malicious" should not outvote two "benign" peers.
+    if quorum == "majority":
+        from collections import Counter
+        counts = Counter(p["verdict"]["verdict"] for p in valid)
+        top_label, top_n = counts.most_common(1)[0]
+        # Strict majority = more than half of the valid judges
+        if top_n * 2 > len(valid):
+            side = [p for p in valid if p["verdict"]["verdict"] == top_label]
+            eff = max(side, key=lambda p: p["verdict"]["confidence"])
+            return dict(eff["verdict"]), {
+                "agreement": False, "needs_human_review": False,
+                "note": f"panel resolved by majority ({top_n}/{len(valid)} "
+                        f"chose '{top_label}')"}
+    # No majority OR quorum=fail-safe: most severe label wins with
+    # human review flagged.
     worst = max(labels, key=lambda v: SEVERITY[v])
     side = [p for p in valid if p["verdict"]["verdict"] == worst]
     eff = max(side, key=lambda p: p["verdict"]["confidence"])
