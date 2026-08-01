@@ -73,7 +73,8 @@ def create_app(db_path=None, data_root=None):
                           x_session_kind: str = Header("prod"),
                           x_session_label: str = Header(None),
                           x_filename: str = Header("capture.pcap"),
-                          x_notify_email: str = Header(None)):
+                          x_notify_email: str = Header(None),
+                          x_judge_panel: str = Header(None)):
         started = time.time()
         sha = x_sha256.strip().lower()
         if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
@@ -90,6 +91,24 @@ def create_app(db_path=None, data_root=None):
             from .notify import valid_address
             if valid_address(x_notify_email):
                 notify_email = x_notify_email.strip()
+
+        # N1: per-upload judge panel override. The dashboard drops a
+        # preset id in X-Judge-Panel; ingest resolves it to a spec
+        # string. An unrecognised id or bad spec silently falls back
+        # to the .env default (LLM_JUDGE_PANEL) - a UI typo must not
+        # lose a large PCAP.
+        judge_panel_override = None
+        if x_judge_panel:
+            try:
+                from llm_judge import panel_presets
+                preset = panel_presets.preset_by_id(x_judge_panel.strip())
+                if preset is not None:
+                    judge_panel_override = preset["spec"]
+                elif panel_presets.valid_spec(x_judge_panel.strip()):
+                    # allow raw spec strings for advanced users / tests
+                    judge_panel_override = x_judge_panel.strip()
+            except Exception:
+                pass
 
         conn = _conn()
         try:
@@ -153,7 +172,8 @@ def create_app(db_path=None, data_root=None):
 
             session_id = db.create_session(conn, pcap_id, label,
                                            x_session_kind,
-                                           notify_email=notify_email)
+                                           notify_email=notify_email,
+                                           judge_panel_override=judge_panel_override)
             db.log_ingest_telemetry(
                 conn, sensor["id"], started, time.time(),
                 request.url.hostname or "", request.url.port or 0,

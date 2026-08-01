@@ -15,7 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sensors (
@@ -177,6 +177,16 @@ ALTER TABLE panel_audit ADD COLUMN needs_review INTEGER DEFAULT 0;
 """
 
 
+# v5: per-session LLM_JUDGE_PANEL override. The dashboard "Send to VM"
+# button lets the user pick which judges run this specific upload
+# (fast cloud / balanced / local-only / max-diversity). ingest_api
+# stores the picked spec here; the worker reads it and passes to
+# analyze_and_judge instead of the .env default.
+_SCHEMA_V5 = """
+ALTER TABLE sessions ADD COLUMN judge_panel_override TEXT;
+"""
+
+
 def default_db_path():
     """Resolve the history DB path. Treats NETSEC_DB set to an EMPTY
     string exactly like an unset variable - this matters because docker
@@ -226,6 +236,10 @@ def migrate(conn):
     if current < 4:
         conn.executescript(_SCHEMA_V4)
         conn.execute("PRAGMA user_version = 4")
+        conn.commit()
+    if current < 5:
+        conn.executescript(_SCHEMA_V5)
+        conn.execute("PRAGMA user_version = 5")
         conn.commit()
     return SCHEMA_VERSION
 
@@ -325,13 +339,16 @@ def register_pcap(conn, sha256, orig_name, size_bytes, sensor_id,
     return cur.lastrowid, True
 
 
-def create_session(conn, pcap_id, label, kind="prod", notify_email=None):
+def create_session(conn, pcap_id, label, kind="prod", notify_email=None,
+                   judge_panel_override=None):
     if kind not in ("prod", "test"):
         raise ValueError(f"kind must be prod|test, got {kind!r}")
     cur = conn.execute(
         "INSERT INTO sessions (pcap_id, label, status, kind, queued_at,"
-        " notify_email) VALUES (?, ?, 'queued', ?, ?, ?)",
-        (pcap_id, label, kind, _utcnow(), notify_email))
+        " notify_email, judge_panel_override)"
+        " VALUES (?, ?, 'queued', ?, ?, ?, ?)",
+        (pcap_id, label, kind, _utcnow(), notify_email,
+         judge_panel_override))
     conn.commit()
     return cur.lastrowid
 

@@ -610,14 +610,20 @@ def _validate_committee_config():
             f"exists on '{provider}'.")
 
 
-def _build_panel():
-    """Parse LLM_JUDGE_PANEL and construct its clients.
+def _build_panel(spec_override=None):
+    """Parse LLM_JUDGE_PANEL (or the per-upload override) and construct its
+    clients.
 
     Returns (entries, clients, init_failures). Raises ValueError on a spec
     that cannot yield a working panel (bad syntax, duplicates, or fewer
     than two constructible judges) - loudly, BEFORE the expensive pipeline
-    run, mirroring _validate_committee_config."""
-    entries = judge_core.parse_panel_spec(judge_config.LLM_JUDGE_PANEL)
+    run, mirroring _validate_committee_config.
+
+    spec_override (N1): the dashboard's Send-to-VM dropdown puts the
+    chosen preset spec here. When set, it wins over the .env default.
+    """
+    spec = spec_override if spec_override is not None else judge_config.LLM_JUDGE_PANEL
+    entries = judge_core.parse_panel_spec(spec)
     clients, init_failures = make_panel_clients(
         entries, verdict_schema=judge_core.VERDICT_SCHEMA)
     for f in init_failures:
@@ -625,7 +631,7 @@ def _build_panel():
               f"initialize and is excluded: {f['error']}", flush=True)
     if len(clients) < 2:
         raise ValueError(
-            f"LLM_JUDGE_PANEL={judge_config.LLM_JUDGE_PANEL!r}: only "
+            f"panel spec {spec!r}: only "
             f"{len(clients)} of {len(entries)} judges could be "
             f"constructed - a panel needs at least two. Failures: "
             + "; ".join(f"{f['entry']}: {f['error']}"
@@ -635,7 +641,7 @@ def _build_panel():
 
 def analyze_and_judge(pcap_path, label="S1", verbose=True,
                       return_session=False, baseline_conn=None,
-                      current_session_id=None):
+                      current_session_id=None, panel_spec_override=None):
     """Run the pipeline + judge; returns (out, assembled, client, context).
 
     return_session=True appends the raw session dict and the rule
@@ -653,8 +659,14 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     """
     _validate_committee_config()
     panel = None
-    if judge_config.LLM_JUDGE_PANEL:
-        panel = _build_panel()  # fail fast before the expensive pipeline
+    # N1: the dashboard drop-down sends its picked spec as
+    # panel_spec_override; if set (even to "" for single-judge),
+    # it wins over the .env LLM_JUDGE_PANEL default for this run.
+    effective_spec = (panel_spec_override
+                      if panel_spec_override is not None
+                      else judge_config.LLM_JUDGE_PANEL)
+    if effective_spec:
+        panel = _build_panel(spec_override=effective_spec)  # fail fast
     import run_pipeline as rp  # imports tshark - keep lazy for tests
 
     if verbose:

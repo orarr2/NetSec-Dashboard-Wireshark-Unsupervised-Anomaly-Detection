@@ -122,16 +122,20 @@ def build_map_report(conn, S, out_path, wigle_fn=None):
 
 
 def _default_analyze(pcap_path, label, baseline_conn=None,
-                     current_session_id=None):
+                     current_session_id=None, panel_override=None):
     """analyze_fn contract: (out, assembled, client, context, S, findings).
     baseline_conn (L5) is an optional DB connection so the judge sees
     each candidate's prior-session history. current_session_id excludes
-    the running session from the history lookup."""
+    the running session from the history lookup.
+    panel_override (N1) is a per-upload LLM_JUDGE_PANEL spec picked by
+    the dashboard's Send-to-VM dropdown - overrides the .env default
+    for just this session."""
     from llm_judge import judge_cli
     return judge_cli.analyze_and_judge(pcap_path, label=label or "S1",
                                        return_session=True,
                                        baseline_conn=baseline_conn,
-                                       current_session_id=current_session_id)
+                                       current_session_id=current_session_id,
+                                       panel_spec_override=panel_override)
 
 
 def _default_md(pcap_path, out, assembled, client, context):
@@ -195,14 +199,16 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
                 f"(need at least {_MIN_PCAP_HEADER_BYTES} for the libpcap "
                 f"file header). Nothing to analyze.")
 
-        # L5: pass the DB conn + session_id so the LLM candidate blob
-        # gets a baseline_history block per IP. analyze_fn contract
-        # accepts baseline_conn/current_session_id; injected stubs
-        # in tests ignore them.
+        # L5+N1: pass DB conn + session_id (baseline_history) and the
+        # per-upload panel spec (N1 dropdown). analyze_fn contract
+        # accepts baseline_conn / current_session_id / panel_override.
+        # Injected stubs in tests may ignore them (TypeError fallback).
+        panel_override = job.get("judge_panel_override")
         try:
             out, assembled, client, context, S, findings = analyze_fn(
                 pcap_path, job.get("label"),
-                baseline_conn=conn, current_session_id=sid)
+                baseline_conn=conn, current_session_id=sid,
+                panel_override=panel_override)
         except TypeError:
             # older analyze_fn signature (positional only) - fall back
             out, assembled, client, context, S, findings = analyze_fn(
