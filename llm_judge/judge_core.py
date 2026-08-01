@@ -398,11 +398,64 @@ def _oui_vendor(mac):
         return None
 
 
+def _lightweight_device_category(vendor, ports, dns_names):
+    """L6: best-effort device category from a small heuristic table when
+    no dashboard-produced inventory is attached. Returns one of:
+    Mobile / Desktop / IoT / Camera / Printer / VoIP Phone / Router /
+    Streaming / Server / unknown. Kept intentionally small; the full
+    classifier lives in app/dashboard_module.py and takes 380 LOC.
+    """
+    v = (vendor or "").lower()
+    dns_str = " ".join(dns_names or []).lower()
+    port_set = set(ports or [])
+    # Port-based signals - strong indicators, checked first
+    if 62078 in port_set:
+        return "Mobile"           # iOS lockdown service
+    if 5228 in port_set:
+        return "Mobile"           # Google GCM push
+    if port_set & {9100, 631, 515}:
+        return "Printer"
+    if port_set & {5060, 5061, 2000}:
+        return "VoIP Phone"
+    if 554 in port_set:
+        return "Camera"           # RTSP
+    if port_set & {8008, 8009, 8443} and "google" in v:
+        return "Streaming"        # Chromecast
+    # Vendor / DNS name signals
+    if "apple" in v:
+        return "Mobile" if "iphone" in dns_str or "ipad" in dns_str else "Desktop"
+    if "samsung" in v:
+        return "Mobile" if "galaxy" in dns_str else "Consumer"
+    if "google" in v and "nest" in dns_str:
+        return "IoT"
+    if any(k in v for k in ("cisco", "meraki", "juniper", "aruba", "mikrotik")):
+        return "Router"
+    if any(k in v for k in ("netgear", "tp-link", "asus", "linksys", "d-link")):
+        return "Router"
+    if any(k in v for k in ("raspberry", "espressif", "arduino")):
+        return "IoT"
+    if "roku" in v or "amazon" in v and "fire" in dns_str:
+        return "Streaming"
+    if "microsoft" in v or "xbox" in dns_str:
+        return "Desktop"
+    if "sony" in v and "playstation" in dns_str:
+        return "Streaming"
+    # Ubiquitous but weak - only DNS names left
+    if any(k in dns_str for k in ("iphone", "ipad", "-mobile")):
+        return "Mobile"
+    if any(k in dns_str for k in ("macbook", "-pc", "-laptop", "-desktop")):
+        return "Desktop"
+    if any(k in dns_str for k in ("printer", "hp-", "canon-")):
+        return "Printer"
+    return "unknown"
+
+
 def _lightweight_device_context(S, ip):
-    """Fallback device_context derived from just S['ip_to_mac'] and
-    S['dns_per_ip'] - no dashboard-module dependency. Used when the
-    caller did not build a full local inventory (the worker path).
-    Returns the empty default block if we can't derive anything useful."""
+    """Fallback device_context derived from just S['ip_to_mac'],
+    S['dns_per_ip'] and S['dst_ports_per_ip'] - no dashboard-module
+    dependency. Used when the caller did not build a full local
+    inventory (the worker path). Returns the empty default block if we
+    can't derive anything useful."""
     out = dict(_EMPTY_DEV)
     mac_counter = (S.get("ip_to_mac") or {}).get(ip)
     if mac_counter:
@@ -417,14 +470,35 @@ def _lightweight_device_context(S, ip):
     # service record). No printable hostname? Leave null - the LLM is
     # taught to read null as unknown.
     dns = (S.get("dns_per_ip") or {}).get(ip)
+    dns_names = []
     if dns:
         try:
             for q, _ in dns.most_common(20):
-                if q.endswith(".local") and not q.startswith("_"):
+                dns_names.append(q)
+                if (out["hostname"] is None and q.endswith(".local")
+                        and not q.startswith("_")):
                     out["hostname"] = q
-                    break
         except Exception:
             pass
+    # L6: try to derive category from OUI + top dst ports + DNS names.
+    ports_counter = (S.get("dst_ports_per_ip") or {}).get(ip)
+    port_ints = []
+    if ports_counter:
+        try:
+            for k, _ in ports_counter.most_common(10):
+                # keys are "port/proto" strings from run_pipeline
+                port_str = str(k).split("/")[0]
+                if port_str.isdigit():
+                    port_ints.append(int(port_str))
+        except Exception:
+            pass
+    try:
+        cat = _lightweight_device_category(out["oui_vendor"], port_ints,
+                                            dns_names)
+        if cat and cat != "unknown":
+            out["category"] = cat
+    except Exception:
+        pass
     return out
 
 

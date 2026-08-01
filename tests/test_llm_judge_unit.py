@@ -222,6 +222,32 @@ def test_assemble_traffic_null_when_no_data():
                   "bytes_out": None, "upload_ratio": None}
 
 
+def test_lightweight_device_category_from_ports():
+    """L6: iPhone lockdown port 62078 → Mobile; RTSP 554 → Camera; etc."""
+    assert judge_core._lightweight_device_category(
+        "Apple, Inc.", [62078, 5228, 443], []) == "Mobile"
+    assert judge_core._lightweight_device_category(
+        "Cisco Systems", [554, 80], []) == "Camera"
+    assert judge_core._lightweight_device_category(
+        "HP Enterprise", [9100, 631, 80], []) == "Printer"
+    assert judge_core._lightweight_device_category(
+        "Yealink Network", [5060, 80], []) == "VoIP Phone"
+    assert judge_core._lightweight_device_category(
+        "Cisco Systems", [80, 443, 22], []) == "Router"
+    assert judge_core._lightweight_device_category(
+        "Unknown Vendor", [80, 443], []) == "unknown"
+
+
+def test_lightweight_device_category_from_dns_names():
+    """L6: DNS name hints classify when ports/vendor alone don't."""
+    assert judge_core._lightweight_device_category(
+        "Apple, Inc.", [443], ["iphone-of-or.local"]) == "Mobile"
+    assert judge_core._lightweight_device_category(
+        "Apple, Inc.", [443], ["or-macbook.local"]) == "Desktop"
+    assert judge_core._lightweight_device_category(
+        "Raspberry Pi Foundation", [22, 80], []) == "IoT"
+
+
 def test_assemble_device_context_lightweight_oui_and_hostname():
     """Even with no dashboard-built local_inv, ip_to_mac + dns_per_ip
     let judge_core derive OUI vendor + .local hostname."""
