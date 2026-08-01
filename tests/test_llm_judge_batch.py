@@ -182,6 +182,50 @@ def test_batched_413_bisects_until_it_fits(cache):
     assert permanent is False
 
 
+def test_batched_tpm_429_bisects_like_413(cache):
+    """Session 13 production finding: Groq gpt-oss models throttle at
+    8k tokens/minute and reject a 5-candidate batch with a 429 that
+    says 'tokens per minute (TPM)'. That is a SIZE problem - half the
+    batch fits the window - so it must bisect, not give up."""
+    class _TpmThrottle(_BatchClient):
+        def judge(self, system_prompt, user_content, schema=None):
+            cands = json.loads(user_content)["candidates"]
+            self.calls.append(("batch", len(cands), schema is not None))
+            if len(cands) > 2:
+                raise _PermanentError(
+                    "HTTP Error 429: Too Many Requests - Rate limit "
+                    "reached ... on tokens per minute (TPM): Limit 8000, "
+                    "Requested 7449. Please try again in 34s")
+            return json.dumps({"verdicts": [
+                _verdict_json(c["candidate_id"]) for c in cands]})
+
+    cands = [_cand(f"10.7.0.{i}") for i in range(5)]
+    out, permanent = judge_core._batched_verdicts_from_client(
+        cands, _TpmThrottle(), cache, "vT")
+    # 5 -> (2, 3) -> the 3 -> (1, 2): four batched, the lone one rides
+    # the per-candidate path
+    assert set(out) == {"10.7.0.0", "10.7.0.1", "10.7.0.3", "10.7.0.4"}
+    assert permanent is False
+
+
+def test_batched_tpd_429_does_not_bisect(cache):
+    """A DAILY-pool 429 ('tokens per day') must NOT bisect - nothing
+    fits until the pool resets. One attempt, permanent skip."""
+    class _Tpd(_BatchClient):
+        def judge(self, system_prompt, user_content, schema=None):
+            cands = json.loads(user_content)["candidates"]
+            self.calls.append(("batch", len(cands), schema is not None))
+            raise _PermanentError(
+                "HTTP Error 429: Too Many Requests - Rate limit reached "
+                "... on tokens per day (TPD): Limit 100000, Used 94380")
+
+    cl = _Tpd()
+    out, permanent = judge_core._batched_verdicts_from_client(
+        [_cand(f"10.6.0.{i}") for i in range(5)], cl, cache, "vT")
+    assert out == {} and permanent is True
+    assert len(cl.calls) == 1  # no retry (permanent), no bisect
+
+
 def test_batched_quota_429_reports_permanent(cache):
     """An exhausted daily quota is permanent for EVERY remaining batch -
     the prefetch loop must learn to stop for this judge."""

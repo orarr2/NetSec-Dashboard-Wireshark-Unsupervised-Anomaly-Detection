@@ -1177,13 +1177,23 @@ def _verdict_from_client(cand, client, cache, prompt_version):
 
 
 def _too_large_error(err):
-    """Heuristic: did the provider reject the request for SIZE (HTTP 413
-    / tokens-per-minute cap), as opposed to auth/quota/schema problems?
-    Size errors are the one permanent class where a SMALLER batch can
-    still succeed - everything else fails identically at any size."""
+    """Heuristic: did the provider reject the request for SIZE, where a
+    SMALLER batch can still succeed? Two flavors seen in production
+    (session 13, Groq free tier):
+    - HTTP 413 "Request too large": the payload exceeds the model's
+      per-request cap outright (llama-8b, 6k TPM vs ~7.3k batch).
+    - HTTP 429 "tokens per minute (TPM)": the payload doesn't fit the
+      REMAINING minute window (gpt-oss, 8k TPM) - a half-size batch
+      usually does.
+    A 429 on the DAILY pool ("tokens per day"/TPD) is explicitly NOT
+    size - nothing fits until the pool resets, so bisecting would just
+    burn attempts; that one flows to the permanent-skip path instead."""
     text = str(err or "")
+    if "tokens per day" in text or "(TPD)" in text:
+        return False
     return ("413" in text or "Payload Too Large" in text
-            or "Request too large" in text)
+            or "Request too large" in text
+            or "tokens per minute" in text or "(TPM)" in text)
 
 
 def _batched_verdicts_from_client(cands, client, cache, prompt_version):
