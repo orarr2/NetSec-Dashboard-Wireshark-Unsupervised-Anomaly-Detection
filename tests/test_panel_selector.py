@@ -74,7 +74,8 @@ def test_every_installed_local_model_appears_in_some_preset():
     """No idle model rule: llama3.2 was installed on the VM but never
     referenced in any preset - that regression must not recur."""
     installed_local = {"ollama:qwen2.5:3b", "ollama:gemma2:2b",
-                       "ollama:phi3.5", "ollama:llama3.2:3b"}
+                       "ollama:phi3.5", "ollama:llama3.2:3b",
+                       "ollama:granite3.3:2b"}
     referenced = set()
     for preset in panel_presets.PRESETS.values():
         for entry in preset["spec"].split(","):

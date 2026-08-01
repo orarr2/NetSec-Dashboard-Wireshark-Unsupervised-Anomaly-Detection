@@ -44,6 +44,32 @@ PRESETS = {
                   "fallback + out-of-family diversity (Alibaba). "
                   "Qwen dominates wall-clock; Groq/Gemini idle waiting."),
     },
+    "fresh_cloud_3": {
+        "label": "Fresh-quota cloud x3 (2 GPT-OSS + Qwen3.6) - ~2-3 s / candidate",
+        "spec": ("groq:openai/gpt-oss-20b,"
+                 "groq:openai/gpt-oss-120b,"
+                 "groq:qwen/qwen3.6-27b"),
+        "wallclock_per_candidate_s": 3,
+        "notes": ("Groq quotas are PER MODEL - these three share the "
+                  "same API key as fast_cloud_3 but draw from three "
+                  "SEPARATE daily token pools. Use when the llama pool "
+                  "is exhausted (measured 2026-08-01: llama-70b hit its "
+                  "100k TPD mid-run). OpenAI open-weights x2 + Alibaba."),
+    },
+    "cloud_max_6": {
+        "label": "Cloud max x6 (2 llama + Gemini + 2 GPT-OSS + Qwen3.6) - ~3 s / candidate",
+        "spec": ("groq:llama-3.1-8b-instant,"
+                 "groq:llama-3.3-70b-versatile,"
+                 "gemini:gemini-2.5-flash,"
+                 "groq:openai/gpt-oss-20b,"
+                 "groq:openai/gpt-oss-120b,"
+                 "groq:qwen/qwen3.6-27b"),
+        "wallclock_per_candidate_s": 3,
+        "notes": ("Every cloud judge at once: Meta x2 + Google + "
+                  "OpenAI x2 + Alibaba, six separate quota pools, zero "
+                  "VM load, all parallel. The strongest fast option "
+                  "for a big capture when diversity matters."),
+    },
     "local_only_2": {
         "label": "Local only x2 (qwen + gemma, zero API) - ~110 s / candidate",
         "spec": "ollama:qwen2.5:3b,ollama:gemma2:2b",
@@ -53,15 +79,15 @@ PRESETS = {
                   "max. Use when no cloud key is available or all "
                   "data must stay on the box."),
     },
-    "local_diverse_4": {
-        "label": "Local diverse x4 (qwen + gemma + phi3.5 + llama3.2) - ~220 s / candidate",
+    "local_diverse_5": {
+        "label": "Local diverse x5 (qwen + gemma + phi3.5 + llama3.2 + granite) - ~250 s / candidate",
         "spec": ("ollama:qwen2.5:3b,ollama:gemma2:2b,"
-                 "ollama:phi3.5,ollama:llama3.2:3b"),
-        "wallclock_per_candidate_s": 220,
-        "notes": ("Alibaba + Google + Microsoft + Meta locally. Four "
-                  "models compete for 4 vCPU serially: sum of latencies. "
-                  "Highest zero-key family diversity - one model per "
-                  "major LLM lab."),
+                 "ollama:phi3.5,ollama:llama3.2:3b,ollama:granite3.3:2b"),
+        "wallclock_per_candidate_s": 250,
+        "notes": ("Alibaba + Google + Microsoft + Meta + IBM locally. "
+                  "Five models compete for 4 vCPU serially: sum of "
+                  "latencies. Highest zero-key family diversity - one "
+                  "model per major LLM lab."),
     },
     "hybrid_6": {
         "label": "Hybrid x6 (2 Groq + Gemini + qwen + gemma + llama3.2) - ~165 s / candidate",
@@ -76,20 +102,26 @@ PRESETS = {
                   "sum of the 3 local models. Best resolver stability "
                   "at 6+ voters. Adds Meta locally next to Google/Alibaba."),
     },
-    "max_7": {
-        "label": "Maximum x7 (2 Groq + Gemini + qwen + gemma + phi + llama3.2) - ~220 s / candidate, SLOW",
+    "max_11": {
+        "label": "Maximum x11 (6 cloud + 5 local) - ~250 s / candidate, VERY SLOW",
         "spec": ("groq:llama-3.1-8b-instant,"
                  "groq:llama-3.3-70b-versatile,"
                  "gemini:gemini-2.5-flash,"
+                 "groq:openai/gpt-oss-20b,"
+                 "groq:openai/gpt-oss-120b,"
+                 "groq:qwen/qwen3.6-27b,"
                  "ollama:qwen2.5:3b,"
                  "ollama:gemma2:2b,"
                  "ollama:phi3.5,"
-                 "ollama:llama3.2:3b"),
-        "wallclock_per_candidate_s": 220,
-        "notes": ("All 7 configured judges. Ollama CPU contention "
-                  "makes this slow (4 local models serial). Only for "
-                  "small captures (<5 candidates) where diversity "
-                  "matters more than speed."),
+                 "ollama:llama3.2:3b,"
+                 "ollama:granite3.3:2b"),
+        "wallclock_per_candidate_s": 250,
+        "notes": ("Every configured judge: 6 cloud (Meta x2, Google, "
+                  "OpenAI x2, Alibaba) + 5 local (Alibaba, Google, "
+                  "Microsoft, Meta, IBM). Ollama CPU contention makes "
+                  "this slow (5 local serial). Only for tiny captures "
+                  "(<5 candidates) where maximum diversity matters "
+                  "more than anything."),
     },
     "single_groq_fast": {
         "label": "Single judge (Groq 8B, no panel) - ~0.5 s / candidate, no debate",
@@ -128,7 +160,8 @@ def valid_spec(spec):
 
 def choices_for_ui():
     """Return [(id, label)] pairs ordered for a dropdown."""
-    ordered = ["fast_cloud_3", "balanced_4", "local_only_2",
-               "local_diverse_4", "hybrid_6", "max_7", "single_groq_fast"]
+    ordered = ["fast_cloud_3", "fresh_cloud_3", "cloud_max_6",
+               "balanced_4", "local_only_2", "local_diverse_5",
+               "hybrid_6", "max_11", "single_groq_fast"]
     return [(pid, PRESETS[pid]["label"]) for pid in ordered
             if pid in PRESETS]
