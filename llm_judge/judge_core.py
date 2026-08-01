@@ -1176,10 +1176,25 @@ def _verdict_from_client(cand, client, cache, prompt_version):
     return verdict, latency_ms, False, None
 
 
+def _too_large_error(err):
+    """Heuristic: did the provider reject the request for SIZE (HTTP 413
+    / tokens-per-minute cap), as opposed to auth/quota/schema problems?
+    Size errors are the one permanent class where a SMALLER batch can
+    still succeed - everything else fails identically at any size."""
+    text = str(err or "")
+    return ("413" in text or "Payload Too Large" in text
+            or "Request too large" in text)
+
+
 def _batched_verdicts_from_client(cands, client, cache, prompt_version):
     """Q3: several candidates through ONE LLM call. Returns
+    (verdicts, permanently_failed) where verdicts is
     {candidate_id: (verdict, latency_ms_share, False, None)} for the
-    fresh, successfully-validated subset ONLY.
+    fresh, successfully-validated subset ONLY, and permanently_failed
+    is True when the provider says no batch will EVER succeed for this
+    judge right now (quota exhausted, schema rejected) - the prefetch
+    loop uses it to stop burning calls on that judge's remaining
+    slices.
 
     The batch is a pure accelerator with graceful degradation baked
     into the contract: cached candidates are skipped here (the panel
@@ -1190,6 +1205,12 @@ def _batched_verdicts_from_client(cands, client, cache, prompt_version):
     loop falls back to the ordinary per-candidate call for exactly the
     affected candidates. Worst case equals batching off, never worse.
 
+    One size-specific rescue: a 413 / request-too-large rejection (a
+    TPM cap smaller than the batch, measured on Groq's llama-8b: 6k
+    TPM vs ~7.3k for a 5-candidate payload) bisects the batch and
+    retries each half - the halves recurse further if still too big,
+    so any TPM limit finds its own largest fitting size.
+
     Verdicts are cached under the same per-candidate fingerprint the
     single path uses, so a later re-run hits cache identically either
     way. Latency is attributed as an equal share of the one call."""
@@ -1199,7 +1220,7 @@ def _batched_verdicts_from_client(cands, client, cache, prompt_version):
         if cache.get(fp) is None:
             fresh.append(cand)
     if len(fresh) < 2:
-        return {}  # nothing to gain from a batched call
+        return {}, False  # nothing to gain from a batched call
     items, latency_ms, last_err = None, 0, None
     for _attempt in (1, 2):  # same retry contract as the single path
         try:
@@ -1218,10 +1239,26 @@ def _batched_verdicts_from_client(cands, client, cache, prompt_version):
             if getattr(e, "permanent", False):
                 break
     if items is None:
+        if _too_large_error(last_err) and len(fresh) >= 3:
+            # Payload exceeded a per-request/TPM cap - bisect and let
+            # each half find its own fitting size. A half that shrinks
+            # to one candidate skips the batch (the <2 guard above)
+            # and rides the ordinary per-candidate path instead.
+            mid = len(fresh) // 2
+            out_a, perm_a = _batched_verdicts_from_client(
+                fresh[:mid], client, cache, prompt_version)
+            out_b, perm_b = _batched_verdicts_from_client(
+                fresh[mid:], client, cache, prompt_version)
+            out_a.update(out_b)
+            return out_a, (perm_a and perm_b)
+        permanent = bool(getattr(last_err, "permanent", False)
+                         and not _too_large_error(last_err))
         print(f"[panel] batch call failed on {client.model_id} "
               f"({last_err}) - those candidates fall back to "
-              f"per-candidate calls", flush=True)
-        return {}
+              f"per-candidate calls"
+              + (" (skipping this judge's remaining batches)"
+                 if permanent else ""), flush=True)
+        return {}, permanent
     share = max(latency_ms // len(fresh), 1)
     by_id = {c.get("candidate_id"): c for c in fresh}
     out = {}
@@ -1244,7 +1281,7 @@ def _batched_verdicts_from_client(cands, client, cache, prompt_version):
             print(f"[judge] WARNING: cache write failed ({e}) - "
                   f"continuing with the uncached verdict", flush=True)
         out[cid] = (verdict, share, False, None)
-    return out
+    return out, False
 
 
 def judge_candidates(candidates, client=None, cache_db=None,
@@ -1780,10 +1817,18 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
             def _prefetch_for(cl):
                 got = {}
                 for j in range(0, len(candidates), batch_size):
-                    for cid, tup in _batched_verdicts_from_client(
-                            candidates[j:j + batch_size], cl, cache,
-                            prompt_version).items():
+                    out, permanent = _batched_verdicts_from_client(
+                        candidates[j:j + batch_size], cl, cache,
+                        prompt_version)
+                    for cid, tup in out.items():
                         got[(cl.model_id, cid)] = tup
+                    if permanent:
+                        # Quota exhausted / schema rejected - every
+                        # remaining batch would fail identically. Stop
+                        # burning calls; the per-candidate path (which
+                        # short-circuits permanent errors itself) takes
+                        # over for the rest.
+                        break
                 return got
             for got in _pool.map(_prefetch_for, clients):
                 prefetched.update(got)
