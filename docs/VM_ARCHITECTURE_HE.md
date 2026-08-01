@@ -497,6 +497,100 @@ LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,openai_compat:openai/gpt-o
 **LLM_JUDGE_DEBATE=0** ל-single-round only (‏פאנל בלי דיון - כל שופט
 מצביע פעם אחת, resolver מכריע ישר).
 
+### מה בדיוק שולחים לשופטים? (‏Prompt + Blob + Verdict)
+
+לכל candidate = קריאת HTTP אחת לכל שופט. אין קריאה אחת לכל ההקלטה. אם
+5 IPs חשודים, ‏5 קריאות מקבילות לכל שופט. מה שרואה השופט:
+
+**‏1. פרומפט המערכת (‏זהה לכל השופטים, לכל candidate, לא משתנה בזמן ריצה):**
+
+```
+You are a network-security triage analyst. You receive a JSON blob
+describing one candidate (an IP, a flow, or the whole session) that at
+least one unsupervised detector or deterministic rule has flagged.
+
+1. Return a strict JSON object matching the schema below.
+2. Assign a verdict (benign | suspicious | malicious) and category.
+3. Ground every claim in the input blob - cite feature names in evidence_features.
+4. If signals are contradictory, prefer "suspicious" over "malicious".
+5. Never invent facts not in the blob. null = unknown, not zero.
+6. recommended_action is a suggestion, not an action.
+7. confidence is [0.0, 1.0]. reasoning: one paragraph, <=400 chars.
+8. Deterministic rules are HIGH-PRECISION. If any rule fired, classify
+   into the matching attack category and do NOT return "benign".
+```
+
+בנוסף מצטרפים ‏(‏1) ה-schema של ה-verdict, ‏(‏2) cheat-sheet של 7 הקטגוריות,
+ו-(‏3) שתי דוגמאות מעובדות (‏SYN scan → malicious, ‏ML anomaly → benign).
+
+**סה"כ פרומפט: ~1500 תווים.** מקור אמת: `llm_judge/judge_core.py` -
+המשתנה `SYSTEM_PROMPT`.
+
+**‏2. הבלוב של ה-candidate (‏JSON per-IP, ‏זה כל מה שהשופט רואה על ה-IP):**
+
+```json
+{
+  "candidate_id": "192.168.1.10",
+  "kind": "ip",
+  "session_context": {"duration_s": 0.1, "total_packets": 2000, "total_ips": 2},
+  "features": {
+    "mean_len": 54.0, "std_len": 0.0, "count": 1000.0, "burst_score": 1000.0,
+    "unique_dsts": 1.0, "syn_count": 0.0, "rst_count": 0.0, "fin_count": 0.0,
+    "null_count": 0.0, "xmas_count": 1000.0
+  },
+  "ml_signals": {
+    "iso_score": 0.0, "iso_stability": 0.0, "anomaly": false,
+    "cluster": -1, "silhouette": null, "lstm_bin_flag_count": null
+  },
+  "rule_signals": {
+    "scan_alerts": [{"type": "XMAS", "count": 1000, "unique_dsts": 1, "ratio": 1.0}],
+    "flood_alerts": [], "amp_alerts": [], "arp_multi_mac": false
+  },
+  "advanced_signals": {"beaconing": null, "dns_tunneling": null,
+                       "dga": null, "tls_anomaly": null, "fusion_score": null},
+  "device_context": {"category": "unknown", "hostname": null, "oui_vendor": null},
+  "enrichments": {"is_private": true, "reverse_dns": null,
+                  "asn": null, "baseline_seen_before": null},
+  "trigger_reasons": ["scan_rule"]
+}
+```
+
+**מקור אמת:** `llm_judge/judge_core.py` - הפונקציה `assemble_candidates`.
+
+**‏3. תשובת השופט (‏verdict schema):**
+
+```json
+{
+  "verdict": "suspicious",
+  "category": "port_scan",
+  "confidence": 0.95,
+  "evidence_features": ["rule_signals.scan_alerts", "features.xmas_count"],
+  "reasoning": "The high burst score suggests a more sophisticated attack.",
+  "recommended_action": "investigate"
+}
+```
+
+השרתי עמידים מאומתים ב-`validate_verdict` - מנרמל ל-1 שורה, חותך את
+reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כל דבר מחוץ
+לenums.
+
+**מקור אמת מלא (‏עם דוגמאות ולכידויות):** [`docs/LLM_INTERFACE.md`](LLM_INTERFACE.md).
+
+### מה חסר לשופט לדעת (‏העשרות מתוכננות)
+
+הפייפליין אוסף הרבה יותר ממה שהשופט רואה. שדות שהשופט **לא** מקבל עכשיו,
+אבל שהיו עוזרים לו:
+
+| שדה | נאסף בפייפליין? | עלות הוספה |
+|---|---|---|
+| שם המכשיר + OUI vendor + קטגוריה | ✅ ‏(`device_classifier` + `build_local_inventory`) | נמוכה - `device_context` כבר בסכימה, רק צריך לאכלס |
+| HTTP Host + TLS SNI + top DNS | ✅ ‏(`host_stats`) | נמוכה |
+| Top-5 destination ports + protocol | ✅ | נמוכה |
+| Hour of day + day of week | ✅ ‏(מ-`session_context.t0`) | טריוויאלית |
+| bytes_in / bytes_out per IP | ⚠️ יש `total_bytes` אבל לא directional | בינונית |
+| TLS versions + weak ciphers | ⚠️ יש `tls_anomaly` engine (‏score בלבד) | בינונית |
+| Baseline history (‏האם ה-IP חדש?) | ✅ (‏`baseline` module) | בינונית |
+
 ---
 
 ## 11. Sensors ו-HMAC - איך זיהוי מכריע מי רשאי להעלות

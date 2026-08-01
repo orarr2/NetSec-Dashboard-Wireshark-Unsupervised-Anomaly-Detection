@@ -58,6 +58,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `tools/upload_pcap.py` | Signed HMAC upload CLI - streams a PCAP to the VM's `/v1/pcap` with `--email <address>` for the report |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
+| `docs/LLM_INTERFACE.md` | The exact prompt, candidate blob, and verdict schema sent to every LLM judge - what the model actually sees per candidate |
 | `docs/VM_DEPLOYMENT.md` | Standing up the analyzer VM 24/7 on a free Oracle ARM box over Tailscale |
 | `docs/VM_OPS.md` | Day-to-day operations on the VM (health snapshot, redeploy, backups, email + panel activation, sensor rotation) |
 | `docs/` | Deep-dive documentation (cell-by-cell walkthrough, Q&A, design trade-offs, decision graphs) |
