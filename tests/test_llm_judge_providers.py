@@ -252,9 +252,11 @@ def test_openai_compat_requires_model():
 
 # --------------------------------------------------------------------------
 # Permanent-vs-transient error tagging (H3 fix): a 4xx from the server is
-# permanent - retrying it just burns quota and, on Groq's shared account
-# limits, spawns 429 storms that stall a parallel panel for tens of
-# seconds. Only 429 and 5xx get the retry.
+# permanent at this layer - retrying it just burns quota. That INCLUDES
+# 429: _post already has its own burst-retry loop, and an error that
+# survived _post's budget means the rate window is still hot - a further
+# outer retry would just wait through it again. Only 5xx and network
+# errors stay transient (retriable).
 # --------------------------------------------------------------------------
 def test_openai_compat_400_is_tagged_permanent(mock_openai_server):
     """A 400 from BOTH json_schema and json_object (e.g. allam-2-7b's
@@ -289,6 +291,40 @@ def test_openai_compat_unrelated_4xx_is_permanent():
     try:
         # schema=None keeps us out of the strict/plain fallback and lands
         # HTTPError in the outer except HTTPError branch of judge()
+        client = OpenAICompatClient(
+            model="m", base_url=f"http://127.0.0.1:{srv.server_address[1]}/v1",
+            api_key="k", timeout_s=5, verdict_schema=None)
+        with pytest.raises(JudgeClientError) as exc:
+            client.judge("s", "u")
+        assert exc.value.permanent is True
+    finally:
+        srv.shutdown(); t.join(timeout=5)
+
+
+def test_openai_compat_exhausted_429_is_permanent(monkeypatch):
+    """A 429 that survived _post's internal retry budget is permanent at
+    the outer layer: the burst-window already elapsed while we slept, so
+    retrying the whole cycle just waits through the same rate window
+    again. Was permanent=False before the follow-up H3 fix, which cost
+    the panel ~16s per stuck judge for zero gain."""
+    from llm_judge.llm_clients import JudgeClientError
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(429)
+            self.send_header("Retry-After", "0")
+            self.end_headers()
+            self.wfile.write(b'{"error":"rate limited"}')
+
+        def log_message(self, *a):
+            pass
+
+    # Cap retry waits to 0.01s so the test stays fast
+    monkeypatch.setattr(OpenAICompatClient, "_MAX_WAIT_S", 0.01)
+    monkeypatch.setattr(OpenAICompatClient, "_MAX_RETRIES", 1)
+    srv = HTTPServer(("127.0.0.1", 0), Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True); t.start()
+    try:
         client = OpenAICompatClient(
             model="m", base_url=f"http://127.0.0.1:{srv.server_address[1]}/v1",
             api_key="k", timeout_s=5, verdict_schema=None)

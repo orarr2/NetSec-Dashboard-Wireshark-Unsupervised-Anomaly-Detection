@@ -170,7 +170,7 @@ class OllamaClient:
                 f"Ollama call failed ({self.host}): {_http_error_detail(e)}."
                 " Is the model pulled? "
                 f"Try: ollama pull {self.model_id}",
-                permanent=(e.code < 500 and e.code != 429)) from e
+                permanent=(e.code < 500)) from e
         except Exception as e:
             raise JudgeClientError(
                 f"Ollama call failed ({self.host}): {e}. "
@@ -328,15 +328,18 @@ class OpenAICompatClient:
                             system_prompt, user_content, plain))
                     except urllib.error.HTTPError as e2:
                         # Both formats rejected by the server - the model
-                        # is broken (allam-2-7b's json_validate_failed) or
-                        # the request is malformed. A retry cannot fix it
-                        # and will just burn quota, so mark permanent.
+                        # is broken (allam-2-7b's json_validate_failed),
+                        # the request is malformed, OR we already exhausted
+                        # the internal 429 retry budget inside _post. A
+                        # further retry cannot fix any of those and just
+                        # burns quota, so mark permanent for every 4xx
+                        # (429 included - _post already backed off).
                         raise JudgeClientError(
                             f"OpenAI-compatible call failed ({self.base_url},"
                             f" model {self.model_id}). json_schema attempt: "
                             f"{first_detail}; json_object attempt: "
                             f"{_http_error_detail(e2)}",
-                            permanent=(e2.code < 500 and e2.code != 429)) \
+                            permanent=(e2.code < 500)) \
                             from e2
                     self._schema_unsupported = True
             else:
@@ -345,13 +348,15 @@ class OpenAICompatClient:
         except JudgeClientError:
             raise
         except urllib.error.HTTPError as e:
-            # 4xx (except 429) means the request itself is wrong -
-            # bad key, bad model, malformed body. Retrying it is
-            # pointless and, on rate-limited providers, harmful.
+            # Every 4xx is permanent at this layer: 400/401/404 for a
+            # wrong request cannot recover, and a 429 that reached here
+            # already exhausted the burst-retry inside _post - the outer
+            # retry would just wait through the same rate window again.
+            # 5xx stays transient (server hiccup).
             raise JudgeClientError(
                 f"OpenAI-compatible call failed ({self.base_url}, model "
                 f"{self.model_id}): {_http_error_detail(e)}",
-                permanent=(e.code < 500 and e.code != 429)) from e
+                permanent=(e.code < 500)) from e
         except Exception as e:
             raise JudgeClientError(
                 f"OpenAI-compatible call failed ({self.base_url}, model "
