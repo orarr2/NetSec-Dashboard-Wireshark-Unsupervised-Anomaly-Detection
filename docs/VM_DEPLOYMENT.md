@@ -362,36 +362,38 @@ about this.
 ## The dashboard button uploads to the VM
 
 The dashboard runs on your machine, but it no longer needs a local
-Docker daemon for anything. The **Send S1 / S2 to n8n Alert** button
-uploads the session's PCAP over Tailscale using the `scp` binary that
-ships with Windows and every Unix.
+Docker daemon for anything. The **Send S1 to VM (mail report)** button
+signs the session's PCAP and streams it to the ingest API over
+Tailscale - the same HMAC-signed path `tools/upload_pcap.py` uses, so
+there is no size cap and no `scp` involved.
 
-Four environment variables control the target. **All ship blank** by
-default; the button reports "set NETSEC_REMOTE_HOST" until they are
+Next to the button you type the address the finished report should be
+mailed to and pick an LLM panel preset; both ride along as request
+headers (`X-Notify-Email`, `X-Judge-Panel`).
+
+Three environment variables control the target. **All ship blank** by
+default; the button reports "set NETSEC_INGEST_URL" until they are
 configured, so a fresh fork cannot silently upload to somebody else's
 VM (`deploy/.env.example` documents them):
 
 | variable | example value |
 |---|---|
-| `NETSEC_REMOTE_HOST` | `<vm-tailscale-ip>` |
-| `NETSEC_REMOTE_USER` | `ubuntu` |
-| `NETSEC_REMOTE_INCOMING` | `/srv/netsec/incoming` (or wherever your intake watches) |
-| `NETSEC_SSH_KEY` | `<path-to-your-ssh-key>` |
+| `NETSEC_INGEST_URL` | `http://<vm-tailscale-ip>:8766` |
+| `NETSEC_SENSOR_ID` | `laptop` (from `deploy/create_sensor.py`) |
+| `NETSEC_SENSOR_SECRET` | the secret that script printed once |
 
-Before uploading, the button probes `judge_api` (`:8765`) and n8n
-(`:5678`) on the remote host. If Tailscale is disconnected, or those
-services aren't listening, it says so and refuses to upload rather
-than reporting a success that goes nowhere.
+A capture the VM has already analysed is deduplicated by SHA-256: the
+upload returns the existing session rather than queueing the same work
+twice, and the button says so instead of implying a fresh run.
 
-Dropping a file on the VM by hand does the same thing:
+The same upload from a shell, for a machine with no notebook:
 
 ```bash
-scp -i <key> capture.pcap ubuntu@<vm-public-ip>:/srv/netsec/incoming/
+python3 tools/upload_pcap.py capture.pcapng --email you@example.com
 ```
 
-The **first-class** upload path (documented in
-`AUTOMATION_QUICKSTART.md`) is the ingest API - HMAC-signed,
-streaming, no size cap, auto-analysed on arrival:
+Both routes land on the ingest API - HMAC-signed, streaming, no size
+cap, auto-analysed on arrival:
 
 ```bash
 python3 tools/upload_pcap.py capture.pcapng

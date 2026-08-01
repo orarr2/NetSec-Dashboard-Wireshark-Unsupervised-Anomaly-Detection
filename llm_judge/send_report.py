@@ -183,8 +183,18 @@ def markdown_to_html(md):
 
     close_blocks()
     body = "\n".join(html)
+    # The charset declaration has to travel INSIDE the document. As an
+    # email body the MIME part carries charset=utf-8, but the same HTML
+    # is also written to disk and served by the ingest API as a bare
+    # `text/html` with no charset parameter - a browser then falls back
+    # to its locale default (windows-1252 on a Western Windows) and the
+    # report's non-ASCII characters (the scales glyph on a split panel,
+    # the ellipsis, any Unicode in a hostname) render as mojibake.
     return (
-        "<html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,"
+        "<html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,"
+        "initial-scale=1\"></head>"
+        "<body style=\"font-family:-apple-system,Segoe UI,Helvetica,"
         "Arial,sans-serif;color:#1f2328;line-height:1.5;max-width:820px\">"
         f"{body}"
         "</body></html>")

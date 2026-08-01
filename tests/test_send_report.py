@@ -159,6 +159,20 @@ def test_markdown_renders_expected_structures():
     assert "<strong>MALICIOUS</strong>" in html
 
 
+def test_markdown_declares_utf8_in_the_document():
+    """The same HTML is emailed (MIME carries charset), written to disk,
+    and served by the ingest API as a bare `text/html`. Only a charset
+    declaration inside the document survives all three, so without it a
+    browser guesses its locale default and the report's non-ASCII
+    characters render as mojibake."""
+    html = sr.markdown_to_html("- verdict split ⚖ … and 5 more\n")
+    assert '<meta charset="utf-8">' in html
+    head = html.index("</head>")
+    assert html.index('<meta charset="utf-8">') < head
+    assert html.index("<body") > head          # declaration precedes content
+    assert "⚖" in html and "…" in html
+
+
 def test_markdown_escapes_html():
     html = sr.markdown_to_html("A <script>alert(1)</script> & more")
     assert "<script>" not in html
