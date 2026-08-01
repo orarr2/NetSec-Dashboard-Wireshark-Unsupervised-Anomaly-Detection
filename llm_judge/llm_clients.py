@@ -32,7 +32,18 @@ except ImportError:  # imported with llm_judge/ itself on sys.path
 
 
 class JudgeClientError(RuntimeError):
-    """A provider call failed (network, refusal, bad payload)."""
+    """A provider call failed (network, refusal, bad payload).
+
+    `permanent=True` marks the failure as one that a retry cannot
+    plausibly fix - a 4xx from the server (schema unsupported, bad
+    model name, malformed prompt). Retrying such errors just burns
+    quota and, on strict rate limits like Groq, triggers 429s that
+    stall the panel for tens of seconds.
+    """
+
+    def __init__(self, message, permanent=False):
+        super().__init__(message)
+        self.permanent = bool(permanent)
 
 
 def _http_error_detail(e):
@@ -158,7 +169,8 @@ class OllamaClient:
             raise JudgeClientError(
                 f"Ollama call failed ({self.host}): {_http_error_detail(e)}."
                 " Is the model pulled? "
-                f"Try: ollama pull {self.model_id}") from e
+                f"Try: ollama pull {self.model_id}",
+                permanent=(e.code < 500 and e.code != 429)) from e
         except Exception as e:
             raise JudgeClientError(
                 f"Ollama call failed ({self.host}): {e}. "
@@ -217,9 +229,14 @@ class OpenAICompatClient:
 
     # Free tiers (Groq: 12k tokens/min) return HTTP 429 when a batch is
     # bursty. Retry a bounded number of times, honoring the server's stated
-    # wait, so a single hot minute doesn't silently drop candidates.
-    _MAX_RETRIES = 3
-    _MAX_WAIT_S = 30.0
+    # wait, so a single hot minute doesn't silently drop candidates. The
+    # cap is deliberately short: a panel of N judges runs each retry in
+    # parallel, so a 30-second wait would stall every judge together and
+    # look like a hang. 8s x 2 retries = at most ~20s added on the hot
+    # path - enough to survive one bursty batch, small enough that the
+    # UI still feels alive.
+    _MAX_RETRIES = 2
+    _MAX_WAIT_S = 8.0
 
     @staticmethod
     def _retry_after_seconds(e):
@@ -310,11 +327,17 @@ class OpenAICompatClient:
                         data = self._post(self._payload(
                             system_prompt, user_content, plain))
                     except urllib.error.HTTPError as e2:
+                        # Both formats rejected by the server - the model
+                        # is broken (allam-2-7b's json_validate_failed) or
+                        # the request is malformed. A retry cannot fix it
+                        # and will just burn quota, so mark permanent.
                         raise JudgeClientError(
                             f"OpenAI-compatible call failed ({self.base_url},"
                             f" model {self.model_id}). json_schema attempt: "
                             f"{first_detail}; json_object attempt: "
-                            f"{_http_error_detail(e2)}") from e2
+                            f"{_http_error_detail(e2)}",
+                            permanent=(e2.code < 500 and e2.code != 429)) \
+                            from e2
                     self._schema_unsupported = True
             else:
                 data = self._post(self._payload(system_prompt,
@@ -322,9 +345,13 @@ class OpenAICompatClient:
         except JudgeClientError:
             raise
         except urllib.error.HTTPError as e:
+            # 4xx (except 429) means the request itself is wrong -
+            # bad key, bad model, malformed body. Retrying it is
+            # pointless and, on rate-limited providers, harmful.
             raise JudgeClientError(
                 f"OpenAI-compatible call failed ({self.base_url}, model "
-                f"{self.model_id}): {_http_error_detail(e)}") from e
+                f"{self.model_id}): {_http_error_detail(e)}",
+                permanent=(e.code < 500 and e.code != 429)) from e
         except Exception as e:
             raise JudgeClientError(
                 f"OpenAI-compatible call failed ({self.base_url}, model "

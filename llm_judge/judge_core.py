@@ -660,13 +660,21 @@ def apply_rule_guardrail(candidate, verdict):
 def _verdict_from_client(cand, client, cache, prompt_version):
     """One candidate through one client: cache -> LLM -> validate -> retry
     once. Returns (verdict|None, latency_ms, was_cached, error|None). Never
-    raises - a failure comes back as (None, latency, False, exception)."""
+    raises - a failure comes back as (None, latency, False, exception).
+
+    Retry only helps transient errors (network blip, one-off bad JSON from
+    the model). A permanent failure (4xx from the server: unsupported
+    schema, bad key, malformed body) will fail identically on the second
+    try - and on rate-limited providers the extra call triggers a 429 that
+    stalls a parallel panel. `JudgeClientError.permanent=True` short-
+    circuits the retry for exactly that reason.
+    """
     fp = fingerprint(cand, prompt_version, client.model_id)
     cached = cache.get(fp)
     if cached is not None:
         return cached, 0, True, None
     last_err, latency_ms, verdict = None, 0, None
-    for _attempt in (1, 2):  # retry once on any failure
+    for _attempt in (1, 2):  # retry once on transient failures
         try:
             t0 = time.perf_counter()
             raw = client.judge(SYSTEM_PROMPT, json.dumps(cand, indent=2))
@@ -675,6 +683,8 @@ def _verdict_from_client(cand, client, cache, prompt_version):
             break
         except Exception as e:
             last_err, verdict = e, None
+            if getattr(e, "permanent", False):
+                break  # 4xx from the server - a retry would fail the same
     if verdict is None:
         return None, latency_ms, False, last_err
     # The cache write stays OUTSIDE the retry loop and is best-effort: a

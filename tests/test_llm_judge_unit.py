@@ -264,6 +264,39 @@ def test_judge_retries_once_then_drops(tmp_path):
     assert out2["results"][0]["verdict"]["category"] == "port_scan"
 
 
+def test_judge_skips_retry_on_permanent_error(tmp_path):
+    """H3 fix: a JudgeClientError with permanent=True (4xx from the
+    server: allam-2-7b's json_validate_failed, unknown model, bad key)
+    must NOT be retried. A retry on a permanent error just burns quota
+    and, on Groq's shared account limits, spawns 429s that stall a
+    parallel panel. Regression: pre-fix this made 4 HTTP calls per
+    broken candidate and took 30-90s per judge."""
+    from llm_judge.llm_clients import JudgeClientError
+    perm = JudgeClientError("model not found (400)", permanent=True)
+    client = FakeClient(responses=[perm, perm])  # if retried, would raise
+    out = judge_core.judge_candidates(_candidates()[:1], client=client,
+                                      cache_db=str(tmp_path / "c.sqlite"),
+                                      verbose=False)
+    assert out["results"] == []
+    assert client.calls == 1, (
+        f"permanent error must not be retried; got {client.calls} calls")
+    assert "model not found" in out["dropped"][0]["error"]
+
+
+def test_judge_still_retries_transient_and_validation_errors(tmp_path):
+    """A transient error (permanent unset or False - e.g. 429, 500,
+    JudgeValidationError, bad JSON) MUST still be retried once - that
+    behaviour is what covers a one-off bad JSON from the model."""
+    from llm_judge.llm_clients import JudgeClientError
+    transient = JudgeClientError("overloaded (503)")  # permanent=False
+    client = FakeClient(responses=[transient, json.dumps(good_verdict())])
+    out = judge_core.judge_candidates(_candidates()[:1], client=client,
+                                      cache_db=str(tmp_path / "c.sqlite"),
+                                      verbose=False)
+    assert client.calls == 2, "transient error must be retried once"
+    assert out["results"][0]["verdict"]["category"] == "port_scan"
+
+
 def test_judge_disabled_flag_is_noop(tmp_path, monkeypatch):
     monkeypatch.setattr(judge_config, "LLM_JUDGE_ENABLED", False)
     client = FakeClient()
