@@ -3628,6 +3628,12 @@ def _build_proximity_map_figure(session_dict, title_label):
 
 def make_figures(s1, s2, cdf, z_scores_df, my_ip):
     figs = {}
+    # rebuild_figures() passes the SAME session object for both slots
+    # when only one capture is loaded, so every chart still renders.
+    # Dual-series charts must not draw that copy as a second series -
+    # a fabricated 'Session 2' identical to Session 1 reads as two
+    # independent captures showing the same attack.
+    _two_sessions = s2 is not s1
 
 
     agg = s2["ip_agg"].sort_values("dominance",ascending=False).head(15).reset_index()
@@ -3716,12 +3722,18 @@ def make_figures(s1, s2, cdf, z_scores_df, my_ip):
 
     p1 = pd.DataFrame(s1["protocols"].most_common(10), columns=["proto","count"])
     p1["session"] = "Session 1"
-    p2 = pd.DataFrame(s2["protocols"].most_common(10), columns=["proto","count"])
-    p2["session"] = "Session 2"
-    figs["proto"] = px.bar(pd.concat([p1,p2]), x="proto", y="count", color="session",
+    proto_frames = [p1]
+    if _two_sessions:
+        p2 = pd.DataFrame(s2["protocols"].most_common(10),
+                          columns=["proto","count"])
+        p2["session"] = "Session 2"
+        proto_frames.append(p2)
+    figs["proto"] = px.bar(pd.concat(proto_frames), x="proto", y="count",
+        color="session",
         barmode="group", color_discrete_map={"Session 1":BLUE,"Session 2":RED},
         text="count",
-        title="Protocol Distribution - Session 1 vs Session 2")
+        title=("Protocol Distribution - Session 1 vs Session 2"
+               if _two_sessions else "Protocol Distribution - Session 1"))
     figs["proto"].update_traces(texttemplate="%{text:,}", textposition="outside",
                                 textfont=dict(size=11), cliponaxis=False)
     figs["proto"].update_layout(xaxis_tickangle=-30, plot_bgcolor=WHITE, paper_bgcolor=WHITE,
@@ -3991,15 +4003,19 @@ def make_figures(s1, s2, cdf, z_scores_df, my_ip):
     syn_rows = []
     for ip, cnt in s1["syn_counter"].most_common(10):
         syn_rows.append({"ip":ip, "syn":cnt, "session":"Session 1"})
-    for ip, cnt in s2["syn_counter"].most_common(10):
-        syn_rows.append({"ip":ip, "syn":cnt, "session":"Session 2"})
+    if _two_sessions:
+        for ip, cnt in s2["syn_counter"].most_common(10):
+            syn_rows.append({"ip":ip, "syn":cnt, "session":"Session 2"})
     syn_df = pd.DataFrame(syn_rows)
     if not syn_df.empty:
         figs["syn"] = px.bar(
             syn_df, x="syn", y="ip", color="session", barmode="group",
             orientation="h", text="syn",
             color_discrete_map={"Session 1":BLUE,"Session 2":RED},
-            title="TCP SYN Packets per IP - Both Sessions (potential scan/flood)",
+            title=("TCP SYN Packets per IP - Both Sessions "
+                   "(potential scan/flood)" if _two_sessions else
+                   "TCP SYN Packets per IP - Session 1 "
+                   "(potential scan/flood)"),
             labels={"ip":"IP","syn":"SYN packet count"},
         )
         figs["syn"].update_traces(textposition="outside", textfont=dict(size=11),

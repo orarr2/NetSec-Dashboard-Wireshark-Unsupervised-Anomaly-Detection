@@ -369,8 +369,19 @@ def set_session_notify_email(conn, session_id, notify_email):
 
 
 def latest_session_for_pcap(conn, pcap_id):
+    """Newest REUSABLE session for this PCAP, or None.
+
+    A re-upload is deduplicated onto an existing session so the same
+    capture is not analysed twice. That is only correct while the
+    existing session can still produce a report: a session left in
+    'error' never will, so attaching to it would swallow the upload -
+    the requester typed an email address and would wait forever for a
+    report no worker is going to write. Errored sessions are therefore
+    skipped and the caller queues a fresh one.
+    """
     row = conn.execute(
-        "SELECT id FROM sessions WHERE pcap_id = ? ORDER BY id DESC LIMIT 1",
+        "SELECT id FROM sessions WHERE pcap_id = ? AND status <> 'error'"
+        " ORDER BY id DESC LIMIT 1",
         (pcap_id,)).fetchone()
     return row["id"] if row else None
 

@@ -131,6 +131,30 @@ def test_register_pcap_idempotent_and_session_flow(conn):
         db.create_session(conn, pcap_id, "S1", "staging")
 
 
+def test_errored_session_is_not_reused_for_dedup(conn):
+    """A re-upload must not be deduplicated onto a session that already
+    failed: that session will never produce a report, so the requester
+    would wait forever for an email nobody is going to send."""
+    sensor, _ = _sensor(conn)
+    pcap_id, _ = db.register_pcap(conn, SHA, "a.pcap", 123,
+                                  sensor["id"], "/x/a.pcap")
+    dead = db.create_session(conn, pcap_id, "S1", "prod")
+    db.claim_next_job(conn)
+    db.mark_error(conn, dead, "worker died")
+    assert db.get_session(conn, dead)["status"] == "error"
+
+    # nothing reusable left -> the caller queues a fresh session
+    assert db.latest_session_for_pcap(conn, pcap_id) is None
+
+    fresh = db.create_session(conn, pcap_id, "S1-retry", "prod")
+    assert db.latest_session_for_pcap(conn, pcap_id) == fresh
+    # a healthy session still wins over a newer errored one
+    newer_dead = db.create_session(conn, pcap_id, "S1-retry2", "prod")
+    db.claim_next_job(conn)
+    db.mark_error(conn, newer_dead, "died again")
+    assert db.latest_session_for_pcap(conn, pcap_id) == fresh
+
+
 # ---- storage -------------------------------------------------------------
 
 def test_storage_stream_and_finalize(tmp_path):
