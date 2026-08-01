@@ -135,7 +135,7 @@ QUOTA_DB = os.environ.get("LLM_JUDGE_QUOTA_DB",
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a
 # bump automatically invalidates cached verdicts.
-PROMPT_VERSION = "v0.3.0"
+PROMPT_VERSION = "v0.4.0"  # I2: blob enrichments (time, device, websites, traffic)
 
 # Ensemble weights (spec section 9).
 W_ANOM = 0.20        # baseline detector floor

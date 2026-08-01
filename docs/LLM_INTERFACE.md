@@ -93,7 +93,10 @@ and never reaches the model.
   "session_context": {
     "duration_s": 0.1,
     "total_packets": 2000,
-    "total_ips": 2
+    "total_ips": 2,
+    "iso_timestamp": "2026-08-01T09:41:00",
+    "hour_of_day": 9,
+    "day_of_week": "Sat"
   },
 
   "features": {
@@ -137,8 +140,31 @@ and never reaches the model.
 
   "device_context": {
     "category": "unknown",
-    "hostname": null,
-    "oui_vendor": null
+    "hostname": "orarr-macbook.local",
+    "oui_vendor": "Apple, Inc."
+  },
+
+  "websites": {
+    "top_http_hosts": null,
+    "top_tls_sni": [
+      {"host": "cloudflare.com", "count": 87},
+      {"host": "googleapis.com", "count": 34}
+    ],
+    "top_dns_queries": [
+      {"host": "evil-c2.duckdns.org", "count": 128},
+      {"host": "pool.ntp.org", "count": 12}
+    ]
+  },
+
+  "traffic": {
+    "top_dst_ports": [
+      {"port_proto": "443/tcp", "count": 900},
+      {"port_proto": "53/udp", "count": 30},
+      {"port_proto": "80/tcp", "count": 20}
+    ],
+    "bytes_in": 3000000,
+    "bytes_out": 1000000,
+    "upload_ratio": 0.25
   },
 
   "enrichments": {
@@ -157,7 +183,10 @@ and never reaches the model.
 - **`candidate_id` + `kind`** - identity. `kind` is `ip` for per-host
   candidates or `session` for aggregate rules (e.g. spoofed SYN flood).
 - **`session_context`** - capture-level totals so the judge knows the
-  scale ("1000 packets from this IP out of 2000 total = it dominates").
+  scale ("1000 packets from this IP out of 2000 total = it dominates"),
+  plus `iso_timestamp`, `hour_of_day` (0-23), and `day_of_week` (Mon..Sun)
+  so off-hours activity carries weight. All three time fields are null
+  when the caller built S without a real timestamp (e.g. unit tests).
 - **`features`** - the 10 statistical columns the ML models train on.
   All counts and ratios are for the candidate IP alone.
 - **`ml_signals`** - IsolationForest score + stability, DBSCAN cluster
@@ -172,11 +201,26 @@ and never reaches the model.
   tunnel / DGA / TLS anomaly / fusion score). Populated only when the
   engine fired on this candidate; `null` means "not fired", not
   "clean" - the prompt teaches the model that distinction.
-- **`device_context`** - `category` / `hostname` / `oui_vendor` from
-  the device classifier + inventory. When the worker did not attach an
-  inventory, everything is unknown/null. **This is a current gap - the
-  worker does not build the local inventory by default. See "planned
-  enrichments" below.**
+- **`device_context`** - `category` / `hostname` / `oui_vendor`. The
+  dashboard path populates all three via `build_local_inventory` (device
+  classifier + inventory). The worker path falls back to a lightweight
+  derivation that uses only `S["ip_to_mac"]` (for `oui_vendor` via the
+  `manuf` package) and `S["dns_per_ip"]` (for `hostname` via .local
+  mDNS names). `category` remains "unknown" on the worker path unless
+  the dashboard-produced inventory is attached at `S["_local_inv"]`.
+- **`websites`** - `top_http_hosts` / `top_tls_sni` / `top_dns_queries`,
+  each an ordered list (up to 5, by count) of `{host, count}` items or
+  `null` when the pipeline observed no traffic of that kind for this IP.
+  mDNS (`.local`), `.arpa`, and PTR queries are filtered out before
+  ranking so the list reflects real external browsing. Random-looking
+  hostnames corroborate `advanced_signals.dga` / `.beaconing`.
+- **`traffic`** - `top_dst_ports` (up to 5 `{port_proto, count}` items,
+  proto = "tcp" or "udp"), `bytes_in` / `bytes_out` (directional totals),
+  and `upload_ratio` (`bytes_out / (bytes_in + bytes_out)`, rounded to
+  3 places). A high `upload_ratio` with meaningful `bytes_out` and a
+  public destination is a data-exfiltration shape. Presence of
+  `445/tcp`, `3389/tcp`, `22/tcp`, `5985/tcp` on an internal host is a
+  lateral-movement signal.
 - **`enrichments`** - `is_private` is the only field always populated.
   `reverse_dns`, `asn`, `baseline_seen_before` are reserved for future
   enrichment engines (Shodan is wired but off unless
@@ -298,26 +342,37 @@ produced and the failed judge is recorded in the participation report.
 
 ---
 
-## 7. What is currently NOT sent to the LLM (planned enrichments)
+## 7. What was added in I2 (2026-08-01) and what remains open
 
-The pipeline gathers a lot more than what reaches the LLM. Fields the
-model would benefit from but does not see today:
+Delivered in prompt version **v0.4.0**:
 
-| Field | Where the pipeline already has it | Cost to expose |
+- `session_context.hour_of_day` / `.day_of_week` / `.iso_timestamp`
+- `device_context.oui_vendor` + `.hostname` (lightweight, worker path;
+  full inventory still requires the dashboard's `build_local_inventory`)
+- `websites` block with `top_http_hosts` / `top_tls_sni` / `top_dns_queries`
+- `traffic` block with `top_dst_ports` / `bytes_in` / `bytes_out` /
+  `upload_ratio`
+
+Pipeline changes (`attack_tests/run_pipeline.py`):
+
+- `FIELDS` gained `http.host` and `tls.handshake.extensions_server_name`
+  (one extra tshark column each; unaffected packets return "").
+- `analyze_pcap` now returns `ip_to_mac`, `dns_per_ip`, `http_host_per_ip`,
+  `tls_sni_per_ip`, `dst_ports_per_ip` as per-IP Counter maps that
+  `assemble_candidates` consumes.
+
+Still open (not yet in the blob):
+
+| Field | Where the pipeline has it | Cost to expose |
 |---|---|---|
-| Device OUI vendor + hostname + category | `device_classifier.py` + `build_local_inventory()` | Low - populate `device_context` in worker |
-| HTTP `Host` + TLS `SNI` per IP | `host_stats` (advanced engines) | Low - forward to blob |
-| Top DNS queries per IP | DNS scanner outputs | Low - forward to blob |
-| Top-5 destination ports + protocol | Per-IP counters exist | Low - forward to blob |
-| Hour of day + day of week | Derivable from `session_context.t0` | Trivial - format at assemble time |
-| bytes_in / bytes_out per IP | `total_bytes` exists but not directional | Medium - add flow-level directional tracking |
-| TLS versions + cipher suites | `tls_anomaly` engine returns only score | Medium - extend the engine output |
+| `device_context.category` on worker path | Full classifier lives in `app/dashboard_module.py` (`_SORTED_RULES`, `_match_dns_fingerprint`, `classify_local_device`); the module runs `pip install` + `app.run()` on import, so it can't be imported into the worker directly | Medium - extract a `app/device_inventory.py` (~380 LOC) shared by both paths |
+| TLS versions + cipher suites | `tls_anomaly` engine returns only score | Medium - extend engine output |
 | Baseline history (has this IP been seen before?) | `baseline` module keeps 30-day history | Medium - lookup at assemble time |
 
-The enrichments are opt-in additions to `assemble_candidates`; the
-prompt already tells the model to trust `null` as "unknown, not zero",
-so new fields can roll out without breaking cached verdicts (the cache
-fingerprints on the full blob).
+Every enrichment is additive; the prompt already teaches the model that
+`null` = unknown, so new fields never falsely imply "observed zero".
+Bumping `PROMPT_VERSION` (done: `v0.3.0` -> `v0.4.0`) invalidates every
+cached verdict so the model re-judges with the richer input on next run.
 
 ---
 

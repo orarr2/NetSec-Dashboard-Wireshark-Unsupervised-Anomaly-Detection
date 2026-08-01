@@ -121,6 +121,141 @@ def test_assemble_unions_ml_and_rule_triggers():
     json.dumps(out["candidates"])
 
 
+# --------------------------------------------------------------------------
+# I2 blob enrichments: time_context, websites, traffic, lightweight
+# device_context. Every candidate must carry each new block with its
+# documented "unknown" defaults when the pipeline did not observe the
+# underlying signal (never [] or 0 - null, so the prompt's null=unknown
+# rule kicks in).
+# --------------------------------------------------------------------------
+def test_assemble_time_context_from_S_t0():
+    """hour_of_day / day_of_week / iso_timestamp populated from S['t0']."""
+    S = make_session()
+    out = judge_core.assemble_candidates(S, make_findings())
+    ctx = out["candidates"][0]["session_context"]
+    assert ctx["hour_of_day"] == 12          # make_session sets 12:00
+    assert ctx["day_of_week"] == "Fri"       # 2026-07-10 is a Friday
+    assert ctx["iso_timestamp"].startswith("2026-07-10T12:00:00")
+
+
+def test_assemble_time_context_gracefully_handles_missing_t0():
+    """A synthetic S without t0 must not crash - fields land as null."""
+    import copy
+    S = make_session()
+    S.pop("t0")
+    S.pop("t1")
+    out = judge_core.assemble_candidates(S, make_findings())
+    ctx = out["candidates"][0]["session_context"]
+    assert ctx["hour_of_day"] is None
+    assert ctx["day_of_week"] is None
+    assert ctx["iso_timestamp"] is None
+    assert ctx["duration_s"] == 0.0
+    # blob must still be JSON-serializable
+    json.dumps(out["candidates"])
+
+
+def test_assemble_websites_populated_from_S_maps():
+    """When S carries http_host_per_ip / tls_sni_per_ip / dns_per_ip, the
+    candidate's websites block reflects the top 5 by count."""
+    import collections
+    S = make_session()
+    ip = "192.168.1.10"
+    S["http_host_per_ip"] = {ip: collections.Counter({
+        "api.example.com": 42, "cdn.example.com": 5})}
+    S["tls_sni_per_ip"] = {ip: collections.Counter({
+        "google.com": 87, "cloudflare.com": 34})}
+    S["dns_per_ip"] = {ip: collections.Counter({
+        "evil.duckdns.org": 128, "pool.ntp.org": 12,
+        "_apple-mobdev2._tcp.local": 400,  # mDNS: filtered out
+        "1.0.0.10.in-addr.arpa": 300})}    # PTR: filtered out
+    out = judge_core.assemble_candidates(S, make_findings())
+    web = out["candidates"][0]["websites"]
+    assert web["top_http_hosts"][0] == {"host": "api.example.com", "count": 42}
+    assert web["top_tls_sni"][0] == {"host": "google.com", "count": 87}
+    # mDNS/.arpa filtered; only real external names survive
+    dns_hosts = [d["host"] for d in web["top_dns_queries"]]
+    assert "evil.duckdns.org" in dns_hosts
+    assert "pool.ntp.org" in dns_hosts
+    assert not any(h.endswith(".local") or h.endswith(".arpa")
+                   for h in dns_hosts)
+
+
+def test_assemble_websites_null_when_pipeline_saw_nothing():
+    """No per-IP browsing maps -> all three fields land null, NOT [].
+    The SYSTEM_PROMPT teaches null = unknown; [] would mislead the LLM
+    into treating 'no browsing' as evidence of anomaly."""
+    S = make_session()
+    out = judge_core.assemble_candidates(S, make_findings())
+    web = out["candidates"][0]["websites"]
+    assert web == {"top_http_hosts": None, "top_tls_sni": None,
+                   "top_dns_queries": None}
+
+
+def test_assemble_traffic_populated_from_S():
+    """dst_ports_per_ip + bytes_src + bytes_dst produce the traffic block
+    with top-5 ports and directional byte totals + upload_ratio."""
+    import collections
+    S = make_session()
+    ip = "192.168.1.10"
+    S["dst_ports_per_ip"] = {ip: collections.Counter({
+        "443/tcp": 900, "80/tcp": 50, "53/udp": 30,
+        "22/tcp": 15, "445/tcp": 5, "3389/tcp": 2, "123/udp": 1})}
+    S["bytes_src"] = collections.Counter({ip: 1_000_000})
+    S["bytes_dst"] = collections.Counter({ip: 3_000_000})
+    out = judge_core.assemble_candidates(S, make_findings())
+    tr = out["candidates"][0]["traffic"]
+    assert len(tr["top_dst_ports"]) == 5           # capped
+    assert tr["top_dst_ports"][0] == {"port_proto": "443/tcp", "count": 900}
+    assert tr["bytes_in"] == 3_000_000
+    assert tr["bytes_out"] == 1_000_000
+    assert tr["upload_ratio"] == 0.25              # 1/(1+3)
+
+
+def test_assemble_traffic_null_when_no_data():
+    """No port/byte maps -> traffic block is all null (unknown), not 0."""
+    S = make_session()
+    S["bytes_src"] = {}
+    S["bytes_dst"] = {}
+    out = judge_core.assemble_candidates(S, make_findings())
+    tr = out["candidates"][0]["traffic"]
+    assert tr == {"top_dst_ports": None, "bytes_in": None,
+                  "bytes_out": None, "upload_ratio": None}
+
+
+def test_assemble_device_context_lightweight_oui_and_hostname():
+    """Even with no dashboard-built local_inv, ip_to_mac + dns_per_ip
+    let judge_core derive OUI vendor + .local hostname."""
+    import collections
+    S = make_session()
+    ip = "192.168.1.10"
+    # Apple MAC prefix 00:03:93 - manuf pkg knows this one universally.
+    S["ip_to_mac"] = {ip: collections.Counter({"00:03:93:aa:bb:cc": 100})}
+    S["dns_per_ip"] = {ip: collections.Counter({"or-macbook.local": 50})}
+    out = judge_core.assemble_candidates(S, make_findings())
+    dev = out["candidates"][0]["device_context"]
+    # Vendor recognized by manuf (or None if manuf isn't installed - the
+    # helper never raises, just returns null). Hostname always resolvable
+    # from the .local DNS entry.
+    assert dev["hostname"] == "or-macbook.local"
+    if dev["oui_vendor"] is not None:
+        assert "apple" in dev["oui_vendor"].lower()
+
+
+def test_assemble_session_candidate_gets_empty_enrichment_blocks():
+    """The flood session-scope candidate has no per-IP owner so websites
+    and traffic land as the null defaults, not as some other IP's data."""
+    flood = [{"type": "SYN_FLOOD", "total_syn": 100, "syn_sources": 90,
+              "syn_per_sec": 10.0, "syn_per_source": 1.1,
+              "spoofed_source_pattern": True}]
+    S = make_session()
+    out = judge_core.assemble_candidates(S, make_findings(flood_alerts=flood))
+    sess = next(c for c in out["candidates"] if c["kind"] == "session")
+    assert sess["websites"] == {"top_http_hosts": None, "top_tls_sni": None,
+                                 "top_dns_queries": None}
+    assert sess["traffic"] == {"top_dst_ports": None, "bytes_in": None,
+                                "bytes_out": None, "upload_ratio": None}
+
+
 def test_assemble_cap_keeps_rule_triggered_first():
     S = make_session(n_benign=6)
     # every benign IP except one becomes a DBSCAN-noise candidate; keeping

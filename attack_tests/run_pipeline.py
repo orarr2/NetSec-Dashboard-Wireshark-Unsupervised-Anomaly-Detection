@@ -34,12 +34,19 @@ FIELDS = [
     "udp.srcport", "udp.dstport",
     "dns.qry.name", "dns.flags.rcode", "dns.flags.response",
     "arp.src.proto_ipv4", "arp.src.hw_mac", "arp.opcode",
+    # Enrichment fields for the LLM candidate blob (I2). tshark ignores
+    # unknown fields silently on packets that do not carry them, so the
+    # cost is one extra column per packet, negligible on the 2k-packet
+    # captures the judge normally sees.
+    "http.host",
+    "tls.handshake.extensions_server_name",
 ]
 COLS = ["ts","len","eth_src","eth_dst","ip_src","ip_dst",
         "ip6_src","ip6_dst","proto",
         "tcp_sport","tcp_dport","tcp_flags","udp_sport","udp_dport",
         "dns_qname","dns_rcode","dns_response",
-        "arp_psrc","arp_hwsrc","arp_opcode"]
+        "arp_psrc","arp_hwsrc","arp_opcode",
+        "http_host","tls_sni"]
 
 
 sys.path.insert(0, os.path.join(
@@ -154,6 +161,58 @@ def analyze_pcap(path, label):
     ip_agg["null_count"]  = ip_agg.index.map(lambda x: null_counter.get(x, 0))
     ip_agg["xmas_count"]  = ip_agg.index.map(lambda x: xmas_counter.get(x, 0))
 
+    # ----- I2 blob enrichments (per-IP maps consumed by
+    # llm_judge.assemble_candidates). Each is a defaultdict-ish shape:
+    # {ip -> Counter(item -> count)} so the assembler can take .most_common(N)
+    # cheaply without re-scanning the packet frame. All keys stay strings.
+    dst_ports_per_ip = collections.defaultdict(collections.Counter)
+    # dst_port keys are "<port>/<proto>" so 443/tcp vs 443/udp stay distinct.
+    tcp_port_mask = (df["tcp_dport"] != "") & (df["ip_src"] != "")
+    if tcp_port_mask.any():
+        for ip, port in zip(df[tcp_port_mask]["ip_src"], df[tcp_port_mask]["tcp_dport"]):
+            dst_ports_per_ip[ip][f"{port}/tcp"] += 1
+    udp_port_mask = (df["udp_dport"] != "") & (df["ip_src"] != "")
+    if udp_port_mask.any():
+        for ip, port in zip(df[udp_port_mask]["ip_src"], df[udp_port_mask]["udp_dport"]):
+            dst_ports_per_ip[ip][f"{port}/udp"] += 1
+
+    dns_per_ip = collections.defaultdict(collections.Counter)
+    # ip_src on a query packet is the CLIENT asking; on a response, it is
+    # the resolver. Only client-side queries reveal what the endpoint
+    # wanted to reach - attributing responses would credit the DNS
+    # server with everything its clients ever asked about.
+    dns_qmask = ((df["dns_qname"] != "") & (df["ip_src"] != "")
+                 & (df["dns_response"] != "1")
+                 & (df["dns_response"] != "True"))
+    if dns_qmask.any():
+        for ip, q in zip(df[dns_qmask]["ip_src"], df[dns_qmask]["dns_qname"]):
+            q = q.rstrip(".")
+            if q:
+                dns_per_ip[ip][q] += 1
+
+    http_host_per_ip = collections.defaultdict(collections.Counter)
+    http_mask = (df["http_host"] != "") & (df["ip_src"] != "")
+    if http_mask.any():
+        for ip, host in zip(df[http_mask]["ip_src"], df[http_mask]["http_host"]):
+            if host:
+                http_host_per_ip[ip][host] += 1
+
+    tls_sni_per_ip = collections.defaultdict(collections.Counter)
+    tls_mask = (df["tls_sni"] != "") & (df["ip_src"] != "")
+    if tls_mask.any():
+        for ip, sni in zip(df[tls_mask]["ip_src"], df[tls_mask]["tls_sni"]):
+            if sni:
+                tls_sni_per_ip[ip][sni] += 1
+
+    # ip_to_mac: {ip -> Counter(mac -> pkt_count)}. build_local_inventory
+    # picks the dominant MAC. Also lets assemble_candidates surface an OUI
+    # vendor guess without loading the full device classifier.
+    ip_to_mac = collections.defaultdict(collections.Counter)
+    mac_mask = (df["eth_src"] != "") & (df["ip_src"] != "")
+    if mac_mask.any():
+        for ip, mac in zip(df[mac_mask]["ip_src"], df[mac_mask]["eth_src"]):
+            ip_to_mac[ip][mac] += 1
+
     print(f"[{label}] {os.path.basename(path)} | "
           f"{t0:%H:%M:%S}->{t1:%H:%M:%S} | "
           f"{len(df):,} packets | {len(ips_src)} src-IPs | "
@@ -187,6 +246,12 @@ def analyze_pcap(path, label):
         "arp_spoofing_macs": arp_spoofing_macs,
         "dns_q": dns_q, "dns_nxdomain": dns_nxdomain,
         "dns_long_queries": dns_long_queries,
+        # I2 enrichments (consumed by llm_judge.assemble_candidates):
+        "dst_ports_per_ip": dict(dst_ports_per_ip),
+        "dns_per_ip": dict(dns_per_ip),
+        "http_host_per_ip": dict(http_host_per_ip),
+        "tls_sni_per_ip": dict(tls_sni_per_ip),
+        "ip_to_mac": dict(ip_to_mac),
     }
 
 

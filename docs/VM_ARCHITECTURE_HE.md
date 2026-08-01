@@ -576,20 +576,30 @@ reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כ�
 
 **מקור אמת מלא (‏עם דוגמאות ולכידויות):** [`docs/LLM_INTERFACE.md`](LLM_INTERFACE.md).
 
-### מה חסר לשופט לדעת (‏העשרות מתוכננות)
+### מה נוסף לשופט ב-I2 (‏2026-08-01, ‏prompt v0.4.0)
 
-הפייפליין אוסף הרבה יותר ממה שהשופט רואה. שדות שהשופט **לא** מקבל עכשיו,
-אבל שהיו עוזרים לו:
+הוספנו 5 העשרות שהשופט רואה כעת בכל candidate blob:
 
-| שדה | נאסף בפייפליין? | עלות הוספה |
+| שדה | מקור | דוגמה |
 |---|---|---|
-| שם המכשיר + OUI vendor + קטגוריה | ✅ ‏(`device_classifier` + `build_local_inventory`) | נמוכה - `device_context` כבר בסכימה, רק צריך לאכלס |
-| HTTP Host + TLS SNI + top DNS | ✅ ‏(`host_stats`) | נמוכה |
-| Top-5 destination ports + protocol | ✅ | נמוכה |
-| Hour of day + day of week | ✅ ‏(מ-`session_context.t0`) | טריוויאלית |
-| bytes_in / bytes_out per IP | ⚠️ יש `total_bytes` אבל לא directional | בינונית |
-| TLS versions + weak ciphers | ⚠️ יש `tls_anomaly` engine (‏score בלבד) | בינונית |
-| Baseline history (‏האם ה-IP חדש?) | ✅ (‏`baseline` module) | בינונית |
+| `session_context.iso_timestamp` + `.hour_of_day` + `.day_of_week` | מ-`S["t0"]` | `"09"`, `"Sat"` - סריקה ב-3AM Sun מקבלת ניקוד גבוה יותר |
+| `device_context.oui_vendor` + `.hostname` | `manuf` package + mDNS `.local` | `"Apple, Inc."`, `"orarr-macbook.local"` |
+| `websites.top_http_hosts` + `.top_tls_sni` + `.top_dns_queries` | tshark חדש: `http.host`, `tls.handshake.extensions_server_name` | `[{"host": "api.example.com", "count": 42}, ...]` (‏top 5) |
+| `traffic.top_dst_ports` | groupby על tcp_dport/udp_dport | `[{"port_proto": "445/tcp", "count": 900}]` - lateral movement signal |
+| `traffic.bytes_in/bytes_out/upload_ratio` | `bytes_src`, `bytes_dst` (‏קיימים) | `upload_ratio: 0.98` = exfiltration shape |
+
+**שינוי בפייפליין**: `attack_tests/run_pipeline.py` מרחיב את שאילתת tshark
+עם 2 שדות (http.host, tls.sni) - עלות זניחה על קפצ'ר של 2000 packets.
+
+**PROMPT_VERSION** קפץ מ-v0.3.0 ל-v0.4.0 → כל ה-cache verdicts יתחדשו.
+
+### מה עדיין חסר (‏פתוח)
+
+- `device_context.category` on worker path - דורש extraction של
+  `classify_local_device` מ-`dashboard_module.py` ‏(~380 שורות). הlwlwl
+  ורק hostname+vendor נטענים כרגע ב-VM.
+- TLS versions + weak ciphers - `tls_anomaly` engine כרגע מחזיר רק score.
+- Baseline history (‏האם ה-IP הזה חדש?) - יש טבלת baseline אבל לא מזרימים.
 
 ---
 

@@ -112,6 +112,25 @@ Category cheat sheet:
   (isolation_forest / dbscan_noise) with NO deterministic rule fired and
   no matching attack pattern. Do NOT use this when any rule has fired.
 
+Enrichment blocks the blob may include (each field may be null = unknown):
+- session_context.hour_of_day / .day_of_week / .iso_timestamp: when the
+  capture ran. Off-hours or weekend activity from a workstation is worth
+  a note; a scan at 03:00 Sunday is more suspicious than one at 14:00
+  Wednesday. Do not invent this signal - only use it if present.
+- device_context.oui_vendor / .hostname / .category: what device this IP
+  belongs to. A workstation OUI running SMB traffic to many peers reads
+  as lateral movement; the same traffic from a printer is normal.
+- websites.top_http_hosts / .top_tls_sni / .top_dns_queries: the top
+  external hostnames this IP reached (up to 5 each, ranked by count).
+  Random-looking, long, or high-entropy names corroborate advanced_signals
+  .dga / .beaconing. Familiar CDNs / cloud APIs corroborate benign.
+- traffic.top_dst_ports: top destination "port/proto" pairs this IP
+  contacted. Presence of 22/tcp, 445/tcp, 3389/tcp, 5985/tcp on an
+  internal host is a lateral-movement signal.
+- traffic.bytes_in / .bytes_out / .upload_ratio: directional bytes and
+  the upload share. upload_ratio near 1.0 with meaningful bytes_out and
+  a public destination is a data-exfiltration shape.
+
 Worked examples (abbreviated input -> correct output):
 
 Example 1 - vertical SYN scan. Input has features {"syn_count": 1002,
@@ -273,6 +292,140 @@ FEATURE_COLS = ["mean_len", "std_len", "count", "burst_score", "unique_dsts",
 _EMPTY_ADV = {"beaconing": None, "dns_tunneling": None,
               "dga": None, "tls_anomaly": None, "fusion_score": None}
 _EMPTY_DEV = {"category": "unknown", "hostname": None, "oui_vendor": None}
+# I2 blob enrichments: websites the IP reached, top destination ports,
+# directional byte totals. All three blocks are always present in the
+# candidate but any of their fields may be null (unknown), following the
+# SYSTEM_PROMPT rule "null = unknown, not zero".
+_EMPTY_WEB = {"top_http_hosts": None, "top_tls_sni": None,
+              "top_dns_queries": None}
+_EMPTY_TRAFFIC = {"top_dst_ports": None, "bytes_in": None, "bytes_out": None,
+                  "upload_ratio": None}
+
+# The manuf parser (OUI -> vendor) is instantiated at most once per process
+# and hidden behind a getter so the import cost is paid only when the worker
+# actually needs an OUI lookup (the dashboard already has its own parser).
+_MANUF_PARSER = None
+_MANUF_TRIED = False
+
+
+def _oui_vendor(mac):
+    """Best-effort OUI -> vendor string. Returns None on any failure
+    (manuf missing, unparseable MAC, unknown prefix). No exceptions
+    propagate: an enrichment miss must never break judgment."""
+    global _MANUF_PARSER, _MANUF_TRIED
+    if not mac:
+        return None
+    if _MANUF_PARSER is None and not _MANUF_TRIED:
+        _MANUF_TRIED = True
+        try:
+            from manuf import manuf as _manuf_mod
+            _MANUF_PARSER = _manuf_mod.MacParser()
+        except Exception:
+            _MANUF_PARSER = None
+    if _MANUF_PARSER is None:
+        return None
+    try:
+        return (_MANUF_PARSER.get_manuf_long(mac)
+                or _MANUF_PARSER.get_manuf(mac)
+                or None)
+    except Exception:
+        return None
+
+
+def _lightweight_device_context(S, ip):
+    """Fallback device_context derived from just S['ip_to_mac'] and
+    S['dns_per_ip'] - no dashboard-module dependency. Used when the
+    caller did not build a full local inventory (the worker path).
+    Returns the empty default block if we can't derive anything useful."""
+    out = dict(_EMPTY_DEV)
+    mac_counter = (S.get("ip_to_mac") or {}).get(ip)
+    if mac_counter:
+        try:
+            mac = mac_counter.most_common(1)[0][0]
+            vendor = _oui_vendor(mac)
+            if vendor:
+                out["oui_vendor"] = vendor
+        except Exception:
+            pass
+    # Prefer mDNS-style hostname (.local without a leading '_' for a
+    # service record). No printable hostname? Leave null - the LLM is
+    # taught to read null as unknown.
+    dns = (S.get("dns_per_ip") or {}).get(ip)
+    if dns:
+        try:
+            for q, _ in dns.most_common(20):
+                if q.endswith(".local") and not q.startswith("_"):
+                    out["hostname"] = q
+                    break
+        except Exception:
+            pass
+    return out
+
+
+def _top_n_from_counter(counter, n=5, key_label="host"):
+    """{item: count} Counter/dict -> [{key_label: item, count: int}] top-N.
+    Returns None (not []) on empty input so the blob field carries
+    'unknown' semantics rather than 'observed zero'."""
+    if not counter:
+        return None
+    try:
+        items = counter.most_common(n)
+    except AttributeError:
+        # plain dict: sort by value desc, take top n
+        items = sorted(counter.items(), key=lambda kv: -kv[1])[:n]
+    if not items:
+        return None
+    return [{key_label: str(k), "count": int(v)} for k, v in items
+            if k and v > 0] or None
+
+
+def _websites_for(S, ip):
+    """Build the 'websites' block for one candidate IP from S maps."""
+    http_c = (S.get("http_host_per_ip") or {}).get(ip)
+    sni_c  = (S.get("tls_sni_per_ip") or {}).get(ip)
+    dns_c  = (S.get("dns_per_ip") or {}).get(ip)
+    # Drop mDNS/.arpa noise from top DNS queries - the LLM cares about
+    # external browsing, not local service discovery.
+    if dns_c:
+        dns_c = {k: v for k, v in dns_c.items()
+                 if k and not k.endswith(".local")
+                 and not k.endswith(".arpa")
+                 and not k.endswith(".in-addr.arpa")
+                 and not k.startswith("_")}
+    return {
+        "top_http_hosts": _top_n_from_counter(http_c, 5, "host"),
+        "top_tls_sni": _top_n_from_counter(sni_c, 5, "host"),
+        "top_dns_queries": _top_n_from_counter(dns_c, 5, "host"),
+    }
+
+
+def _traffic_for(S, ip):
+    """Build the 'traffic' block: top dst ports + directional byte
+    totals for one candidate IP. bytes_src/bytes_dst come from the
+    pipeline unchanged; if either is missing, the field is null."""
+    ports_c = (S.get("dst_ports_per_ip") or {}).get(ip)
+    ports = _top_n_from_counter(ports_c, 5, "port_proto")
+    bytes_out = None
+    bytes_in = None
+    bs = S.get("bytes_src") or {}
+    bd = S.get("bytes_dst") or {}
+    if ip in bs:
+        try:
+            bytes_out = int(bs[ip])
+        except Exception:
+            bytes_out = None
+    if ip in bd:
+        try:
+            bytes_in = int(bd[ip])
+        except Exception:
+            bytes_in = None
+    upload_ratio = None
+    if isinstance(bytes_in, int) and isinstance(bytes_out, int):
+        total = bytes_in + bytes_out
+        if total > 0:
+            upload_ratio = round(bytes_out / total, 3)
+    return {"top_dst_ports": ports, "bytes_in": bytes_in,
+            "bytes_out": bytes_out, "upload_ratio": upload_ratio}
 
 
 def threats_to_advanced_signals(threats):
@@ -369,11 +522,26 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
     if max_candidates is None:
         max_candidates = judge_config.MAX_CANDIDATES_PER_BATCH
     ip_agg = S["ip_agg"]
-    duration_s = max((S["t1"] - S["t0"]).total_seconds(), 0.0)
+    t0 = S.get("t0")
+    t1 = S.get("t1")
+    duration_s = max((t1 - t0).total_seconds(), 0.0) if (t0 and t1) else 0.0
+    # Time context: an operator judging a candidate benefits from knowing
+    # WHEN the capture ran (a scan at 03:17 Sunday is worth more attention
+    # than one at 14:00 Wednesday). The LLM prompt teaches null=unknown, so
+    # a synthetic test session without a real timestamp lands as three nulls.
+    if t0 is not None:
+        _wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][t0.weekday()]
+        time_ctx = {"iso_timestamp": t0.isoformat(timespec="seconds"),
+                    "hour_of_day": int(t0.hour),
+                    "day_of_week": _wd}
+    else:
+        time_ctx = {"iso_timestamp": None, "hour_of_day": None,
+                    "day_of_week": None}
     session_context = {
         "duration_s": round(duration_s, 1),
         "total_packets": int(S["n_pkts"]),
         "total_ips": int(len(S["ips_src"])),
+        **time_ctx,
     }
 
     scan_by_src = {}
@@ -442,6 +610,12 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
             "lstm_bin_flag_count": int(lstm_flags[ip]) if (lstm_flags
                                                            and ip in lstm_flags) else None,
         }
+        # device_context: prefer the caller-supplied inventory (dashboard
+        # path); fall back to lightweight OUI+hostname derived from S maps
+        # so the worker path is no longer 100% "unknown/null/null".
+        dev_ctx = device_context.get(ip)
+        if not dev_ctx or dev_ctx == _EMPTY_DEV:
+            dev_ctx = _lightweight_device_context(S, ip)
         candidates.append({
             "candidate_id": ip,
             "kind": "ip",
@@ -455,7 +629,13 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
                 "arp_multi_mac": ip in arp_ips,
             },
             "advanced_signals": advanced_signals.get(ip, dict(_EMPTY_ADV)),
-            "device_context": device_context.get(ip, dict(_EMPTY_DEV)),
+            "device_context": dev_ctx,
+            # I2: what this IP reached on the network (top HTTP hosts,
+            # TLS SNIs, DNS queries) and its traffic profile (top dst
+            # ports, directional bytes). All fields default to null when
+            # the pipeline collected nothing for this IP.
+            "websites": _websites_for(S, ip),
+            "traffic": _traffic_for(S, ip),
             "enrichments": {"is_private": _is_private(ip),
                             "reverse_dns": None, "asn": None,
                             "baseline_seen_before": None},
@@ -487,6 +667,11 @@ def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
             # concepts, so keep them at the default empty blocks here.
             "advanced_signals": dict(_EMPTY_ADV),
             "device_context": dict(_EMPTY_DEV),
+            # I2 enrichments: browsing and directional bytes are per-IP;
+            # a session-scope candidate (aggregate flood) has no single
+            # owner, so both blocks are the null defaults.
+            "websites": dict(_EMPTY_WEB),
+            "traffic": dict(_EMPTY_TRAFFIC),
             "enrichments": {"is_private": None, "reverse_dns": None,
                             "asn": None, "baseline_seen_before": None},
             "trigger_reasons": ["flood_rule"],
