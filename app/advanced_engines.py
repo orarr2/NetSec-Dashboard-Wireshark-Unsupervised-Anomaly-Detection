@@ -264,15 +264,42 @@ def _adv_detect_arp_dhcp(PK):
     bad_mac = {"", "00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}
     if len(arp):
         a = arp[arp["arp_psrc"] != ""]
+        # SCIENTIFIC_AUDIT 3.5 - "multi-MAC on IP" alone is not enough to
+        # flag ARP spoofing: a phone reassociating, a NAT restart, or a
+        # DHCP lease turnover during capture all satisfy it. The actual
+        # spoofing signature is a gratuitous reply (opcode 2 without a
+        # preceding opcode 1 from a peer). We now require both:
+        #   n_macs > 1 AND at least one MAC issued a gratuitous reply
+        # If only the multi-MAC part is present, we still emit a signal
+        # but with a lower score (0.5, "possible" tier) and mark low
+        # severity so the guardrail does not escalate.
+        mac_gratuitous = set()
+        for _mac, _grp in arp.groupby("arp_hwsrc"):
+            if _mac in bad_mac:
+                continue
+            _reps = int((_grp["arp_opcode"] == "2").sum())
+            _reqs = int((_grp["arp_opcode"] == "1").sum())
+            if _reps > 0 and _reps > _reqs:
+                mac_gratuitous.add(_mac)
         for ip, grp in a.groupby("arp_psrc"):
             macs = {m for m in grp["arp_hwsrc"].unique() if m not in bad_mac}
             if ip in ("0.0.0.0", "") or len(macs) <= 1: continue
+            gratuitous_seen = bool(macs & mac_gratuitous)
+            if gratuitous_seen:
+                score = min(1.0, 0.6 + 0.15 * len(macs))
+                severity = "high"
+                detail_suffix = " + gratuitous reply signature"
+            else:
+                score = 0.5
+                severity = "low"
+                detail_suffix = " (no gratuitous reply - could be DHCP churn/NAT restart)"
             rows.append(_adv_sig(device=ip, peer=";".join(sorted(macs)),
                 signal="arp_ip_multi_mac", tactic="Collection / MITM",
-                technique="T1557.002", score=min(1.0, 0.6 + 0.15*len(macs)),
-                severity="high", count=len(grp),
+                technique="T1557.002", score=score,
+                severity=severity, count=len(grp),
                 first_ts=grp["ts"].min(), last_ts=grp["ts"].max(),
-                detail=f"IP {ip} claimed by {len(macs)} MACs: {sorted(macs)}"))
+                detail=f"IP {ip} claimed by {len(macs)} MACs: {sorted(macs)}"
+                       f"{detail_suffix}"))
         for mac, grp in a.groupby("arp_hwsrc"):
             if mac in bad_mac: continue
             ips = {i for i in grp["arp_psrc"].unique() if i not in ("0.0.0.0", "")}
@@ -359,9 +386,24 @@ def _adv_detect_dga(PK):
     if not scored: return _adv_pd.DataFrame(rows, columns=_ADV_SIGNAL_COLS)
     arr = _adv_np.array([s[1] for s in scored], dtype=float)
     thr = ADV_DGA_LOGPROB_FLAG if ADV_DGA_LOGPROB_FLAG is not None else float(arr.mean() - arr.std())
+    # SCIENTIFIC_AUDIT 3.3: anchor the adaptive threshold to a
+    # capture-independent baseline (5th percentile of _ADV_COMMON_DOMAINS'
+    # log-probs). Prevents "16% of a normal capture is 'unusually random'
+    # by construction" - the adaptive threshold on the capture's own
+    # domains can drift arbitrarily on small captures.
+    if ADV_DGA_LOGPROB_FLAG is None:
+        baseline_scored = [_adv_score_label(model, w) for w in _ADV_COMMON_DOMAINS
+                           if w and len(w) >= 3]
+        if baseline_scored:
+            _baseline_arr = _adv_np.array(baseline_scored, dtype=float)
+            _baseline_thr = float(_adv_np.percentile(_baseline_arr, 5))
+            thr = min(thr, _baseline_thr)
     qreg = q.assign(_lab=q["dns_qname"].map(lambda x: _adv_registrable(x).split(".")[0]))
     for lab, lp, ent, vw in scored:
-        if lp < thr and (ent >= 3.2 or vw < 0.25):
+        # SCIENTIFIC_AUDIT 3.3: require BOTH high entropy AND low vowel
+        # ratio (was OR). Also raise the entropy floor to 3.6 (was 3.2).
+        # A "random-looking" label needs to look random on both axes.
+        if lp < thr and ent >= 3.6 and vw < 0.25:
             full = qreg[qreg["_lab"] == lab]
             asker = full["ip_src"].value_counts()
             dev = asker.index[0] if len(asker) else ""
@@ -405,13 +447,23 @@ def _adv_detect_tls(PK, cloud=None):
         ndev = tls.groupby("tls_ja3")["ip_src"].nunique()
         ncnt = tls.groupby("tls_ja3").size()
         for ja3, nd in ndev.items():
-            if nd == 1 and int(ncnt[ja3]) <= 3:
+            # SCIENTIFIC_AUDIT 3.4: tighten from "<=3 handshakes on one
+            # device" to "exactly 1 handshake AND peer is external".
+            # Short captures where a single browser sees one JA3 aren't
+            # suspicious; a lone rare handshake to a public IP is.
+            if nd == 1 and int(ncnt[ja3]) == 1:
                 sub = tls[tls["tls_ja3"] == ja3]; dev = sub["ip_src"].iloc[0]
+                # peer must be a non-private IP to fire the alert
+                external_dsts = [d for d in sub["ip_dst"].unique()
+                                 if d and not _adv_is_private(d)]
+                if not external_dsts:
+                    continue
                 rows.append(_adv_sig(device=dev, peer=ja3[:16], signal="rare_ja3",
                     tactic="Command and Control", technique="T1071.001",
                     score=0.5, severity="low", count=int(ncnt[ja3]),
                     first_ts=sub["ts"].min(), last_ts=sub["ts"].max(),
-                    detail=f"JA3 {ja3} seen {int(ncnt[ja3])}x on a single device {dev} (new/unusual client)"))
+                    detail=f"JA3 {ja3} seen once on {dev} to external "
+                           f"{external_dsts[0]} (new/unusual client)"))
     hs = PK[(PK["tls_ja3"] != "") | (PK["tls_sni"] != "")]
     nosni = hs[(hs["tls_sni"] == "") & (hs["ip_dst"] != "")]
     nosni = nosni[~nosni["ip_dst"].map(_adv_is_private)]
