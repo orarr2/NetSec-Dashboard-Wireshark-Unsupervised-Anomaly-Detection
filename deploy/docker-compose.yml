@@ -97,9 +97,13 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
-    ports:
-      # HTTPS on the Tailscale IP. Not on the public interface.
-      - "${TS_BIND:-127.0.0.1}:443:443"
+    # host network so Caddy can reach the Tailscale interface AND the
+    # apps that bind to 100.68.246.54:xxxx (they refuse connections
+    # from any other interface, including the docker bridges). Also
+    # means no `ports:` block - Caddy binds :443 directly on the host,
+    # and the app rules in Caddyfile listen on 100.68.246.54:443 so
+    # nothing leaks to the public interface.
+    network_mode: host
     environment:
       - BASIC_AUTH_USER=${BASIC_AUTH_USER}
       - BASIC_AUTH_HASH=${BASIC_AUTH_HASH}
@@ -107,8 +111,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    # No extra_hosts: reverse_proxy targets in Caddyfile use the
-    # Tailscale IP directly (that is what the apps bind to).
 
 volumes:
   n8n_data:
