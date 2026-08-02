@@ -215,6 +215,19 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
                 pcap_path, job.get("label"))
         if not isinstance(S, dict):
             S = {}
+        # Provenance for the report renderer - the analyze_fn only sees
+        # the sha-named storage path (0bbe30ec_new4.pcapng). The user-
+        # facing metadata (original filename, which sensor uploaded)
+        # lives in the DB row we already have.
+        S["_source_pcap_name"] = job.get("orig_name")
+        try:
+            sensor_row = conn.execute(
+                "SELECT name FROM sensors WHERE id=?",
+                (job.get("sensor_id"),)).fetchone()
+            if sensor_row:
+                S["_source_sensor"] = sensor_row["name"]
+        except Exception:
+            pass
 
         # OSINT threat-intel re-rank (stage YA) BEFORE persistence, so the
         # stored priority reflects an external peer's reputation. Off

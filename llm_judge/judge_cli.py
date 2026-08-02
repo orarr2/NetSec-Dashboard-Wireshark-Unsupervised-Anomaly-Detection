@@ -106,12 +106,32 @@ def build_context(S, findings, assembled):
         scan_summary.append(f"{a['type']} from `{a['src']}` "
                             f"({a['count']} pkts, ratio {a['ratio']})")
 
+    # Local-vs-external counts help a reader place the capture on a
+    # network map at a glance: "148 IPs (112 local)" reads very
+    # differently from "148 IPs (5 local, 143 external)".
+    _ips_all = set(S.get("ips_src") or [])
+    _ips_dst = set(S.get("ips_dst") or [])
+    all_ips_set = _ips_all | _ips_dst
+    local_ips = 0
+    for ip in all_ips_set:
+        s = str(ip)
+        if (s.startswith(("10.", "192.168.", "127.", "169.254.",
+                          "fe80:", "fc", "fd"))
+                or any(s.startswith(f"172.{i}.")
+                       for i in range(16, 32))):
+            local_ips += 1
+
     return {
         "n_packets": int(S["n_pkts"]),
         "duration_s": round(duration, 1),
         "time_range": [_fmt_ts(S["t0"]), _fmt_ts(S["t1"])],
         "total_ips": len(S["ips_src"]),
+        "local_ips_count": local_ips,
+        "external_ips_count": max(0, len(all_ips_set) - local_ips),
         "total_macs": len(S["macs"]),
+        "original_filename": S.get("_source_pcap_name")
+                             or S.get("_source_pcap"),
+        "sensor_name": S.get("_source_sensor"),
         "top_protocols": dict(S["protocols"].most_common(5)),
         "ml": {
             "isolation_forest_anomalies": if_anom_count,
@@ -429,12 +449,40 @@ def exec_summary_lines(pcap_name, out, ctx=None, for_email=False):
         protos = ", ".join(f"{k}" for k in list(ctx.get(
             "top_protocols") or {})[:3])
         mins = round((ctx.get("duration_s") or 0) / 60)
+        # Time metadata: WHEN the capture was recorded matters as much
+        # as WHAT it saw. A scan at 03:17 Sunday reads differently
+        # from one at 14:00 Wednesday. ctx["time_range"] is
+        # [start, end] ISO strings from build_context().
+        tr = ctx.get("time_range") or []
+        when_bits = []
+        if tr and tr[0]:
+            try:
+                from datetime import datetime as _dt
+                start = _dt.fromisoformat(tr[0].replace(" ", "T"))
+                when_bits.append(
+                    f"recorded {start.strftime('%a %d %b %Y, %H:%M')}")
+            except Exception:
+                when_bits.append(f"recorded {tr[0]}")
+        n_macs = ctx.get("total_macs") or 0
+        n_local = (ctx.get("local_ips_count")
+                   if ctx.get("local_ips_count") is not None else None)
         lines += [
             f"**Capture**: {ctx.get('n_packets', 0):,} packets over "
-            f"~{mins} min · {ctx.get('total_ips', 0)} IPs · "
-            f"top protocols: {protos}.",
-            "",
+            f"~{mins} min · {ctx.get('total_ips', 0)} IPs"
+            + (f" ({n_local} local)" if n_local is not None else "")
+            + (f" · {n_macs} MACs" if n_macs else "")
+            + f" · top protocols: {protos}.",
         ]
+        if when_bits:
+            lines.append("*" + " · ".join(when_bits) + "*.")
+        source_bits = []
+        if ctx.get("original_filename"):
+            source_bits.append(f"file `{ctx['original_filename']}`")
+        if ctx.get("sensor_name"):
+            source_bits.append(f"sensor `{ctx['sensor_name']}`")
+        if source_bits:
+            lines.append("*source: " + ", ".join(source_bits) + "*.")
+        lines.append("")
 
     if stats.get("panel"):
         models = stats.get("models") or []
