@@ -15,9 +15,10 @@ set -euo pipefail
 NETSEC_DIR="${NETSEC_DIR:-/home/ubuntu/netsec}"
 PORTAL_DIR="${PORTAL_DIR:-/srv/portal}"
 
-echo "[portal] writing ${PORTAL_DIR}/index.html..."
+echo "[portal] writing ${PORTAL_DIR}/index.html + sessions.html..."
 sudo mkdir -p "${PORTAL_DIR}"
-sudo cp "${NETSEC_DIR}/deploy/brand/portal.html" "${PORTAL_DIR}/index.html"
+sudo cp "${NETSEC_DIR}/deploy/brand/portal.html"   "${PORTAL_DIR}/index.html"
+sudo cp "${NETSEC_DIR}/deploy/brand/sessions.html" "${PORTAL_DIR}/sessions.html"
 
 echo "[portal] copying brand assets -> ${PORTAL_DIR}/brand/..."
 # NOT a symlink: the portal http.server runs as User=nobody and
