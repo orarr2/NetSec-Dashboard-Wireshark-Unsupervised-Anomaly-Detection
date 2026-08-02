@@ -73,8 +73,13 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
-    # No 'ports:' block on purpose - keeps 11434 off Tailscale + off
-    # the public interface. Only sibling containers (worker) see it.
+    # Loopback-only exposure: sibling containers (worker) reach 11434 via
+    # docker DNS, AND host processes on the VM itself (the RAG systemd
+    # service, ad-hoc curl) can reach it at 127.0.0.1:11434. NOT bound to
+    # ${TS_BIND} on purpose - keeping Ollama off the Tailscale interface
+    # is the correct blast radius for a live LLM endpoint.
+    ports:
+      - "127.0.0.1:11434:11434"
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       # Bind inside the container so the docker network can reach us.

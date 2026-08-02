@@ -1,0 +1,23 @@
+[Unit]
+# One-shot ingester: sweeps /srv/netsec/reports for verdicts.json files
+# and adds any new session results to the RAG store. Cheap and
+# idempotent - dedup is by content_hash so re-ingesting the same session
+# is a no-op. Fired by netsec-rag-ingest.timer every 15 minutes.
+Description=NetSec RAG - ingest new reports
+After=netsec-rag.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/netsec
+Environment="NETSEC_RAG_DB=/srv/netsec/rag/store.db"
+Environment="NETSEC_OLLAMA_URL=http://127.0.0.1:11434"
+EnvironmentFile=-/etc/default/netsec-rag
+ExecStart=/usr/bin/python3 /home/ubuntu/netsec/tools/netsec_rag.py \
+    ingest-netsec /srv/netsec/reports
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/netsec/rag
+PrivateTmp=yes
+NoNewPrivileges=yes

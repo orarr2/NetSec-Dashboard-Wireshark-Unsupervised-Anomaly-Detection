@@ -1,0 +1,35 @@
+[Unit]
+# NetSec RAG - retrieval-augmented QA over the report archive and any
+# indexed material. Serves the tiny chat page from tools/netsec_rag.py
+# on the VM's Tailscale IP. NOT reachable from the public interface.
+Description=NetSec RAG (retrieval-augmented QA)
+After=network-online.target docker.service
+Wants=network-online.target
+# Ollama runs as the compose stack's ollama container, exposed at
+# 127.0.0.1:11434 on the host (see deploy/docker-compose.yml).
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/netsec
+Environment="NETSEC_RAG_DB=/srv/netsec/rag/store.db"
+Environment="NETSEC_OLLAMA_URL=http://127.0.0.1:11434"
+# qwen2.5:3b is the multilingual default; override in
+# /etc/default/netsec-rag for a different chat model.
+EnvironmentFile=-/etc/default/netsec-rag
+ExecStart=/usr/bin/python3 /home/ubuntu/netsec/tools/netsec_rag.py serve \
+    --host 100.68.246.54 --port 5200 --generator local
+Restart=on-failure
+RestartSec=10
+# Standard hardening; ProtectSystem=strict keeps the whole filesystem
+# read-only for the service except the paths we explicitly whitelist.
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/netsec/rag
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

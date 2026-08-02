@@ -1,0 +1,14 @@
+[Unit]
+# Auto-ingest new NetSec reports into the RAG store every 15 minutes.
+# Persistent=true catches up on ingestion runs missed while the VM was
+# off. Randomized to spread load a bit.
+Description=NetSec RAG - periodic ingest timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target
