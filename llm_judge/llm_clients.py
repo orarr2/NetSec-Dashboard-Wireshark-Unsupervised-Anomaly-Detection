@@ -145,6 +145,17 @@ class ClaudeClient:
 class OllamaClient:
     """Local Ollama client (free, offline). Requires the Ollama daemon."""
 
+    # A local CPU-only Ollama on ARM prefills ~1400 tokens/sec, so a
+    # 3-candidate batch (~3800 tokens including the system prompt) takes
+    # ~90 seconds before the first output token - beyond the default
+    # batch timeout under a busy panel. Measured 2026-08-02 on the
+    # reference VM: qwen2.5:3b and granite3.3:2b timed out on the very
+    # first batch of a 16-candidate capture, then fell back to
+    # per-candidate calls that DID work. Skipping the batch entirely on
+    # this client class saves the wasted 60+ seconds per stuck batch.
+    # Cloud clients (Groq/Gemini via OpenAICompatClient) still batch.
+    MAX_BATCH = 1
+
     def __init__(self, model=None, host=None, timeout_s=None,
                  verdict_schema=None):
         self.model_id = model or judge_config.OLLAMA_MODEL

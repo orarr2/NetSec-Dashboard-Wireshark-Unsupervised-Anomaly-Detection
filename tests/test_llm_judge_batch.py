@@ -18,6 +18,41 @@ sys.path.insert(0, ROOT)
 from llm_judge import judge_config, judge_core  # noqa: E402
 
 
+def test_effective_batch_size_caps_on_max_batch_class_attr():
+    """A client class that sets MAX_BATCH caps the effective batch size
+    to that value. Without MAX_BATCH the requested size passes through."""
+    class _Cloud:
+        model_id = "cloud"
+    class _SlowLocal:
+        MAX_BATCH = 1
+        model_id = "slow"
+    class _MediumLocal:
+        MAX_BATCH = 2
+        model_id = "medium"
+
+    assert judge_core._effective_batch_size(_Cloud(), 5) == 5
+    assert judge_core._effective_batch_size(_SlowLocal(), 5) == 1
+    assert judge_core._effective_batch_size(_MediumLocal(), 5) == 2
+    # a requested size smaller than the cap wins - never grow past what
+    # the caller asked for
+    assert judge_core._effective_batch_size(_MediumLocal(), 1) == 1
+
+
+def test_ollama_client_caps_at_batch_1():
+    """The concrete Ollama client MUST cap at 1. CPU prefill of a
+    3-candidate batch (~3800 tokens on ARM) exceeds the batch timeout;
+    the whole batch call wastes time before per-candidate fallback."""
+    from llm_judge.llm_clients import OllamaClient
+    assert getattr(OllamaClient, "MAX_BATCH", None) == 1
+
+
+def test_openai_client_does_not_cap_batch():
+    """Cloud clients should NOT set MAX_BATCH - they can handle
+    3-candidate batches easily and rely on the panel-wide setting."""
+    from llm_judge.llm_clients import OpenAICompatClient
+    assert getattr(OpenAICompatClient, "MAX_BATCH", None) is None
+
+
 class _PermanentError(Exception):
     """Stand-in for llm_clients.JudgeClientError with permanent=True -
     what a provider quota/schema rejection surfaces as."""

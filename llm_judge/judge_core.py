@@ -1177,6 +1177,20 @@ def _too_large_error(err):
             or "tokens per minute" in text or "(TPM)" in text)
 
 
+def _effective_batch_size(client, requested):
+    """Cap the batch to what THIS client can handle. Ollama on a small
+    CPU (ARM 24GB) prefills ~1400 tok/s, so a 3-cand batch (~3.8k
+    tokens) blows past the default batch timeout and the whole batch
+    falls back to per-candidate calls anyway. Class-level cap
+    (`OllamaClient.MAX_BATCH = 1`) lets us skip the wasted batch call
+    entirely. Cloud clients (OpenAICompatClient) do not set MAX_BATCH,
+    so they keep the requested size."""
+    cap = getattr(type(client), "MAX_BATCH", None)
+    if cap is None:
+        return requested
+    return min(requested, int(cap))
+
+
 def _batched_verdicts_from_client(cands, client, cache, prompt_version):
     """Q3: several candidates through ONE LLM call. Returns
     (verdicts, permanently_failed) where verdicts is
@@ -1806,10 +1820,20 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
         prefetched = {}
         if batch_size > 1 and len(candidates) > 1:
             def _prefetch_for(cl):
+                # Per-client batch cap: cloud clients honour the panel-
+                # wide batch_size, but slow local clients (Ollama on CPU)
+                # cap themselves at 1 - a 3-cand batch there takes ~90s
+                # of prefill and times out on the very first slice,
+                # wasting the whole batch before the per-candidate
+                # fallback picks up. Skipping the batch entirely on that
+                # client class saves that.
+                eff = _effective_batch_size(cl, batch_size)
+                if eff < 2:
+                    return {}   # skip the batch loop; per-candidate wins
                 got = {}
-                for j in range(0, len(candidates), batch_size):
+                for j in range(0, len(candidates), eff):
                     out, permanent = _batched_verdicts_from_client(
-                        candidates[j:j + batch_size], cl, cache,
+                        candidates[j:j + eff], cl, cache,
                         prompt_version)
                     for cid, tup in out.items():
                         got[(cl.model_id, cid)] = tup
@@ -1825,7 +1849,7 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                 prefetched.update(got)
             if verbose and prefetched:
                 print(f"[panel] batch prefetch: {len(prefetched)} "
-                      f"verdicts ({batch_size}/call) across "
+                      f"verdicts (up to {batch_size}/call) across "
                       f"{len(clients)} judges", flush=True)
 
         for i, cand in enumerate(candidates, 1):
