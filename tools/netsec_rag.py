@@ -301,7 +301,11 @@ def iter_netsec_chunks(reports_root):
 class VectorStore:
     def __init__(self, path=DEFAULT_DB):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        self.db = sqlite3.connect(path)
+        # check_same_thread=False so the same connection can be reused
+        # from Dash's threading server (the REST /ask route on Flask
+        # runs on a request thread, the Dash callbacks on another). All
+        # reads are guarded by SQLite's own locking + WAL.
+        self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS chunks (
