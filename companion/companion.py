@@ -775,14 +775,25 @@ body { overflow: hidden; margin: 0; height: 100%; }
 .topbar .theme-btn:hover, .topbar .settings-btn:hover {
   border-color: var(--violet); color: var(--violet-bright); }
 
-/* Dash dropdowns - inherit theme */
-.Select-control, .Select-menu-outer, .Select-value, .Select-input {
+/* Dash dropdowns - inherit theme + open ABOVE all other content */
+.Select-control, .Select-value, .Select-input {
   background: var(--glass-bg-strong) !important; color: var(--ink) !important;
   border-color: var(--glass-border) !important; }
 .Select-value-label { color: var(--ink) !important; }
 .Select-option { background: var(--bg-panel) !important;
   color: var(--ink) !important; }
 .Select-option.is-focused { background: var(--glass-bg-strong) !important; }
+/* z-index: 200 so the option menu paints ABOVE the chat area / message
+   bubbles / composer (they had no z-index so browser stacked them
+   later, hiding the top of the dropdown menu). */
+.Select-menu-outer { z-index: 200 !important;
+  background: var(--bg-panel) !important;
+  color: var(--ink) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+/* Give the topbar its own stacking context so the dropdown menu can
+   escape it without being clipped by sibling flex containers. */
+.topbar { position: relative; z-index: 100; overflow: visible !important; }
 
 /* CHAT AREA */
 .chat-area { flex: 1; overflow-y: auto; padding: 20px 16px 24px;

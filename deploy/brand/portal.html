@@ -93,6 +93,14 @@
     <div class="grid">
         <!-- FEATURED: last analyzed session (creative idea #1 - show the latest
              report right here in the portal, no need to open email). -->
+        <a class="card" id="card-sessions" href="/sessions.html">
+            <div class="icon">&#x1F5C3;</div>
+            <h2>All sessions</h2>
+            <p>Browse every analyzed session. Filter by verdict or file,
+               click to open the full report.</p>
+            <div class="meta"><span id="sessions-count">-</span></div>
+        </a>
+
         <a class="latest card glass-strong" id="card-latest"
            href="#" target="_blank" rel="noopener">
             <div>
@@ -188,6 +196,17 @@ function setCardState(elId, ok) {
 }
 
 // -------- latest session card --------
+async function loadSessionsCount() {
+    try {
+        const r = await fetch("/sessions.json", {cache: "no-store"});
+        const d = await r.json();
+        document.getElementById("sessions-count").textContent =
+            (d.total || 0) + " sessions indexed";
+    } catch (e) {
+        document.getElementById("sessions-count").textContent = "count unavailable";
+    }
+}
+
 async function loadLatestSession() {
     // Portal is served from netsec-agent:8080 which mounts /srv/netsec,
     // so /latest.json is a static file the portal service refreshes
@@ -234,6 +253,7 @@ async function loadLatestSession() {
 // -------- probes --------
 async function probeAll() {
     loadLatestSession();
+    loadSessionsCount();
     for (const [id, url, cardState] of [
         ["badge-rag",   "/rag/",  "rag-state"],
         ["badge-chat",  "/chat/", "chat-state"],

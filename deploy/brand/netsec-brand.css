@@ -56,18 +56,25 @@
     --shadow-lift:    0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-/* Light mode - toggled by the theme button on any UI. Same accent
-   colors as dark mode, only the ink and glass swap to light-on-light. */
+/* Light mode - toggled by the theme button on any UI. All contrast
+   values tuned so dim/mute text is READABLE on a white ground (v1 was
+   nearly invisible: --ink-mute #9b94b8 on white is a light-purple
+   whisper - fixed). Glass fills also strengthened from 4% to 8-10% so
+   cards / bubbles / pills actually SHOW on light backgrounds. */
 :root[data-theme="light"] {
-    --ink:            #1f1c2e;
-    --ink-dim:        #5a536f;
-    --ink-mute:       #9b94b8;
-    --bg-base:        #fafafd;
-    --bg-panel:       #f2eff8;
-    --glass-bg:            rgba(20, 15, 40, 0.04);
-    --glass-bg-strong:     rgba(20, 15, 40, 0.07);
-    --glass-border:        rgba(20, 15, 40, 0.10);
-    --glass-border-strong: rgba(20, 15, 40, 0.18);
+    --ink:            #1f1c2e;   /* body text */
+    --ink-dim:        #4a4460;   /* subtitles, labels */
+    --ink-mute:       #6b6482;   /* helper / muted text */
+    --bg-base:        #f4f2fa;
+    --bg-panel:       #e8e3f2;
+    --glass-bg:            rgba(20, 15, 40, 0.08);
+    --glass-bg-strong:     rgba(20, 15, 40, 0.13);
+    --glass-border:        rgba(20, 15, 40, 0.18);
+    --glass-border-strong: rgba(20, 15, 40, 0.28);
+    /* Accents stay unchanged (violet/cyan/coral read fine on both bgs)
+       but the "-bright" hovers get slightly darker for contrast. */
+    --violet-bright:  #6d47d8;
+    --cyan-bright:    #0ea5b7;
 }
 
 /* ---- Global reset for the Aurora background --------------------------- */
@@ -149,7 +156,7 @@ code, pre, .mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, monos
     border-radius: var(--radius-pill);
     background: var(--glass-bg-strong);
     border: 1px solid var(--glass-border);
-    color: var(--ink-dim);
+    color: var(--ink);
     font-size: 11px; font-weight: 500;
     letter-spacing: 0.02em;
     font-family: "SF Mono", monospace;

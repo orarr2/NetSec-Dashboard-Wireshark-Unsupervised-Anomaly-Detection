@@ -6,3 +6,4 @@ After=network.target
 Type=oneshot
 User=root
 ExecStart=/usr/bin/python3 /home/ubuntu/netsec/deploy/brand/write-latest-json.py
+ExecStart=/usr/bin/python3 /home/ubuntu/netsec/deploy/brand/write-sessions-json.py

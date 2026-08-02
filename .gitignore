@@ -23,6 +23,7 @@ netsec_upload_*.pcapng
 !docs/DOCKER_AI_AGENTS_HE.md
 !docs/VM_ARCHITECTURE_HE.md
 !docs/VM_BOOTSTRAP_HE.md
+!docs/DATA_ENGINEERING_HE.md
 
 # local working backups created by tooling
 *.local-bak
