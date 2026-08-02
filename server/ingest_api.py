@@ -212,6 +212,86 @@ def create_app(db_path=None, data_root=None):
         finally:
             conn.close()
 
+    @app.post("/v1/compare")
+    async def compare(request: Request,
+                      authorization: str = Header(None),
+                      x_notify_email: str = Header(None),
+                      x_judge_panel: str = Header(None)):
+        """Queue a dual-session comparison job. Body: JSON with
+        {"s1_session_id": int, "s2_session_id": int}. Both sessions
+        must be status='done' and readable by the caller's sensor
+        (or the admin sensor). Returns {"compare_job_id": int,
+        "duplicate": bool} - the same pair is deduplicated onto the
+        existing job unless it errored, so a re-click never queues
+        a second mail."""
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "body must be JSON")
+        try:
+            s1_id = int(body.get("s1_session_id"))
+            s2_id = int(body.get("s2_session_id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "s1_session_id and s2_session_id "
+                                     "must be integers")
+        if s1_id == s2_id:
+            raise HTTPException(400, "s1 and s2 must be different sessions")
+        kind = (body.get("kind") or "prod")
+        if kind not in ("prod", "test"):
+            raise HTTPException(400, "kind must be 'prod' or 'test'")
+
+        notify_email = None
+        if x_notify_email:
+            from .notify import valid_address
+            if valid_address(x_notify_email):
+                notify_email = x_notify_email.strip()
+            # else: silently drop (mirrors the /v1/pcap behaviour)
+
+        panel_override = None
+        if x_judge_panel and 0 < len(x_judge_panel.strip()) <= 512:
+            panel_override = x_judge_panel.strip()
+
+        conn = _conn()
+        try:
+            sensor = _bearer(conn, authorization)
+            for tag, sid in (("s1", s1_id), ("s2", s2_id)):
+                session = db.get_session(conn, sid)
+                _authorize_session(conn, sensor, session)
+                if session.get("status") != "done":
+                    raise HTTPException(
+                        409, f"{tag} session {sid} status="
+                             f"{session.get('status')!r} - a comparison "
+                             f"needs both sessions in status='done'")
+            job_id, created = db.create_compare_job(
+                conn, s1_id, s2_id, notify_email=notify_email,
+                judge_panel_override=panel_override, kind=kind)
+        finally:
+            conn.close()
+        status_code = 202 if created else 200
+        return JSONResponse(
+            {"compare_job_id": job_id, "duplicate": not created,
+             "s1_session_id": s1_id, "s2_session_id": s2_id},
+            status_code=status_code)
+
+    @app.get("/v1/compare/{job_id}")
+    def compare_status(job_id: int,
+                       authorization: str = Header(None)):
+        """Compare-job status for polling from the dashboard. Auth is
+        by the sensor that owns EITHER session (admin sensor sees all,
+        like /v1/sessions)."""
+        conn = _conn()
+        try:
+            sensor = _bearer(conn, authorization)
+            job = db.get_compare_job(conn, job_id)
+            if not job:
+                raise HTTPException(404, "no such compare_job")
+            # authorize on either side
+            s1 = db.get_session(conn, job["s1_session_id"])
+            _authorize_session(conn, sensor, s1)
+            return job
+        finally:
+            conn.close()
+
     @app.get("/v1/reports/{session_id}.{kind}")
     def get_report(session_id: int, kind: str,
                    authorization: str = Header(None)):

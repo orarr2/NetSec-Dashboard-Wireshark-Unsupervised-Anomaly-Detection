@@ -6822,6 +6822,55 @@ def _render_n8n_send_button(session, session_key):
     ], style={"marginTop":"8px"})
 
 
+def _render_compare_button():
+    """Sidebar block for the S1<->S2 comparison job.
+
+    Emits ONE panel-level call to the VM: POST /v1/compare with the
+    latest s1/s2 session_ids the dashboard already tracks under the
+    n8n-send status of each session. The LLM sees ONE prompt about
+    what changed between the two - the two per-session verdicts.json
+    files on the VM already have the individual verdicts.
+
+    Disabled with a helpful reason until BOTH sessions have been sent
+    to the VM at least once (we need their session_ids to compare).
+    """
+    return html.Div([
+        html.Div("Compare S1 vs S2",
+            style={"fontSize":"9.5px","color":INK_MUTE,
+                   "letterSpacing":"0.14em",
+                   "textTransform":"uppercase",
+                   "fontWeight":"600","marginTop":"4px",
+                   "marginBottom":"4px",
+                   "fontFamily":"'JetBrains Mono', monospace"}),
+        html.Div("Runs after both S1 and S2 have been sent to "
+                 "the VM.",
+            style={"fontSize":"10.5px","color":INK_MUTE,
+                   "marginBottom":"6px",
+                   "fontFamily":"'Inter Tight', sans-serif"}),
+        html.Button(
+            [html.Span("\U0001F4CA", style={"marginRight":"8px",
+                                             "fontSize":"1.05rem"}),
+             html.Span("Compare S1 & S2 (mail report)",
+                       style={"fontWeight":"600"})],
+            id="n8n-compare-btn", n_clicks=0,
+            style={"display":"flex","alignItems":"center",
+                   "width":"100%","padding":"8px 10px",
+                   "borderRadius":"10px",
+                   "background":"rgba(139,92,246,0.10)",
+                   "border":"1px solid rgba(139,92,246,0.30)",
+                   "color":VIOLET_BRIGHT,
+                   "fontSize":"11.5px",
+                   "fontFamily":"'Inter Tight', sans-serif",
+                   "cursor":"pointer",
+                   "marginTop":"6px","textAlign":"left"}),
+        html.Div(id="n8n-compare-status",
+                 style={"fontSize":"10.5px","marginTop":"6px",
+                        "padding":"0 4px","lineHeight":"1.5",
+                        "fontFamily":"'Inter Tight', sans-serif"}),
+    ], style={"marginTop":"8px","paddingTop":"10px",
+              "borderTop":f"1px solid {GLASS_BORDER}"})
+
+
 def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
     """Sidebar with grouped nav items, filtered by the active top-level tab
     AND the active S1/S2 session sub-tab (mirrors the chip strip)."""
@@ -6946,6 +6995,7 @@ def _build_sidebar(active_chart, active_tab="analyze", active_session="s1"):
                   "borderBottom":f"1px solid {GLASS_BORDER}"}))
         if has_s2:
             children.append(_render_n8n_send_button(S2, "s2"))
+            children.append(_render_compare_button())
 
     # Chart navigation moved to build_chart_picker_strip (the horizontal
     # chip row right under the Analyze / Security pills). The sidebar now
@@ -9016,6 +9066,104 @@ def _n8n_stack_down_message(status):
 
 
 @app.callback(
+    Output("n8n-compare-status", "children"),
+    Input("n8n-compare-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def send_compare_to_vm(n_clicks):
+    """POST /v1/compare to the VM. Both sessions must already
+    have been sent (their VM session_ids are cached on S1/S2 by
+    send_session_to_n8n above). No PCAP re-upload - the compare
+    job reads the two verdicts.json files already on the VM."""
+    import json as _json_c
+    import urllib.request as _u_c
+    import urllib.error as _ue_c
+    if not n_clicks:
+        return dash.no_update
+    if S1 is None or S2 is None:
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span("Load both S1 and S2 first.",
+                                   style={"color":"#ef4444"})])
+    s1_sid = S1.get("_vm_session_id")
+    s2_sid = S2.get("_vm_session_id")
+    if not s1_sid or not s2_sid:
+        missing = []
+        if not s1_sid: missing.append("S1")
+        if not s2_sid: missing.append("S2")
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span(
+                             f"Click 'Send " + " & ".join(missing) + " to VM'"
+                             f" first - the comparison needs both"
+                             f" per-session verdicts on the VM.",
+                             style={"color":"#ef4444"})])
+    if not (N8N_INGEST_URL and N8N_SENSOR_ID and N8N_SENSOR_SECRET):
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span(
+                             "Set NETSEC_INGEST_URL / NETSEC_SENSOR_ID /"
+                             " NETSEC_SENSOR_SECRET.",
+                             style={"color":"#ef4444"})])
+    # Compose auth using the same bearer flow the CLI uses. The
+    # ingest_api's /v1/compare is bearer-authed (no HMAC needed
+    # here - no upload body). NETSEC_API_TOKEN carries the sensor
+    # bearer.
+    import os as _os_c
+    token = _os_c.environ.get("NETSEC_API_TOKEN", "").strip()
+    if not token:
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span(
+                             "NETSEC_API_TOKEN not set - the compare"
+                             " endpoint uses bearer auth, not HMAC."
+                             " Print it once from"
+                             " deploy/create_sensor.py and export it"
+                             " alongside the other NETSEC_* vars.",
+                             style={"color":"#ef4444"})])
+    # Prefer whichever email the user last typed into either
+    # per-session card; default to none (VM falls back to
+    # NETSEC_NOTIFY_EMAIL). Panel: same rule.
+    email = (S2.get("_vm_email") or S1.get("_vm_email") or "").strip()
+    panel = (S2.get("_vm_panel") or S1.get("_vm_panel") or "").strip()
+    body = _json_c.dumps({"s1_session_id": int(s1_sid),
+                          "s2_session_id": int(s2_sid)}).encode()
+    hdrs = {"Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"}
+    if email:
+        hdrs["X-Notify-Email"] = email
+    if panel:
+        hdrs["X-Judge-Panel"] = panel
+    req = _u_c.Request(N8N_INGEST_URL.rstrip("/") + "/v1/compare",
+                       data=body, headers=hdrs, method="POST")
+    try:
+        with _u_c.urlopen(req, timeout=30) as r:
+            reply = _json_c.loads(r.read().decode("utf-8"))
+    except _ue_c.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:200]
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span(
+                             f"VM refused: HTTP {e.code} - {detail}",
+                             style={"color":"#ef4444"})])
+    except Exception as e:
+        return html.Div([html.Span("\u274c", style={"marginRight":"6px"}),
+                         html.Span(f"Network error: {e}",
+                                   style={"color":"#ef4444"})])
+    jid = reply.get("compare_job_id")
+    dup = " (already queued)" if reply.get("duplicate") else ""
+    mail_line = (f"Compare report will be mailed to {email}." if email
+                 else "No email provided - the report stays on the VM.")
+    return html.Div([
+        html.Div([html.Span("\u2705", style={"marginRight":"6px"}),
+                  html.Span(
+                      f"Compare job {jid} queued (S{s1_sid} vs S{s2_sid}){dup}",
+                      style={"color":"#22c55e","fontWeight":"600"})]),
+        html.Div(mail_line, style={"marginTop":"4px",
+                                    "color":INK_MUTE,"fontSize":"10px"}),
+        html.Div(
+            "The worker drains compare jobs BEFORE new PCAPs -"
+            " delivery latency is ~30-90s depending on the panel.",
+            style={"marginTop":"4px","color":INK_MUTE,
+                   "fontSize":"10px"})])
+
+
+@app.callback(
     Output({"type":"n8n-send-status","session":MATCH}, "children"),
     Input({"type":"n8n-send-btn","session":MATCH}, "n_clicks"),
     State({"type":"n8n-send-btn","session":MATCH}, "id"),
@@ -9105,6 +9253,15 @@ def send_session_to_n8n(n_clicks, btn_id, email, panel_preset):
         ])
 
     sid = result.get("session_id")
+    # Persist so the Compare S1&S2 callback can address the pair
+    # without re-uploading; also remember the email the user
+    # picked so Compare inherits it unless changed.
+    try:
+        S_obj["_vm_session_id"] = sid
+        S_obj["_vm_email"] = addr or None
+        S_obj["_vm_panel"] = panel_preset or None
+    except Exception:
+        pass
     dup = " (duplicate - existing session returned)" if result.get(
         "duplicate") else ""
     mail_line = (f"Report will be mailed to {addr}." if addr

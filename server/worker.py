@@ -311,12 +311,196 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
         return False
 
 
+def process_compare_job(conn, job, data_root=None, judge_fn=None,
+                        render_fn=None):
+    """One claimed compare_job end to end. Reads the two per-session
+    verdicts.json files (already sitting on disk from the per-session
+    runs), asks the LLM panel ONE pair-level question via judge_fn, and
+    mails a single combined report. Raises nothing: failures land in
+    compare_jobs.error.
+
+    judge_fn signature: (s1_out, s2_out, clients, s1_label, s2_label,
+    prompt_version) -> {"verdict":..., "panel_report":...,
+    "pair_blob":..., "prompt_version":...}
+    Injected so tests can skip the LLM call.
+
+    render_fn signature: (job, s1_session, s2_session, pair_result)
+    -> (summary_md, full_md) - defaults to the compare_report renderer
+    which stays out of the hot path for tests that only want the DB shape.
+    """
+    from llm_judge import judge_config, judge_core, llm_clients  # noqa
+    from . import compare_report
+
+    judge_fn = judge_fn or judge_core.judge_session_pair
+    render_fn = render_fn or compare_report.render
+    make_clients = llm_clients.make_panel_clients
+    root = storage.data_root(data_root)
+    jid = job["id"]
+    s1_id, s2_id = job["s1_session_id"], job["s2_session_id"]
+
+    try:
+        s1_session = db.get_session(conn, s1_id)
+        s2_session = db.get_session(conn, s2_id)
+        if not s1_session or not s2_session:
+            raise ValueError(
+                f"compare_job {jid}: session missing "
+                f"(s1={s1_session is not None}, "
+                f"s2={s2_session is not None})")
+        for tag, sess in (("s1", s1_session), ("s2", s2_session)):
+            if sess.get("status") != "done":
+                raise ValueError(
+                    f"compare_job {jid}: {tag} session {sess['id']} "
+                    f"status={sess.get('status')} (must be 'done')")
+
+        def _load_out(session_id):
+            rep = db.get_report(conn, session_id, "json")
+            if not rep or not os.path.isfile(rep["path"]):
+                raise FileNotFoundError(
+                    f"session {session_id}: verdicts.json missing")
+            with open(rep["path"], "r", encoding="utf-8") as fh:
+                return json.load(fh)
+
+        s1_out = _load_out(s1_id)
+        s2_out = _load_out(s2_id)
+
+        # Panel resolution: honor the per-upload override the button
+        # posted; empty spec -> the .env default. Same shape as
+        # judge_cli._resolve_panel_spec, but that lives inside a CLI
+        # module we don't want to import from the worker just for this.
+        panel_spec = (job.get("judge_panel_override") or "").strip()
+        if not panel_spec:
+            try:
+                from llm_judge import panel_presets
+                preset = panel_presets.preset_by_id(
+                    panel_presets.DEFAULT_PRESET_ID) or {}
+                panel_spec = preset.get("spec") or ""
+            except Exception:
+                panel_spec = ""
+        # If the ingest_api resolved a preset id already (e.g. "fresh_cloud_3")
+        # we still need to expand it to the raw spec.
+        try:
+            from llm_judge import panel_presets
+            preset_hit = panel_presets.preset_by_id(panel_spec)
+            if preset_hit and preset_hit.get("spec"):
+                panel_spec = preset_hit["spec"]
+        except Exception:
+            pass
+        panel_spec = panel_spec or os.environ.get("LLM_JUDGE_PANEL", "")
+        if not panel_spec:
+            raise RuntimeError(
+                "compare_job needs an LLM panel spec - set "
+                "LLM_JUDGE_PANEL in .env or pass a preset via "
+                "X-Judge-Panel")
+        entries = judge_core.parse_panel_spec(panel_spec)
+        clients, init_failures = make_clients(
+            entries, verdict_schema=judge_core.PAIR_VERDICT_SCHEMA)
+        if not clients:
+            raise RuntimeError(
+                f"compare_job {jid}: no panel clients could be built "
+                f"({init_failures})")
+
+        pair = judge_fn(s1_out, s2_out, clients,
+                        s1_label=(s1_session.get("label") or "S1"),
+                        s2_label=(s2_session.get("label") or "S2"),
+                        prompt_version=None)
+
+        # Write outputs under reports/compare/<jid>/
+        rep_dir = os.path.join(root, "reports", "compare", str(jid))
+        os.makedirs(rep_dir, exist_ok=True)
+        paths = {"json": os.path.join(rep_dir, "verdict.json"),
+                 "summary": os.path.join(rep_dir, "summary.md"),
+                 "md": os.path.join(rep_dir, "report.md"),
+                 "html": os.path.join(rep_dir, "report.html"),
+                 "pdf": os.path.join(rep_dir, "report.pdf")}
+        # verdict.json is the machine-readable single source of truth
+        with open(paths["json"], "w", encoding="utf-8") as fh:
+            json.dump({"job_id": jid, "s1_session_id": s1_id,
+                       "s2_session_id": s2_id, **pair}, fh,
+                      ensure_ascii=False, indent=2, default=str)
+        # summary_md is the mail body; full_md is the PDF/HTML source
+        summary_md, full_md = render_fn(job, s1_session, s2_session, pair)
+        with open(paths["summary"], "w", encoding="utf-8") as fh:
+            fh.write(summary_md)
+        with open(paths["md"], "w", encoding="utf-8") as fh:
+            fh.write(full_md)
+        # HTML wraps the full_md through the same charset-safe wrapper
+        # the per-session report uses
+        from llm_judge import send_report
+        html = send_report.markdown_to_html(full_md)
+        with open(paths["html"], "w", encoding="utf-8") as fh:
+            fh.write(html)
+        try:
+            pdf_path = report_pdf.render(html, paths["pdf"])
+        except Exception as e:
+            print(f"[worker] compare {jid}: PDF render skipped ({e})",
+                  flush=True)
+            pdf_path = None
+
+        db.mark_compare_done(
+            conn, jid,
+            verdict_json=json.dumps(pair.get("verdict") or {},
+                                    ensure_ascii=False),
+            stats_json=json.dumps({
+                "s1_totals": pair.get("pair_blob", {}).get("totals",
+                                                            {}).get("s1"),
+                "s2_totals": pair.get("pair_blob", {}).get("totals",
+                                                            {}).get("s2"),
+                "flip_count_total":
+                    pair.get("pair_blob", {}).get("flip_count_total", 0),
+                "models_answered": pair.get("models_answered", []),
+                "models_total": pair.get("models_total"),
+            }, ensure_ascii=False),
+            prompt_version=pair.get("prompt_version"))
+
+        # Notify. Reuse notify.deliver with a synthetic session-like
+        # dict so the same SMTP -> n8n fallback covers compare jobs
+        # without a second delivery module.
+        synthetic = {
+            "id": f"compare-{jid}",
+            "label": f"compare S{s1_id}↔S{s2_id}",
+            "notify_email": job.get("notify_email"),
+            "kind": job.get("kind", "prod"),
+        }
+        deliver_paths = {"summary": paths["summary"],
+                         "md": paths["md"],
+                         "html": paths["html"]}
+        if pdf_path:
+            deliver_paths["pdf"] = pdf_path
+        # Wrap in a fake `out` that the mailer's summary path can read
+        wrapped = {"stats": {"prompt_version": pair.get("prompt_version"),
+                             "models": pair.get("models_answered")},
+                   "results": [],
+                   "analyst_commentary": None,
+                   "_compare_summary_md": summary_md}
+        _notify(synthetic, wrapped, deliver_paths)
+        print(f"[worker] compare_job {jid} done "
+              f"(S{s1_id} vs S{s2_id}, "
+              f"posture={pair['verdict'].get('posture_delta')}, "
+              f"answered={len(pair.get('models_answered', []))}/"
+              f"{pair.get('models_total')})", flush=True)
+        return True
+    except Exception as e:
+        db.mark_compare_error(conn, jid, e)
+        print(f"[worker] compare_job {jid} FAILED: {e}", flush=True)
+        return False
+
+
 def run_once(conn=None, analyze_fn=None, md_fn=None, data_root=None):
-    """Claim and process at most one job. Returns the session id, or
-    None when the queue is empty."""
+    """Claim and process at most one job. Returns the session id
+    (or the compare_job id, prefixed) when work was picked up, or
+    None when both queues are empty. Compare jobs are drained
+    BEFORE session jobs when both queues have work: a comparison
+    depends on already-done sessions, so finishing the pair as soon
+    as it is queueable keeps the mail latency close to the moment
+    the user clicked.
+    """
     own = conn is None
     conn = conn or db.connect()
     try:
+        cjob = db.claim_next_compare_job(conn)
+        if cjob is not None:
+            process_compare_job(conn, cjob, data_root=data_root)
+            return f"compare:{cjob['id']}"
         job = db.claim_next_job(conn)
         if job is None:
             return None

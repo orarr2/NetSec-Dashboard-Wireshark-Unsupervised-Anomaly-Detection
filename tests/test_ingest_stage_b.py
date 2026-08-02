@@ -333,6 +333,110 @@ def test_api_records_ingest_telemetry(api, tmp_path):
     assert row["bytes_sent"] == len(payload)
 
 
+# ---- /v1/compare endpoint (dual-session report) --------------------------
+
+def _seed_done_session(tmp_path, sensor_name="apitest", sha_prefix="cc",
+                       label="cap"):
+    """Helper: register a pcap + finish a session on the api-owned DB."""
+    conn = db.connect(str(tmp_path / "netsec.db"))
+    try:
+        sensor = db.get_sensor(conn, sensor_name)
+        sha = (sha_prefix * 32)[:64]
+        pid, _ = db.register_pcap(conn, sha, f"{sha_prefix}.pcap", 200,
+                                  sensor["id"], f"/x/{sha_prefix}.pcap")
+        sid = db.create_session(conn, pid, label, "prod")
+        db.claim_next_job(conn)
+        db.mark_done(conn, sid, n_pkts=1, n_ips=1)
+    finally:
+        conn.close()
+    return sid
+
+
+def test_compare_endpoint_creates_and_deduplicates(api, tmp_path):
+    client, sensor, token = api
+    s1 = _seed_done_session(tmp_path, sha_prefix="ea", label="cap1")
+    s2 = _seed_done_session(tmp_path, sha_prefix="eb", label="cap2")
+    auth_hdr = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/v1/compare",
+                    json={"s1_session_id": s1, "s2_session_id": s2},
+                    headers={**auth_hdr, "X-Notify-Email": "me@x.com"})
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["duplicate"] is False
+    job_id = body["compare_job_id"]
+
+    dup = client.post("/v1/compare",
+                      json={"s1_session_id": s1, "s2_session_id": s2},
+                      headers=auth_hdr)
+    assert dup.status_code == 200
+    assert dup.json()["compare_job_id"] == job_id
+    assert dup.json()["duplicate"] is True
+
+
+def test_compare_endpoint_requires_both_done(api, tmp_path):
+    """A pair posted while one side is still queued MUST fail with 409
+    - a partial-verdict pair would mislead the LLM into 'de-escalated'."""
+    client, sensor, token = api
+    s1 = _seed_done_session(tmp_path, sha_prefix="fa")
+    # s2 is queued (never claimed / done)
+    conn = db.connect(str(tmp_path / "netsec.db"))
+    try:
+        sens = db.get_sensor(conn, "apitest")
+        pid, _ = db.register_pcap(conn, "fb" * 32, "fb.pcap", 200,
+                                  sens["id"], "/x/fb.pcap")
+        s2 = db.create_session(conn, pid, "still-queued", "prod")
+    finally:
+        conn.close()
+    auth_hdr = {"Authorization": f"Bearer {token}"}
+    r = client.post("/v1/compare",
+                    json={"s1_session_id": s1, "s2_session_id": s2},
+                    headers=auth_hdr)
+    assert r.status_code == 409
+    assert "status" in r.text
+
+
+def test_compare_endpoint_rejects_bad_body_and_same_session(api, tmp_path):
+    client, sensor, token = api
+    s1 = _seed_done_session(tmp_path, sha_prefix="1a")
+    auth_hdr = {"Authorization": f"Bearer {token}"}
+
+    assert client.post("/v1/compare", data="not-json",
+                       headers=auth_hdr).status_code == 400
+    assert client.post("/v1/compare", json={"s1_session_id": "one",
+                                            "s2_session_id": 2},
+                       headers=auth_hdr).status_code == 400
+    r = client.post("/v1/compare",
+                    json={"s1_session_id": s1, "s2_session_id": s1},
+                    headers=auth_hdr)
+    assert r.status_code == 400
+    # bearer required
+    assert client.post("/v1/compare",
+                       json={"s1_session_id": s1,
+                             "s2_session_id": s1 + 1}).status_code == 401
+
+
+def test_compare_endpoint_status_returns_job(api, tmp_path):
+    client, sensor, token = api
+    s1 = _seed_done_session(tmp_path, sha_prefix="2a")
+    s2 = _seed_done_session(tmp_path, sha_prefix="2b")
+    auth_hdr = {"Authorization": f"Bearer {token}"}
+    r = client.post("/v1/compare",
+                    json={"s1_session_id": s1, "s2_session_id": s2},
+                    headers=auth_hdr)
+    jid = r.json()["compare_job_id"]
+
+    status = client.get(f"/v1/compare/{jid}", headers=auth_hdr)
+    assert status.status_code == 200
+    body = status.json()
+    assert body["id"] == jid
+    assert body["status"] == "queued"
+
+    assert client.get(f"/v1/compare/{jid}").status_code == 401
+    assert client.get("/v1/compare/999999",
+                      headers=auth_hdr).status_code == 404
+
+
 # ---- upload CLI against a stdlib stub server -----------------------------
 
 def test_upload_cli_end_to_end(tmp_path):
