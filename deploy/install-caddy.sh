@@ -30,7 +30,12 @@ sudo chown root:root /etc/default/netsec-caddy
 echo "[caddy] mirroring creds into deploy/.env (compose reads this)..."
 # The compose file reads BASIC_AUTH_* from its adjacent .env. Rewrite
 # those two lines in-place, preserving everything else.
+#
+# ONE gotcha: docker compose interpolates $VAR in .env values, and
+# bcrypt hashes are FULL of $. Every literal $ must be doubled ($$)
+# in the .env file so compose passes it through unchanged.
 ENV="${DEPLOY_DIR}/.env"
+HASH_ESCAPED="${BASIC_AUTH_HASH//\$/\$\$}"
 sudo touch "${ENV}"
 sudo chmod 600 "${ENV}"
 if sudo grep -q "^BASIC_AUTH_USER=" "${ENV}"; then
@@ -39,10 +44,9 @@ else
     echo "BASIC_AUTH_USER=${BASIC_AUTH_USER}" | sudo tee -a "${ENV}" >/dev/null
 fi
 if sudo grep -q "^BASIC_AUTH_HASH=" "${ENV}"; then
-    # sed with a delimiter that will not clash with the bcrypt hash chars
-    sudo sed -i "s|^BASIC_AUTH_HASH=.*|BASIC_AUTH_HASH=${BASIC_AUTH_HASH}|" "${ENV}"
+    sudo sed -i "s|^BASIC_AUTH_HASH=.*|BASIC_AUTH_HASH=${HASH_ESCAPED}|" "${ENV}"
 else
-    echo "BASIC_AUTH_HASH=${BASIC_AUTH_HASH}" | sudo tee -a "${ENV}" >/dev/null
+    echo "BASIC_AUTH_HASH=${HASH_ESCAPED}" | sudo tee -a "${ENV}" >/dev/null
 fi
 
 echo "[caddy] docker compose up caddy..."
