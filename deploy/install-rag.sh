@@ -22,6 +22,11 @@ NETSEC_DIR="${NETSEC_DIR:-/home/ubuntu/netsec}"
 STORE_DIR="${STORE_DIR:-/srv/netsec/rag}"
 DEPLOY_DIR="${NETSEC_DIR}/deploy"
 
+echo "[rag] installing host Python deps (numpy)..."
+# numpy is the RAG's only non-stdlib dep. Prefer the debian package so we
+# do not fight PEP 668's externally-managed-environment on newer Ubuntu.
+sudo apt-get install -y python3-numpy
+
 echo "[rag] pulling nomic-embed-text (idempotent)..."
 sudo docker exec deploy-ollama-1 ollama pull nomic-embed-text
 

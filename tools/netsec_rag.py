@@ -392,9 +392,13 @@ class VectorStore:
 # --------------------------------------------------------------------------
 _SYSTEM = (
     "You are a precise assistant answering ONLY from the provided context "
-    "passages. Cite the passages you use as [1], [2] matching their "
-    "numbers. If the answer is not in the context, say exactly: "
-    "'That is not in the indexed material.' Never invent facts.")
+    "passages. Extract the CONCRETE facts (IPs, verdicts, categories, "
+    "dates, device names) directly from the passages - never answer with "
+    "citation numbers alone (e.g. NOT '[1], [2] were malicious', but "
+    "'192.168.1.10 (session 4) and 172.10.146.42 (session 21) were "
+    "malicious'). Cite the passage numbers as [1], [2] AFTER the fact. "
+    "If the answer is not in the context, say exactly: 'That is not in "
+    "the indexed material.' Never invent facts.")
 
 
 def _build_prompt(question, hits):
