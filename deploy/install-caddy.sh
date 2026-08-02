@@ -45,11 +45,11 @@ else
     echo "BASIC_AUTH_HASH=${BASIC_AUTH_HASH}" | sudo tee -a "${ENV}" >/dev/null
 fi
 
-echo "[caddy] docker compose up (caddy + n8n for N8N_PATH)..."
+echo "[caddy] docker compose up caddy..."
 cd "${DEPLOY_DIR}"
 sudo -E BASIC_AUTH_USER="${BASIC_AUTH_USER}" \
      BASIC_AUTH_HASH="${BASIC_AUTH_HASH}" \
-     docker compose up -d caddy n8n
+     docker compose up -d caddy
 sleep 4
 
 echo "[caddy] fail2ban with a Caddy basicauth jail..."
@@ -87,5 +87,5 @@ echo "  # From the tailnet (accept the self-signed cert once):"
 echo "  https://netsec-agent/         portal"
 echo "  https://netsec-agent/rag/     RAG"
 echo "  https://netsec-agent/chat/    Companion"
-echo "  https://netsec-agent/n8n/     n8n"
+echo "  http://netsec-agent:5678      n8n (keeps its own owner-account login)"
 echo "  # basicauth user: ${BASIC_AUTH_USER}"

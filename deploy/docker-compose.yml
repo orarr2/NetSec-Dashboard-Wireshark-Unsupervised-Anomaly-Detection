@@ -19,10 +19,6 @@ services:
       - N8N_HOST=${TS_BIND:-127.0.0.1}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - GENERIC_TIMEZONE=${TZ:-UTC}
-      # Path prefix so n8n works behind the Caddy reverse proxy at
-      # /n8n/. Also tells its own frontend where to load assets from.
-      - N8N_PATH=/n8n/
-      - N8N_PROXY_HOPS=1
     volumes:
       - n8n_data:/home/node/.n8n
       # Workflow templates, importable via the n8n UI or the CLI:
