@@ -19,11 +19,18 @@ NETSEC_DIR="${NETSEC_DIR:-/home/ubuntu/netsec}"
 DB_DIR="${DB_DIR:-/srv/netsec/companion}"
 DEPLOY_DIR="${NETSEC_DIR}/deploy"
 
-echo "[companion] installing host Python deps (pip + dash + dbc)..."
-# NB: the ubuntu 'dash' apt package is the shell, NOT the Python framework.
-# Use pip for the actual Dash and Bootstrap Components wheels.
-sudo apt-get install -y python3-pip python3-flask 2>&1 | tail -1
-sudo pip3 install --break-system-packages dash dash_bootstrap_components 2>&1 | tail -2
+echo "[companion] setting up a dedicated venv (no system Python pollution)..."
+# Dash pulls newer versions of stdlib-adjacent packages (typing_extensions,
+# flask) that conflict with the apt-provided ones on Ubuntu 24.04.
+# Isolate in /opt/netsec-companion/venv so the system python stays clean
+# and the systemd unit points at THIS interpreter.
+sudo apt-get install -y python3-venv 2>&1 | tail -1
+VENV=/opt/netsec-companion/venv
+if [ ! -x "${VENV}/bin/python" ]; then
+  sudo python3 -m venv "${VENV}"
+fi
+sudo "${VENV}/bin/pip" install --quiet --upgrade pip
+sudo "${VENV}/bin/pip" install --quiet dash dash_bootstrap_components
 
 echo "[companion] creating ${DB_DIR}..."
 sudo mkdir -p "${DB_DIR}"

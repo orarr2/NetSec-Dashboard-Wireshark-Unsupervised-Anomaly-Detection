@@ -15,7 +15,7 @@ WorkingDirectory=/home/ubuntu/netsec/companion
 Environment="NETSEC_OLLAMA_URL=http://127.0.0.1:11434"
 Environment="NETSEC_COMPANION_DB=/srv/netsec/companion/chats.db"
 EnvironmentFile=-/etc/default/netsec-companion
-ExecStart=/usr/bin/python3 /home/ubuntu/netsec/companion/companion.py \
+ExecStart=/opt/netsec-companion/venv/bin/python /home/ubuntu/netsec/companion/companion.py \
     --ollama-url http://127.0.0.1:11434 \
     --db /srv/netsec/companion/chats.db \
     --bind 100.68.246.54 \
