@@ -57,10 +57,11 @@ netsec-agent.tail37ac21.ts.net {
     # so Caddy proxies straight to it. host.docker.internal would only
     # reach the docker bridge, which the apps do NOT listen on.
 
-    # /rag/ -> the retrieval-augmented chat.
-    # handle_path strips the prefix, so the backend sees /
-    # (the RAG's inline JS was updated to use relative fetch("ask")).
-    handle_path /rag/* {
+    # /rag/ -> the RAG Dash frontend.
+    # `handle` (not handle_path) preserves the prefix so Dash sees
+    # /rag/ and its url_base_pathname='/rag/' matches - assets and
+    # callbacks all resolve under the correct subpath.
+    handle /rag/* {
         reverse_proxy 100.68.246.54:5200
     }
 
