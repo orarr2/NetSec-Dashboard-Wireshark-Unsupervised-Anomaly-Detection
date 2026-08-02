@@ -32,19 +32,24 @@ def conn(tmp_path):
 
 def test_schema_version_and_tables(conn):
     version, = conn.execute("PRAGMA user_version").fetchone()
-    assert version == db.SCHEMA_VERSION == 5
+    assert version == db.SCHEMA_VERSION == 6
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     expected = {"sensors", "pcap_files", "sessions", "ip_features",
                 "findings", "adv_signals", "fusion_scores", "candidates",
                 "verdicts", "panel_audit", "reports", "device_baselines",
-                "gaps", "llm_quota", "telemetry_log"}
+                "gaps", "llm_quota", "telemetry_log", "compare_jobs"}
     assert expected <= tables
     # v3 adds sessions.notify_email so the ingest header can survive
     # into the worker's fallback chain.
     session_cols = {r[1] for r in conn.execute(
         "PRAGMA table_info(sessions)")}
     assert "notify_email" in session_cols
+    # v6 adds compare_jobs with per-pair uniqueness (except errored rows).
+    cj_cols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(compare_jobs)")}
+    assert {"s1_session_id", "s2_session_id", "status", "verdict_json",
+            "stats_json", "notify_email"} <= cj_cols
 
 
 def test_migrate_is_idempotent(conn):
@@ -155,6 +160,67 @@ def test_errored_session_is_not_reused_for_dedup(conn):
     assert db.latest_session_for_pcap(conn, pcap_id) == fresh
 
 
+# ---- compare_jobs (schema v6, dual-session S1 vs S2 report) -------------
+
+def test_compare_job_create_and_dedup(conn):
+    """A repeat click on Compare S1 & S2 must not re-queue the same pair
+    - the mail box would fill with duplicates - but a job that failed
+    must NOT block a fresh attempt (mirrors the errored-session fix)."""
+    sensor, _ = _sensor(conn)
+    p1, _ = db.register_pcap(conn, "a" * 64, "a.pcap", 1,
+                             sensor["id"], "/x/a")
+    p2, _ = db.register_pcap(conn, "b" * 64, "b.pcap", 1,
+                             sensor["id"], "/x/b")
+    s1 = db.create_session(conn, p1, "S1", "prod")
+    s2 = db.create_session(conn, p2, "S2", "prod")
+
+    job1, created1 = db.create_compare_job(conn, s1, s2,
+                                           notify_email="me@x")
+    assert created1 is True
+    dup, created2 = db.create_compare_job(conn, s1, s2)
+    assert dup == job1 and created2 is False
+
+    # a blank second call still adopts a fresh email if the first was blank
+    p3, _ = db.register_pcap(conn, "c" * 64, "c.pcap", 1,
+                             sensor["id"], "/x/c")
+    p4, _ = db.register_pcap(conn, "d" * 64, "d.pcap", 1,
+                             sensor["id"], "/x/d")
+    sa = db.create_session(conn, p3, "S1b", "prod")
+    sb = db.create_session(conn, p4, "S2b", "prod")
+    j, _ = db.create_compare_job(conn, sa, sb)          # no email
+    db.create_compare_job(conn, sa, sb, notify_email="late@x")
+    assert db.get_compare_job(conn, j)["notify_email"] == "late@x"
+
+    # an errored job unlocks the pair for a fresh queue
+    db.mark_compare_error(conn, job1, "worker died")
+    fresh, created3 = db.create_compare_job(conn, s1, s2)
+    assert fresh != job1 and created3 is True
+
+
+def test_claim_next_compare_job_atomic(conn):
+    sensor, _ = _sensor(conn)
+    p1, _ = db.register_pcap(conn, "a" * 64, "a.pcap", 1,
+                             sensor["id"], "/x/a")
+    p2, _ = db.register_pcap(conn, "b" * 64, "b.pcap", 1,
+                             sensor["id"], "/x/b")
+    s1 = db.create_session(conn, p1, "S1", "prod")
+    s2 = db.create_session(conn, p2, "S2", "prod")
+    job, _ = db.create_compare_job(conn, s1, s2)
+    assert db.claim_next_compare_job(conn)["id"] == job
+    # once claimed it is running and no longer picked
+    assert db.get_compare_job(conn, job)["status"] == "running"
+    assert db.claim_next_compare_job(conn) is None
+
+    db.mark_compare_done(conn, job,
+                         verdict_json='{"summary":"escalated"}',
+                         stats_json='{"total":5}',
+                         prompt_version="v0.5.0")
+    row = db.get_compare_job(conn, job)
+    assert row["status"] == "done"
+    assert row["verdict_json"] == '{"summary":"escalated"}'
+    assert row["prompt_version"] == "v0.5.0"
+
+
 # ---- storage -------------------------------------------------------------
 
 def test_storage_stream_and_finalize(tmp_path):
@@ -216,7 +282,8 @@ def _upload_headers(sensor, payload):
 
 def test_api_upload_flow(api):
     client, sensor, token = api
-    assert client.get("/healthz").json() == {"status": "ok", "schema": 5}
+    assert client.get("/healthz").json() == {"status": "ok",
+                                              "schema": db.SCHEMA_VERSION}
 
     payload = b"\xd4\xc3\xb2\xa1" + b"x" * 4096
     digest, headers = _upload_headers(sensor, payload)

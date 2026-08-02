@@ -15,7 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sensors (
@@ -186,6 +186,38 @@ _SCHEMA_V5 = """
 ALTER TABLE sessions ADD COLUMN judge_panel_override TEXT;
 """
 
+# v6: dual-session comparison jobs. When the dashboard has both S1 and
+# S2 loaded AND both have been analysed on the VM, the "Compare S1 & S2"
+# button posts (s1_session_id, s2_session_id, email, panel) to the ingest
+# API, which registers a compare_jobs row. The worker picks it up, runs
+# the LLM panel ONCE on a session-pair blob (no per-candidate re-judging
+# - the two per-session verdicts are already cached), and mails a single
+# combined report that talks about what changed between the captures.
+# The (s1,s2) pair is unique so a repeat click short-circuits into the
+# existing job instead of queueing a second one; a job that failed does
+# not block re-queueing (mirrors the errored-session dedup fix).
+_SCHEMA_V6 = """
+CREATE TABLE IF NOT EXISTS compare_jobs (
+    id INTEGER PRIMARY KEY,
+    s1_session_id INTEGER NOT NULL,
+    s2_session_id INTEGER NOT NULL,
+    status TEXT NOT NULL,       -- queued | running | done | error
+    kind TEXT NOT NULL DEFAULT 'prod',
+    queued_at TEXT NOT NULL,
+    started_at TEXT, finished_at TEXT,
+    error TEXT,
+    notify_email TEXT,
+    judge_panel_override TEXT,
+    prompt_version TEXT,
+    verdict_json TEXT,          -- the pair-level verdict from the panel
+    stats_json TEXT             -- counters for the mail summary
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compare_pair
+    ON compare_jobs(s1_session_id, s2_session_id)
+    WHERE status <> 'error';
+CREATE INDEX IF NOT EXISTS idx_compare_status ON compare_jobs(status);
+"""
+
 
 def default_db_path():
     """Resolve the history DB path. Treats NETSEC_DB set to an EMPTY
@@ -240,6 +272,10 @@ def migrate(conn):
     if current < 5:
         conn.executescript(_SCHEMA_V5)
         conn.execute("PRAGMA user_version = 5")
+        conn.commit()
+    if current < 6:
+        conn.executescript(_SCHEMA_V6)
+        conn.execute("PRAGMA user_version = 6")
         conn.commit()
     return SCHEMA_VERSION
 
@@ -495,6 +531,111 @@ def get_report(conn, session_id, kind):
         "SELECT * FROM reports WHERE session_id = ? AND kind = ? "
         "ORDER BY id DESC LIMIT 1", (session_id, kind)).fetchone()
     return dict(row) if row else None
+
+
+# ---- compare jobs (dual-session S1 vs S2 report) -------------------------
+
+def create_compare_job(conn, s1_session_id, s2_session_id,
+                       notify_email=None, judge_panel_override=None,
+                       kind="prod"):
+    """Register a session-pair job. Deduplicated on (s1, s2) unless the
+    prior job is in status='error' - a failed comparison must not block
+    the user from asking again (mirrors latest_session_for_pcap).
+
+    Returns (job_id, created) where created=False means an existing
+    non-errored job for the same pair was returned instead of a new one.
+    """
+    if kind not in ("prod", "test"):
+        raise ValueError(f"kind must be prod|test, got {kind!r}")
+    row = conn.execute(
+        "SELECT id FROM compare_jobs WHERE s1_session_id=? AND"
+        " s2_session_id=? AND status <> 'error' ORDER BY id DESC LIMIT 1",
+        (s1_session_id, s2_session_id)).fetchone()
+    if row is not None:
+        # Adopt a newer email on a re-click if the first was blank.
+        if notify_email:
+            conn.execute(
+                "UPDATE compare_jobs SET notify_email=? WHERE id=?"
+                " AND (notify_email IS NULL OR notify_email='')",
+                (notify_email, row["id"]))
+            conn.commit()
+        return row["id"], False
+    cur = conn.execute(
+        "INSERT INTO compare_jobs (s1_session_id, s2_session_id, status,"
+        " kind, queued_at, notify_email, judge_panel_override)"
+        " VALUES (?, ?, 'queued', ?, ?, ?, ?)",
+        (s1_session_id, s2_session_id, kind, _utcnow(), notify_email,
+         judge_panel_override))
+    conn.commit()
+    return cur.lastrowid, True
+
+
+def get_compare_job(conn, job_id):
+    row = conn.execute(
+        "SELECT * FROM compare_jobs WHERE id=?", (job_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def claim_next_compare_job(conn):
+    """Same shape as claim_next_job but for compare_jobs. Returns the
+    joined row (with both session rows expanded as s1_/s2_ prefixes) or
+    None. A running-forever compare row is requeued after the same
+    stale window as regular sessions."""
+    stale = requeue_stale_compare_jobs(conn)
+    if stale:
+        print(f"[db] requeued {len(stale)} stale compare_jobs: {stale}",
+              flush=True)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        row = conn.execute(
+            "SELECT id FROM compare_jobs WHERE status='queued' "
+            "ORDER BY id LIMIT 1").fetchone()
+        if row is None:
+            conn.execute("COMMIT")
+            return None
+        conn.execute(
+            "UPDATE compare_jobs SET status='running', started_at=? WHERE id=?",
+            (_utcnow(), row["id"]))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return get_compare_job(conn, row["id"])
+
+
+def requeue_stale_compare_jobs(conn, stale_s=None, now=None):
+    stale_s = stale_s if stale_s is not None else int(
+        os.environ.get("NETSEC_STALE_JOB_S", "3600"))
+    from datetime import timedelta
+    cutoff = ((now or datetime.now(timezone.utc))
+              - timedelta(seconds=stale_s)).isoformat(timespec="seconds")
+    rows = conn.execute(
+        "SELECT id FROM compare_jobs WHERE status='running' AND"
+        " (started_at IS NULL OR started_at < ?)", (cutoff,)).fetchall()
+    ids = [r["id"] for r in rows]
+    for jid in ids:
+        conn.execute(
+            "UPDATE compare_jobs SET status='queued', started_at=NULL"
+            " WHERE id=? AND status='running'", (jid,))
+    if ids:
+        conn.commit()
+    return ids
+
+
+def mark_compare_done(conn, job_id, verdict_json=None, stats_json=None,
+                      prompt_version=None):
+    conn.execute(
+        "UPDATE compare_jobs SET status='done', finished_at=?,"
+        " verdict_json=?, stats_json=?, prompt_version=? WHERE id=?",
+        (_utcnow(), verdict_json, stats_json, prompt_version, job_id))
+    conn.commit()
+
+
+def mark_compare_error(conn, job_id, error):
+    conn.execute(
+        "UPDATE compare_jobs SET status='error', finished_at=?, error=?"
+        " WHERE id=?", (_utcnow(), str(error)[:2000], job_id))
+    conn.commit()
 
 
 def log_ingest_telemetry(conn, sensor_id, started_at, ended_at, dst,

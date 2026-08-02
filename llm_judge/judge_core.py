@@ -2011,6 +2011,299 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                       "prompt_version": prompt_version}}
 
 
+# --------------------------------------------------------------------------
+# Session-pair comparison (dual-session S1 vs S2 report).
+#
+# The dashboard already produces a per-session verdicts.json on the VM. When
+# BOTH sessions exist and were analysed, the "Compare S1 & S2" button asks
+# for a SECOND-ORDER read: what changed between the two captures.
+#
+# This does NOT re-judge individual candidates - those verdicts are cached
+# per (candidate, prompt_version, model) and re-running them would double
+# the free-tier spend for the same answers. Instead we compute a compact
+# pair-summary (per-session counts, IPs new/gone, verdict flips for IPs
+# that appear in both, per-device delta) and send it as ONE prompt to the
+# panel with a smaller pair-verdict schema.
+# --------------------------------------------------------------------------
+PAIR_VERDICT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "posture_delta": {"type": "string",
+                          "enum": ["escalated", "stable", "de-escalated",
+                                   "mixed"]},
+        "confidence": {"type": "number", "description": "0.0 to 1.0"},
+        "headline": {"type": "string",
+                     "description": "One sentence, at most 240 chars."},
+        "reasoning": {"type": "string",
+                      "description": "One paragraph, no newlines, "
+                                     "at most 500 characters. Cite pair "
+                                     "features by dotted path."},
+        "notable_flips": {
+            "type": "array",
+            "description": "IPs whose verdict changed between S1 and S2. "
+                           "Each item: {ip, from, to, why}",
+            "items": {"type": "object",
+                      "properties": {"ip": {"type": "string"},
+                                     "from": {"type": "string"},
+                                     "to": {"type": "string"},
+                                     "why": {"type": "string"}},
+                      "required": ["ip", "from", "to"]},
+        },
+        "recommended_action": {"type": "string",
+                               "enum": ["no_change", "monitor",
+                                        "investigate", "escalate"]},
+    },
+    "required": ["posture_delta", "confidence", "headline", "reasoning",
+                 "recommended_action"],
+    "additionalProperties": False,
+}
+
+
+PAIR_SYSTEM_PROMPT = """You are a network-security triage analyst comparing two
+captures from the same environment (S1 = earlier, S2 = later). You receive
+a JSON blob summarising what changed. Reply with ONE JSON object matching
+the schema. No prose outside the JSON, no markdown fences.
+
+Rules:
+1. posture_delta in {escalated, stable, de-escalated, mixed}:
+   - "escalated" - new malicious verdicts OR benign->malicious flips.
+   - "de-escalated" - previously malicious IPs disappeared or dropped to
+     benign in S2.
+   - "stable" - roughly the same picture in both.
+   - "mixed" - some IPs escalated AND some de-escalated.
+2. confidence in [0.0, 1.0]. headline is ONE sentence, at most 240 chars.
+   reasoning is ONE paragraph, no newlines, at most 500 characters.
+3. Ground every claim in the pair blob - cite fields by dotted path
+   (e.g. "verdict_flips[0].ip", "counts.s2.malicious").
+4. notable_flips: pull the 1-5 most important verdict changes for
+   individual IPs from the input's verdict_flips list. Leave [] when
+   nothing flipped.
+5. recommended_action:
+   - "no_change" - stable, benign both sides.
+   - "monitor" - stable but with unresolved suspicious signals.
+   - "investigate" - concrete new malicious verdicts or troubling flips.
+   - "escalate" - multiple new malicious verdicts OR a clean environment
+     that turned actively hostile.
+
+Schema:
+{schema}
+""".replace("{schema}", json.dumps(PAIR_VERDICT_SCHEMA, indent=2))
+
+
+def _verdict_counts(results):
+    counts = {"malicious": 0, "suspicious": 0, "benign": 0}
+    for r in results or []:
+        v = ((r.get("verdict") or {}).get("verdict"))
+        if v in counts:
+            counts[v] += 1
+    return counts
+
+
+def build_pair_blob(s1_out, s2_out, s1_label="S1", s2_label="S2"):
+    """Turn two per-session verdict outputs into ONE compact pair blob
+    the panel judges as a single unit. Everything the LLM sees comes
+    from cached per-session data - no capture is re-parsed here."""
+    s1_res = (s1_out or {}).get("results") or []
+    s2_res = (s2_out or {}).get("results") or []
+    s1_by_ip = {r.get("candidate_id"): r for r in s1_res
+                if r.get("candidate_id")}
+    s2_by_ip = {r.get("candidate_id"): r for r in s2_res
+                if r.get("candidate_id")}
+    ips_s1, ips_s2 = set(s1_by_ip), set(s2_by_ip)
+    only_s1 = sorted(ips_s1 - ips_s2)[:20]
+    only_s2 = sorted(ips_s2 - ips_s1)[:20]
+    flips = []
+    for ip in sorted(ips_s1 & ips_s2):
+        v1 = ((s1_by_ip[ip].get("verdict") or {}).get("verdict"))
+        v2 = ((s2_by_ip[ip].get("verdict") or {}).get("verdict"))
+        if v1 and v2 and v1 != v2:
+            flips.append({"ip": ip, "from": v1, "to": v2,
+                          "from_confidence":
+                              (s1_by_ip[ip].get("verdict") or {})
+                                  .get("confidence"),
+                          "to_confidence":
+                              (s2_by_ip[ip].get("verdict") or {})
+                                  .get("confidence"),
+                          "s2_category":
+                              (s2_by_ip[ip].get("verdict") or {})
+                                  .get("category")})
+    # Pull the top-3 non-benign verdicts from each side so the model has
+    # concrete examples to cite even when nothing flipped.
+    def _top_bad(by_ip):
+        bad = [(ip, r) for ip, r in by_ip.items()
+               if ((r.get("verdict") or {}).get("verdict"))
+               in ("malicious", "suspicious")]
+        bad.sort(key=lambda t: -float(
+            (t[1].get("verdict") or {}).get("confidence") or 0))
+        return [{"ip": ip,
+                 "verdict": (r.get("verdict") or {}).get("verdict"),
+                 "category": (r.get("verdict") or {}).get("category"),
+                 "confidence": (r.get("verdict") or {}).get("confidence")}
+                for ip, r in bad[:3]]
+    return {
+        "labels": {"s1": s1_label, "s2": s2_label},
+        "counts": {"s1": _verdict_counts(s1_res),
+                   "s2": _verdict_counts(s2_res)},
+        "totals": {"s1": len(s1_res), "s2": len(s2_res)},
+        "unique_ips_s1_only": only_s1,
+        "unique_ips_s2_only": only_s2,
+        "verdict_flips": flips[:20],
+        "flip_count_total": len(flips),
+        "top_non_benign_s1": _top_bad(s1_by_ip),
+        "top_non_benign_s2": _top_bad(s2_by_ip),
+    }
+
+
+def validate_pair_verdict(obj):
+    """Normalize the pair verdict or raise JudgeValidationError."""
+    if not isinstance(obj, dict):
+        raise JudgeValidationError(
+            f"pair verdict is {type(obj).__name__}, not object")
+    missing = [k for k in PAIR_VERDICT_SCHEMA["required"] if k not in obj]
+    if missing:
+        raise JudgeValidationError(f"missing fields: {missing}")
+    if obj["posture_delta"] not in ("escalated", "stable",
+                                    "de-escalated", "mixed"):
+        raise JudgeValidationError(
+            f"bad posture_delta {obj['posture_delta']!r}")
+    if obj["recommended_action"] not in ("no_change", "monitor",
+                                         "investigate", "escalate"):
+        raise JudgeValidationError(
+            f"bad recommended_action {obj['recommended_action']!r}")
+    conf = obj["confidence"]
+    if not isinstance(conf, (int, float)) or isinstance(conf, bool) \
+            or not (0.0 <= float(conf) <= 1.0):
+        raise JudgeValidationError(f"confidence {conf!r} outside [0, 1]")
+    # Fold newlines out of the free-text fields so a stray \n cannot
+    # break the emailed markdown; cap lengths per schema.
+    out = dict(obj)
+    out["headline"] = " ".join(str(obj["headline"]).split())[:240]
+    out["reasoning"] = " ".join(str(obj["reasoning"]).split())[:500]
+    flips = obj.get("notable_flips") or []
+    if not isinstance(flips, list):
+        flips = []
+    clean_flips = []
+    for f in flips[:10]:
+        if not isinstance(f, dict):
+            continue
+        if not {"ip", "from", "to"} <= set(f):
+            continue
+        clean_flips.append({
+            "ip": str(f["ip"])[:60],
+            "from": str(f["from"])[:30],
+            "to": str(f["to"])[:30],
+            "why": " ".join(str(f.get("why") or "").split())[:200],
+        })
+    out["notable_flips"] = clean_flips
+    out["confidence"] = float(conf)
+    return out
+
+
+def judge_session_pair(s1_out, s2_out, clients, s1_label="S1",
+                       s2_label="S2", prompt_version=None):
+    """Ask the LLM panel ONE pair-level question and return the resolver's
+    effective verdict. Every client gets the same pair blob; failures on
+    individual judges do not abort the call - the resolver picks a
+    majority posture_delta and reports which judges answered.
+
+    Return shape:
+        {"verdict": {...validated PAIR_VERDICT_SCHEMA...},
+         "panel_report": {model_id: {"answered": bool, "error": str|None,
+                                     "raw": dict|None, "latency_ms": int}},
+         "pair_blob": {...},
+         "prompt_version": "v0.5.0-pair"}
+
+    Never raises; if every judge fails we return a verdict shaped like
+    {"posture_delta": "mixed", "confidence": 0.0,
+     "headline": "no judge succeeded"} so the caller can still mail a
+    report that explains what happened.
+    """
+    prompt_version = prompt_version or (
+        judge_config.PROMPT_VERSION + "-pair")
+    blob = build_pair_blob(s1_out, s2_out, s1_label, s2_label)
+    user_content = json.dumps(blob, indent=2)
+    per_model = {}
+    answers = []
+    for client in clients:
+        t0 = time.perf_counter()
+        try:
+            raw = client.judge(PAIR_SYSTEM_PROMPT, user_content,
+                               schema=PAIR_VERDICT_SCHEMA)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            data = validate_pair_verdict(json.loads(raw))
+            per_model[client.model_id] = {"answered": True, "error": None,
+                                          "raw": data,
+                                          "latency_ms": latency_ms}
+            answers.append((client.model_id, data))
+        except Exception as e:
+            # trim the provider dump to one sentence for the report -
+            # judge_cli._first_sentence lives in the CLI module, so an
+            # inline strip is cleaner than a circular import
+            msg = " ".join(str(e).split())
+            for sep in (". ", " - "):
+                if sep in msg:
+                    msg = msg.split(sep, 1)[0]
+                    break
+            per_model[client.model_id] = {
+                "answered": False,
+                "error": msg[:180],
+                "raw": None,
+                "latency_ms": int((time.perf_counter() - t0) * 1000)}
+
+    if not answers:
+        verdict = {"posture_delta": "mixed", "confidence": 0.0,
+                   "headline": ("Every panel judge failed on the compare "
+                                "call - see panel_report for details."),
+                   "reasoning": ("No judge produced a valid pair verdict; "
+                                 "the mail summary falls back to raw "
+                                 "counters from build_pair_blob."),
+                   "notable_flips": [],
+                   "recommended_action": "monitor"}
+    else:
+        verdict = _resolve_pair_verdict([a for _, a in answers])
+    return {"verdict": verdict, "panel_report": per_model,
+            "pair_blob": blob, "prompt_version": prompt_version,
+            "models_answered": [m for m, _ in answers],
+            "models_total": len(clients)}
+
+
+_POSTURE_ORDER = {"stable": 0, "de-escalated": 1,
+                  "mixed": 2, "escalated": 3}
+
+
+def _resolve_pair_verdict(answers):
+    """Majority-vote posture_delta; on a tie pick the more severe side.
+    The headline / reasoning / notable_flips come from the highest-
+    confidence answer inside the winning group so we keep concrete text."""
+    from collections import Counter
+    votes = Counter(a["posture_delta"] for a in answers)
+    top = votes.most_common()
+    top_count = top[0][1]
+    winners = [p for p, n in top if n == top_count]
+    picked = max(winners, key=lambda p: _POSTURE_ORDER.get(p, 0))
+    group = [a for a in answers if a["posture_delta"] == picked]
+    group.sort(key=lambda a: -float(a.get("confidence") or 0))
+    best = dict(group[0])
+    # Union of the notable_flips the winners listed - dedup on ip, keep
+    # the first mention (highest confidence in that group).
+    seen, merged = set(), []
+    for a in group:
+        for f in (a.get("notable_flips") or []):
+            if f["ip"] in seen:
+                continue
+            seen.add(f["ip"])
+            merged.append(f)
+            if len(merged) >= 5:
+                break
+        if len(merged) >= 5:
+            break
+    best["notable_flips"] = merged
+    best["panel_agreement"] = {"picked": picked,
+                               "votes": dict(votes),
+                               "answered": len(answers)}
+    return best
+
+
 def save_verdicts(out, pcap_name, output_dir=None):
     """Write the judged batch to llm_judge/output/ as JSON; returns the path."""
     output_dir = output_dir or judge_config.OUTPUT_DIR
