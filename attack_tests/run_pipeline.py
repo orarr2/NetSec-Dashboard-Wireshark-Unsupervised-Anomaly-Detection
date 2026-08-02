@@ -521,7 +521,11 @@ def run_security_scans(S):
         print(f"      (no reflector pattern)")
 
     # Returned so tests / the evaluation harness can assert on findings
-    # instead of scraping stdout.
+    # instead of scraping stdout. `adv_signals` mirrors the six-engine
+    # `per_engine` block that run_advanced_threats attached to `S`, so
+    # the benign fixture can gate on per-engine false-positive counts
+    # (SCIENTIFIC_AUDIT 3.6) without re-running the tshark pass.
+    adv = (S.get("threats") or {}).get("per_engine") or {}
     return {
         "scan_alerts": scan_alerts,
         "flood_alerts": flood_alerts,
@@ -530,6 +534,7 @@ def run_security_scans(S):
         "arp_spoofing_macs": dict(S["arp_spoofing_macs"]),
         "dns_nxdomain": S["dns_nxdomain"],
         "dns_long_queries": list(S["dns_long_queries"]),
+        "adv_signals": {name: list(sig or []) for name, sig in adv.items()},
     }
 
 

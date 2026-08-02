@@ -51,5 +51,24 @@
       "amp_rule": true,
       "aggregate_flood": false
     }
+  },
+  "benign_home.pcapng": {
+    "attack": null,
+    "source": "5-min tshark capture on the reference laptop's Wi-Fi, no attack traffic",
+    "attacker_ips": [],
+    "expect": {
+      "aggregate_flood": false,
+      "no_scan_alerts": true,
+      "no_amp_alerts": true,
+      "no_arp_spoofing": true,
+      "adv_engine_fp_bounds": {
+        "arp_dhcp": 0,
+        "dns_tunnel": 0,
+        "dga": 0,
+        "beaconing": 0,
+        "tls": 1,
+        "fusion": 0
+      }
+    }
   }
 }

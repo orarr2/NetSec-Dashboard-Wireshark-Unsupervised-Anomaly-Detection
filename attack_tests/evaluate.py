@@ -102,6 +102,24 @@ def evaluate_pcap(name, gt, quiet=False):
     if expect.get("amp_rule"):
         amp_ips = {a["src"] for a in findings["amp_alerts"]}
         checks["amp_rule"] = set(gt.get("reflector_ips", [])) <= amp_ips
+    # SCIENTIFIC_AUDIT 3.6: benign-side checks. `no_scan_alerts` and its
+    # siblings assert zero deterministic hits; `adv_engine_fp_bounds` puts
+    # a per-engine ceiling on false positives so the FP-reducing changes in
+    # 3.3-3.5 can regress visibly. Numbers frozen against the first live
+    # measurement on the reference fixture - a change to any engine that
+    # inflates its count breaks CI.
+    if expect.get("no_scan_alerts"):
+        checks["no_scan_alerts"] = len(findings["scan_alerts"]) == 0
+    if expect.get("no_amp_alerts"):
+        checks["no_amp_alerts"] = len(findings["amp_alerts"]) == 0
+    if expect.get("no_arp_spoofing"):
+        checks["no_arp_spoofing"] = len(findings["arp_spoofing_ips"]) == 0
+    bounds = expect.get("adv_engine_fp_bounds") or {}
+    if bounds:
+        adv = findings.get("adv_signals") or {}
+        for engine, ceiling in bounds.items():
+            observed = len(adv.get(engine) or [])
+            checks[f"adv_{engine}_fp_bound"] = observed <= ceiling
 
     return result
 
