@@ -1,0 +1,12 @@
+[Unit]
+# Renew the Tailscale LE cert every Sunday at 03:00. LE certs are
+# 90-day; a weekly renewal keeps us far away from expiry.
+Description=Weekly Tailscale LE cert renewal
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

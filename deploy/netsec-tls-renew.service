@@ -1,0 +1,14 @@
+[Unit]
+# Re-issue the Tailscale-provided Let's Encrypt cert. Tailscale keeps a
+# 90-day LE cert per hostname; running this before expiry (weekly is
+# plenty) refreshes it in place. Caddy sees the new file on next check.
+Description=Renew Tailscale Let's Encrypt cert for netsec-agent
+After=tailscaled.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/etc/netsec-tls
+ExecStart=/usr/bin/tailscale cert netsec-agent.tail37ac21.ts.net
+# Caddy reloads certs from disk periodically; a manual reload nudges it
+# to notice the fresh cert immediately without service restart.
+ExecStartPost=/usr/bin/docker exec deploy-caddy-1 caddy reload --config /etc/caddy/Caddyfile

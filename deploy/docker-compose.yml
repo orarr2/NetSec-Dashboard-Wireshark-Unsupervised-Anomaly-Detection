@@ -111,6 +111,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Tailscale Let's Encrypt cert lives here on the host, refreshed
+      # by netsec-tls-renew.timer. Read-only from Caddy's side.
+      - /etc/netsec-tls:/etc/netsec-tls:ro
 
 volumes:
   n8n_data:

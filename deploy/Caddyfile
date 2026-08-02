@@ -33,11 +33,14 @@
     default_sni netsec-agent
 }
 
-# One site, three names. Caddy signs a single internal cert that
-# covers the Tailscale IP AND the Tailscale MagicDNS name (both plain
-# and FQDN), so every way you reach the VM gets the SAME cert.
-100.68.246.54, netsec-agent, netsec-agent.tail37ac21.ts.net {
-    tls internal
+# One site, three names.
+# The FQDN (netsec-agent.tail37ac21.ts.net) is what the real
+# Let's Encrypt cert from Tailscale covers - browsers show the green
+# lock. The IP and short-name still route to the same site (basicauth
+# and reverse-proxy rules apply) but Caddy falls back to its internal
+# CA for them (short name / IP-based access shows a one-time warning).
+netsec-agent.tail37ac21.ts.net {
+    tls /etc/netsec-tls/netsec-agent.tail37ac21.ts.net.crt /etc/netsec-tls/netsec-agent.tail37ac21.ts.net.key
 
     # One credential, one realm. Browsers cache it across paths on the
     # same origin, so the user authenticates once per browser session.
