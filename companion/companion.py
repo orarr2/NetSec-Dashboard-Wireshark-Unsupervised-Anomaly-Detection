@@ -676,180 +676,215 @@ def _default_system_prompt():
         "Be concise: one paragraph unless the user asks for detail."
     )
 
-_APP_CSS = """
-<style>
-  :root {
-    --bg: #0f0f11; --panel: #17171a; --panel-2: #22222a; --border: #2a2a2f;
-    --ink: #e5e7eb; --ink-mute: #8b8b95; --violet: #7c6cff;
-    --user-bg: #26262e; --assistant-bg: #1c1c22;
-  }
-  :root[data-theme="light"] {
-    --bg: #ffffff; --panel: #f7f7fa; --panel-2: #eceef1; --border: #e2e4ea;
-    --ink: #1f1f24; --ink-mute: #6b6f78; --violet: #6d5cff;
-    --user-bg: #e8ecf5; --assistant-bg: #f7f8fb;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
-    font-family: -apple-system, "SF Pro Text", "Segoe UI", Helvetica, Arial,
-    sans-serif; -webkit-font-smoothing: antialiased; height: 100%; }
-  body { overflow: hidden; }
-  .companion-app { display: flex; height: 100vh; height: 100dvh;
-    position: relative; }
+def _load_brand_asset(name):
+    """Read a shared brand asset (CSS or base64 data-URL) so all UIs -
+    Portal, RAG, Companion - render in the same Aurora language as the
+    dashboard notebook."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for candidate in (os.path.join(here, "..", "deploy", "brand", name),
+                      os.path.join("/home/ubuntu/netsec/deploy/brand", name)):
+        try:
+            with open(os.path.abspath(candidate), encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            continue
+    return ""
 
-  /* -------- SIDEBAR -------- */
-  .sidebar { width: 260px; background: var(--panel);
-    border-right: 1px solid var(--border);
-    padding: 12px 10px 14px; overflow-y: auto; flex-shrink: 0;
-    display: flex; flex-direction: column; }
-  .sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
-    text-transform: uppercase; margin: 14px 6px 6px; font-weight: 600; }
-  .sidebar .chat-row { padding: 8px 10px; border-radius: 8px; cursor: pointer;
-    font-size: 13px; color: var(--ink); white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; }
-  .sidebar .chat-row:hover { background: var(--panel-2); }
-  .sidebar .chat-row.active { background: var(--panel-2);
-    color: var(--ink); font-weight: 500; }
-  .sidebar .new-btn { display: flex; align-items: center; width: 100%;
-    padding: 10px 12px; background: var(--panel-2); color: var(--ink);
-    border: 1px solid var(--border); border-radius: 10px;
-    font-size: 13px; cursor: pointer; margin-bottom: 8px;
-    font-family: inherit; }
-  .sidebar .new-btn:hover { background: var(--panel);
-    border-color: var(--violet); }
-  .sidebar .footer-note { margin-top: auto; color: var(--ink-mute);
-    font-size: 10.5px; padding: 12px 6px 0;
-    border-top: 1px solid var(--border); }
 
-  /* -------- BACKDROP (mobile only, shown when sidebar is open) -------- */
-  .backdrop { display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.5); z-index: 40; }
+_BRAND_CSS = _load_brand_asset("netsec-brand.css")
+_LOGO_DATA_URL = _load_brand_asset("netsec-logo.b64").strip()
 
-  /* -------- MAIN -------- */
-  .main { flex: 1; display: flex; flex-direction: column;
-    min-width: 0; height: 100vh; height: 100dvh; }
-  .topbar { padding: 10px 14px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-    background: var(--bg); }
-  .topbar .hamburger { display: none; background: none; border: none;
-    color: var(--ink); font-size: 22px; cursor: pointer; padding: 4px 8px;
-    line-height: 1; }
-  .topbar .brand { font-weight: 600; font-size: 13px; color: var(--ink); }
-  .topbar .grow { flex: 1; }
-  .topbar .theme-btn, .topbar .settings-btn {
-    background: none; border: none; color: var(--ink); cursor: pointer;
-    font-size: 16px; padding: 6px 8px; border-radius: 8px; }
-  .topbar .theme-btn:hover, .topbar .settings-btn:hover {
-    background: var(--panel-2); }
 
-  /* Dropdown from dcc.Dropdown - inherit theme */
-  .Select-control, .Select-menu-outer, .Select-value, .Select-input {
-    background: var(--panel) !important; color: var(--ink) !important;
-    border-color: var(--border) !important; }
-  .Select-value-label { color: var(--ink) !important; }
-  .Select-option { background: var(--panel) !important;
-    color: var(--ink) !important; }
-  .Select-option.is-focused { background: var(--panel-2) !important; }
+_APP_CSS = "<style>" + _BRAND_CSS + """
+/* -------- Companion-specific overrides on top of the shared tokens ----- */
+* { box-sizing: border-box; }
+body { overflow: hidden; margin: 0; height: 100%; }
+.companion-app { display: flex; height: 100vh; height: 100dvh;
+  position: relative; }
 
-  /* -------- CHAT AREA -------- */
-  .chat-area { flex: 1; overflow-y: auto; padding: 16px 12px 20px;
-    -webkit-overflow-scrolling: touch; }
-  @media (min-width: 700px) { .chat-area { padding: 20px 24px; } }
-  .msg { max-width: 820px; margin: 10px auto; padding: 12px 14px;
-    border-radius: 12px; line-height: 1.6; white-space: pre-wrap;
-    word-wrap: break-word; font-size: 14.5px; }
-  .msg.user { background: var(--user-bg); }
-  .msg.assistant { background: var(--assistant-bg);
-    border: 1px solid var(--border); }
-  .msg.error { background: #3a1c1c; color: #ffb3b3;
-    border: 1px solid #5a2a2a; }
-  .msg-body { unicode-bidi: plaintext; }        /* handle mixed heb+eng */
-  .meta { font-size: 11px; color: var(--ink-mute); margin-top: 6px;
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace; }
-  .role-label { font-size: 10.5px; color: var(--ink-mute);
-    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 5px;
-    font-weight: 600; }
+/* SIDEBAR */
+.sidebar { width: 260px;
+  background: rgba(15, 10, 30, 0.6);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--glass-border);
+  padding: 12px 10px 14px; overflow-y: auto; flex-shrink: 0;
+  display: flex; flex-direction: column; }
+.sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
+  text-transform: uppercase; margin: 14px 6px 6px; font-weight: 600;
+  font-family: "SF Mono", monospace; }
+.sidebar .chat-row { padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; color: var(--ink-dim); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; margin: 2px 0; }
+.sidebar .chat-row:hover { background: var(--glass-bg-strong);
+  color: var(--ink); }
+.sidebar .chat-row.active { background: var(--glass-bg-strong);
+  color: var(--violet-bright); font-weight: 500;
+  border-left: 2px solid var(--violet); padding-left: 8px; }
+.sidebar .new-btn { display: flex; align-items: center; width: 100%;
+  padding: 10px 14px; background: var(--glass-bg-strong); color: var(--ink);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  font-size: 13px; cursor: pointer; margin-bottom: 8px;
+  font-family: var(--font-sans); }
+.sidebar .new-btn:hover { background: var(--glass-bg-strong);
+  border-color: var(--violet); color: var(--violet-bright); }
+.sidebar .footer-note { margin-top: auto; color: var(--ink-mute);
+  font-size: 10.5px; padding: 12px 6px 0;
+  border-top: 1px solid var(--glass-border);
+  font-family: "SF Mono", monospace; }
 
-  /* -------- WELCOME -------- */
-  .welcome { text-align: center; padding: 40px 12px 16px;
-    color: var(--ink); }
-  .welcome h1 { font-size: 30px; margin: 0 0 6px; color: var(--ink);
-    font-weight: 700; letter-spacing: -0.01em; }
-  .welcome p { color: var(--ink-mute); margin: 0 0 22px; font-size: 14px; }
-  .suggestions { display: grid; grid-template-columns: 1fr;
-    gap: 8px; max-width: 640px; margin: 0 auto; }
-  @media (min-width: 700px) {
-    .suggestions { grid-template-columns: 1fr 1fr; }
-  }
-  .suggestion { background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 14px; font-size: 13px;
-    cursor: pointer; color: var(--ink); text-align: left;
-    font-family: inherit; }
-  .suggestion:hover { background: var(--panel-2); }
+/* BACKDROP */
+.backdrop { display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 40; }
 
-  /* -------- COMPOSER -------- */
-  .composer { padding: 10px 12px 14px; border-top: 1px solid var(--border);
-    background: var(--bg); flex-shrink: 0; }
-  @media (min-width: 700px) { .composer { padding: 12px 24px 16px; } }
-  .composer-inner { max-width: 820px; margin: 0 auto; position: relative; }
-  .composer textarea { width: 100%; background: var(--panel);
-    border: 1px solid var(--border); color: var(--ink);
-    border-radius: 12px; padding: 12px 48px 12px 14px;
-    font-size: 15px; resize: none; font-family: inherit; outline: none;
-    -webkit-appearance: none; }
-  .composer textarea:focus { border-color: var(--violet); }
-  .composer .send-btn { position: absolute; right: 8px; bottom: 8px;
-    width: 34px; height: 34px; border-radius: 50%;
-    background: var(--violet); color: #fff; border: none;
-    cursor: pointer; font-size: 15px; }
-  /* Paperclip button in the composer: same absolute style as send, on
-     the LEFT. The dcc.Upload wrapper is display:inline-block so this
-     works. */
-  .composer .attach-btn { position: absolute; left: 8px; bottom: 8px;
-    width: 34px; height: 34px; border-radius: 50%;
-    background: transparent; color: var(--ink-mute);
-    border: 1px solid var(--border); cursor: pointer; font-size: 15px; }
-  .composer .attach-btn:hover { color: var(--ink); background: var(--panel); }
-  .composer textarea { padding-left: 52px; }  /* room for the paperclip */
-  /* Attachment chip: sits ABOVE the composer showing the current file. */
-  .attach-chip { max-width: 820px; margin: 0 auto 6px;
-    display: flex; align-items: center; gap: 8px;
-    padding: 0 4px; min-height: 0; }
-  .attach-chip.has-file { padding: 6px 10px; background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 8px;
-    font-size: 12.5px; color: var(--ink); }
-  .attach-chip .kind { font-family: "SF Mono", monospace; color: var(--violet);
-    background: var(--panel); padding: 2px 6px; border-radius: 4px;
-    font-size: 11px; }
-  .attach-chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; }
-  .attach-chip .size { color: var(--ink-mute); font-size: 11px; }
-  .attach-chip .rm { background: none; border: none; color: var(--ink-mute);
-    cursor: pointer; font-size: 15px; padding: 0 6px; }
-  .attach-chip .rm:hover { color: var(--ink); }
-  .attach-chip.error { background: #3a1c1c; color: #ffa0a0;
-    border-color: #5a2a2a; }
-  .footer { text-align: center; color: var(--ink-mute); font-size: 10.5px;
-    padding: 6px 8px 0; }
-  .badge { display: inline-flex; align-items: center; padding: 3px 8px;
-    border-radius: 999px; font-size: 10.5px; margin-left: 6px;
-    background: var(--panel-2); color: var(--ink-mute);
-    border: 1px solid var(--border);
-    font-family: "SF Mono", "JetBrains Mono", monospace; }
-  .badge.warn { background: #3a2a1c; color: #ffb37a;
-    border-color: #5a3a2a; }
+/* MAIN */
+.main { flex: 1; display: flex; flex-direction: column;
+  min-width: 0; height: 100vh; height: 100dvh; }
+.topbar { padding: 12px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.topbar .hamburger { display: none; background: none; border: none;
+  color: var(--ink); font-size: 22px; cursor: pointer; padding: 4px 8px;
+  line-height: 1; }
+.topbar .brand-logo { height: 22px; display: block; }
+.topbar .brand { font-weight: 600; font-size: 13px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  font-family: "SF Mono", monospace; color: var(--ink); }
+.topbar .sep { color: var(--ink-mute); }
+.topbar .grow { flex: 1; }
+.topbar .theme-btn, .topbar .settings-btn {
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
+  color: var(--ink); cursor: pointer;
+  font-size: 15px; padding: 6px 10px; border-radius: 10px; }
+.topbar .theme-btn:hover, .topbar .settings-btn:hover {
+  border-color: var(--violet); color: var(--violet-bright); }
 
-  /* -------- MOBILE (<= 700px) -------- */
-  @media (max-width: 699px) {
-    .sidebar { position: fixed; left: 0; top: 0; bottom: 0;
-      width: 82vw; max-width: 320px; z-index: 50;
-      transform: translateX(-100%); transition: transform 0.2s ease; }
-    .sidebar.open { transform: translateX(0); }
-    .backdrop.show { display: block; }
-    .topbar .hamburger { display: block; }
-    .topbar .brand-vm-badge { display: none; }  /* hide long IP on phone */
-    .main { width: 100%; }
-    .topbar { padding: 10px 10px; }
-  }
+/* Dash dropdowns - inherit theme */
+.Select-control, .Select-menu-outer, .Select-value, .Select-input {
+  background: var(--glass-bg-strong) !important; color: var(--ink) !important;
+  border-color: var(--glass-border) !important; }
+.Select-value-label { color: var(--ink) !important; }
+.Select-option { background: var(--bg-panel) !important;
+  color: var(--ink) !important; }
+.Select-option.is-focused { background: var(--glass-bg-strong) !important; }
+
+/* CHAT AREA */
+.chat-area { flex: 1; overflow-y: auto; padding: 20px 16px 24px;
+  -webkit-overflow-scrolling: touch; }
+@media (min-width: 700px) { .chat-area { padding: 24px 28px; } }
+.msg { max-width: 820px; margin: 12px auto; padding: 14px 18px;
+  border-radius: 16px; line-height: 1.6; white-space: pre-wrap;
+  word-wrap: break-word; font-size: 14.5px; }
+.msg.user { background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.18), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(139, 92, 246, 0.28); color: var(--ink); }
+.msg.assistant { background: var(--glass-bg); color: var(--ink);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur); }
+.msg.error { background: rgba(248, 113, 113, 0.15); color: var(--red-accent);
+  border: 1px solid rgba(248, 113, 113, 0.4); }
+.msg-body { unicode-bidi: plaintext; }
+.meta { font-size: 11px; color: var(--ink-mute); margin-top: 8px;
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace; }
+.role-label { font-size: 10.5px; color: var(--ink-mute);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;
+  font-weight: 600; font-family: "SF Mono", monospace; }
+
+/* WELCOME */
+.welcome { text-align: center; padding: 48px 12px 20px;
+  color: var(--ink); }
+.welcome h1 { font-size: 32px; margin: 0 0 8px; color: var(--ink);
+  font-weight: 700; letter-spacing: -0.01em; }
+.welcome p { color: var(--ink-dim); margin: 0 0 26px; font-size: 14px; }
+.suggestions { display: grid; grid-template-columns: 1fr;
+  gap: 10px; max-width: 680px; margin: 0 auto; padding: 0 12px; }
+@media (min-width: 700px) {
+  .suggestions { grid-template-columns: 1fr 1fr; }
+}
+.suggestion { background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 12px; padding: 14px 16px; font-size: 13px;
+  cursor: pointer; color: var(--ink); text-align: left;
+  font-family: var(--font-sans);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur); }
+.suggestion:hover { background: var(--glass-bg-strong);
+  border-color: var(--violet); }
+
+/* COMPOSER */
+.composer { padding: 12px 14px 16px;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  flex-shrink: 0; }
+@media (min-width: 700px) { .composer { padding: 14px 28px 18px; } }
+.composer-inner { max-width: 820px; margin: 0 auto; position: relative; }
+.composer textarea { width: 100%; background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border); color: var(--ink);
+  border-radius: 14px; padding: 12px 52px 12px 52px;
+  font-size: 15px; resize: none; font-family: var(--font-sans); outline: none;
+  -webkit-appearance: none; }
+.composer textarea:focus { border-color: var(--violet); }
+.composer .send-btn { position: absolute; right: 8px; bottom: 8px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--violet-bright));
+  color: #fff; border: none; cursor: pointer; font-size: 16px;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35); }
+.composer .send-btn:hover { filter: brightness(1.1); }
+.composer .attach-btn { position: absolute; left: 8px; bottom: 8px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: transparent; color: var(--ink-mute);
+  border: 1px solid var(--glass-border); cursor: pointer; font-size: 16px; }
+.composer .attach-btn:hover { color: var(--violet-bright);
+  border-color: var(--violet); }
+/* Attachment chip: sits ABOVE the composer showing the current file. */
+.attach-chip { max-width: 820px; margin: 0 auto 8px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 4px; min-height: 0; }
+.attach-chip.has-file { padding: 8px 12px; background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  font-size: 12.5px; color: var(--ink);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur); }
+.attach-chip .kind { font-family: "SF Mono", monospace;
+  color: var(--violet-bright);
+  background: rgba(139, 92, 246, 0.15); padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; letter-spacing: 0.06em; }
+.attach-chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.attach-chip .size { color: var(--ink-mute); font-size: 11px;
+  font-family: "SF Mono", monospace; }
+.attach-chip .rm { background: none; border: none; color: var(--ink-mute);
+  cursor: pointer; font-size: 15px; padding: 0 6px; }
+.attach-chip .rm:hover { color: var(--red-accent); }
+.attach-chip.error { background: rgba(248, 113, 113, 0.15);
+  color: var(--red-accent); border-color: rgba(248, 113, 113, 0.4); }
+.footer { text-align: center; color: var(--ink-mute); font-size: 10.5px;
+  padding: 8px 8px 0; font-family: "SF Mono", monospace; }
+.badge { display: inline-flex; align-items: center; padding: 3px 10px;
+  border-radius: 999px; font-size: 10.5px; margin-left: 6px;
+  background: var(--glass-bg-strong); color: var(--ink-dim);
+  border: 1px solid var(--glass-border);
+  font-family: "SF Mono", "JetBrains Mono", monospace; }
+.badge.warn { background: rgba(251, 191, 36, 0.15); color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.4); }
+
+/* MOBILE */
+@media (max-width: 699px) {
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0;
+    width: 82vw; max-width: 320px; z-index: 50;
+    transform: translateX(-100%); transition: transform 0.2s ease; }
+  .sidebar.open { transform: translateX(0); }
+  .backdrop.show { display: block; }
+  .topbar .hamburger { display: block; }
+  .topbar .brand-vm-badge { display: none; }
+  .main { width: 100%; }
+  .topbar { padding: 10px 14px; }
+}
 </style>
 """
 
@@ -1026,7 +1061,10 @@ def build_app(tunnel, client, store, port, url_base=None):
                     html.Button("☰", id="hamburger-btn", n_clicks=0,
                                 className="hamburger",
                                 title="Open chat list"),
-                    html.Div("companion", className="brand"),
+                    html.Img(src=_LOGO_DATA_URL, className="brand-logo",
+                             alt="NETSEC") if _LOGO_DATA_URL else None,
+                    html.Div("COMPANION", className="brand"),
+                    html.Div("·", className="sep"),
                     html.Div(id="vm-status-badge",
                              className="brand-vm-badge"),
                     dcc.Dropdown(id="model-select",

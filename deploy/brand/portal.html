@@ -1,0 +1,268 @@
+<!--
+    NetSec Portal - Aurora theme, matching the dashboard notebook.
+    Loads the shared brand CSS from /brand/netsec-brand.css and the
+    NETSEC pixel logo from /brand/netsec-logo.svg. Served on the VM
+    at http://100.68.246.54:8080/ (and reachable at
+    https://netsec-agent.tail37ac21.ts.net/ once Caddy fronts it).
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07050f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NetSec Portal</title>
+<link rel="stylesheet" href="/brand/netsec-brand.css">
+<style>
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 60px; }
+    .hero {
+        display: flex; align-items: center; gap: 20px; margin: 22px 0 36px;
+        padding: 22px 26px; border-radius: 22px;
+    }
+    .hero img { height: 46px; }
+    .hero .titles { flex: 1; }
+    .hero h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+    .hero p  { margin: 0; color: var(--ink-dim); font-size: 13px; }
+    .status-row { display: flex; gap: 8px; flex-wrap: wrap; margin: -12px 0 24px; }
+
+    .grid {
+        display: grid; gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .card {
+        display: flex; flex-direction: column; gap: 10px; padding: 20px;
+        cursor: pointer; color: var(--ink);
+        text-decoration: none;
+    }
+    .card .icon { font-size: 26px; line-height: 1; }
+    .card h2 { margin: 0; font-size: 16px; }
+    .card p  { margin: 0; color: var(--ink-dim); font-size: 13px; line-height: 1.55; flex: 1; }
+    .card .meta { display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; margin-top: 6px; font-size: 11px; color: var(--ink-mute); }
+    .card.disabled { opacity: 0.7; }
+
+    /* Latest-session card is FEATURED, spans wide */
+    .latest {
+        grid-column: 1 / -1;
+        padding: 22px 26px; display: grid;
+        grid-template-columns: 1fr auto; gap: 16px 24px;
+    }
+    .latest .title { color: var(--ink-dim); font-size: 11px; letter-spacing: 0.14em;
+        text-transform: uppercase; margin: 0 0 6px; }
+    .latest h2 { margin: 0 0 6px; font-size: 20px; color: var(--ink); }
+    .latest .sub { margin: 0; color: var(--ink-dim); font-size: 13px; }
+    .latest .counts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+        margin-top: 12px; }
+    .latest .actions { display: flex; flex-direction: column; gap: 8px;
+        align-items: flex-end; justify-content: center; }
+    .latest a.btn { color: var(--ink); }
+
+    .footer-links { margin: 40px 0 0; display: flex; gap: 10px; flex-wrap: wrap;
+        justify-content: center; }
+
+    @media (max-width: 640px) {
+        .hero { flex-direction: column; align-items: flex-start; padding: 18px; }
+        .latest { grid-template-columns: 1fr; }
+        .latest .actions { flex-direction: row; align-items: flex-start; }
+    }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+    <header class="hero glass">
+        <img class="logo" src="/brand/netsec-logo.svg" alt="NETSEC">
+        <div class="titles">
+            <h1>NetSec Portal</h1>
+            <p>Private tools over Tailscale &middot; no public exposure &middot;
+               single-sign-on via Caddy basicauth.</p>
+        </div>
+    </header>
+
+    <div class="status-row">
+        <span class="pill" id="badge-latest">latest &mdash; checking&hellip;</span>
+        <span class="pill" id="badge-rag">RAG &mdash; checking&hellip;</span>
+        <span class="pill" id="badge-chat">Companion &mdash; checking&hellip;</span>
+        <span class="pill" id="badge-dash">Dashboard &mdash; checking&hellip;</span>
+        <span class="pill" id="badge-n8n">n8n &mdash; checking&hellip;</span>
+    </div>
+
+    <div class="grid">
+        <!-- FEATURED: last analyzed session (creative idea #1 - show the latest
+             report right here in the portal, no need to open email). -->
+        <a class="latest card glass-strong" id="card-latest"
+           href="#" target="_blank" rel="noopener">
+            <div>
+                <p class="title">Latest analyzed session</p>
+                <h2 id="latest-label">&hellip;</h2>
+                <p class="sub" id="latest-sub">Loading&hellip;</p>
+                <div class="counts" id="latest-counts"></div>
+            </div>
+            <div class="actions">
+                <span class="btn primary" id="latest-open">Open report &rarr;</span>
+                <a class="btn" id="latest-explain" href="#" target="_blank">
+                    Ask the Companion about it
+                </a>
+            </div>
+        </a>
+
+        <a class="card" id="card-rag" href="/rag/">
+            <div class="icon">&#x1F50D;</div>
+            <h2>NetSec RAG</h2>
+            <p>Ask questions across the report archive and any indexed notes.
+               Retrieval runs locally on the VM.</p>
+            <div class="meta">
+                <span>netsec-agent (via /rag/)</span>
+                <span id="rag-state">&hellip;</span>
+            </div>
+        </a>
+
+        <a class="card" id="card-chat" href="/chat/">
+            <div class="icon">&#x1F4AC;</div>
+            <h2>AI Companion</h2>
+            <p>Chat with the Ollama models on the VM. Drag &amp; drop files
+               (PDF, DOCX, PCAP, code) into the composer for instant summary.</p>
+            <div class="meta">
+                <span>netsec-agent (via /chat/)</span>
+                <span id="chat-state">&hellip;</span>
+            </div>
+        </a>
+
+        <a class="card" id="card-dash" href="http://or-pc-1:8055/"
+           target="_blank" rel="noopener">
+            <div class="icon">&#x1F4CA;</div>
+            <h2>NetSec Dashboard</h2>
+            <p>The forensic notebook running in Jupyter on the LAPTOP
+               (<span class="mono">or-pc-1:8055</span>). Requires the laptop on
+               with the notebook started &mdash; not always-on like the VM.</p>
+            <div class="meta">
+                <span class="mono">or-pc-1:8055</span>
+                <span id="dash-state">&hellip;</span>
+            </div>
+        </a>
+
+        <a class="card" id="card-n8n" href="http://netsec-agent:5678/"
+           target="_blank" rel="noopener">
+            <div class="icon">&#x1F514;</div>
+            <h2>n8n</h2>
+            <p>Automation UI for the alert workflow (Gmail delivery of
+               analysis reports, future Telegram push).</p>
+            <div class="meta">
+                <span class="mono">netsec-agent:5678</span>
+                <span id="n8n-state">&hellip;</span>
+            </div>
+        </a>
+    </div>
+
+    <div class="footer-links">
+        <a class="pill" href="https://github.com/orarr2/NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection"
+           target="_blank" rel="noopener">GitHub repo (private)</a>
+        <a class="pill" href="http://netsec-agent:8766/healthz"
+           target="_blank" rel="noopener">VM /healthz</a>
+        <span class="pill" id="portal-host"></span>
+    </div>
+</div>
+
+<script>
+// -------- probe utility --------
+async function ping(url, timeout=2500) {
+    try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), timeout);
+        await fetch(url, {mode: "no-cors", signal: ctl.signal, cache: "no-store"});
+        clearTimeout(t);
+        return true;
+    } catch (e) { return false; }
+}
+
+function setPill(elId, ok, label) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.className = "pill " + (ok ? "lime" : "red");
+    el.textContent = label;
+}
+
+function setCardState(elId, ok) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = ok ? "up" : "not reachable";
+    el.className = ok ? "" : "";
+    el.style.color = ok ? "var(--lime)" : "var(--red-accent)";
+}
+
+// -------- latest session card --------
+async function loadLatestSession() {
+    // Portal is served from netsec-agent:8080 which mounts /srv/netsec,
+    // so /latest.json is a static file the portal service refreshes
+    // every ~2 min (see netsec-portal-latest.timer). Fallback: hide
+    // the card gracefully if the endpoint is not there yet.
+    try {
+        const r = await fetch("/latest.json", {cache: "no-store"});
+        if (!r.ok) throw new Error("no /latest.json");
+        const d = await r.json();
+        document.getElementById("latest-label").textContent =
+            "Session " + d.sid + " · " + (d.file || "(no filename)");
+        document.getElementById("latest-sub").textContent =
+            "Recorded " + (d.recorded || "unknown") +
+            " · " + (d.n_packets || "?") + " packets · " +
+            (d.duration || "?");
+        const counts = document.getElementById("latest-counts");
+        counts.innerHTML = "";
+        for (const [k, cls] of [["malicious","red"], ["suspicious","amber"], ["benign","lime"]]) {
+            const n = (d.counts || {})[k] || 0;
+            const p = document.createElement("span");
+            p.className = "pill " + cls;
+            p.textContent = n + " " + k;
+            counts.appendChild(p);
+        }
+        // Link the whole card to the report HTML (served by the same
+        // netsec-portal on /reports/<sid>/report.html).
+        const card = document.getElementById("card-latest");
+        card.href = "/reports/" + d.sid + "/report.html";
+        // "Ask the Companion" button pre-loads a starter question.
+        const q = "Explain what NetSec found in session " + d.sid +
+                  " (" + (d.file || "") + ").";
+        document.getElementById("latest-explain").href =
+            "/chat/?prompt=" + encodeURIComponent(q);
+        setPill("badge-latest",
+                (d.counts && d.counts.malicious === 0),
+                "latest · " +
+                ((d.counts && d.counts.malicious) || 0) + " malicious");
+    } catch (e) {
+        document.getElementById("card-latest").style.display = "none";
+        setPill("badge-latest", false, "latest · offline");
+    }
+}
+
+// -------- probes --------
+async function probeAll() {
+    loadLatestSession();
+    for (const [id, url, cardState] of [
+        ["badge-rag",   "/rag/",  "rag-state"],
+        ["badge-chat",  "/chat/", "chat-state"],
+        ["badge-n8n",   "http://netsec-agent:5678/", "n8n-state"],
+    ]) {
+        const ok = await ping(url);
+        setPill(id, ok, id.replace("badge-", "") + " · " + (ok ? "up" : "down"));
+        setCardState(cardState, ok);
+    }
+    // Dashboard - probe the laptop candidates
+    let dashOk = false;
+    for (const h of ["or-pc-1", "or-pc", "or-a"]) {
+        if (await ping("http://" + h + ":8055/", 1500)) {
+            dashOk = true;
+            document.getElementById("card-dash").href = "http://" + h + ":8055/";
+            break;
+        }
+    }
+    setPill("badge-dash", dashOk, "dashboard · " + (dashOk ? "up" : "offline"));
+    setCardState("dash-state", dashOk);
+}
+
+document.getElementById("portal-host").textContent = "served from " + location.host;
+probeAll();
+setInterval(probeAll, 30000);
+</script>
+</body>
+</html>

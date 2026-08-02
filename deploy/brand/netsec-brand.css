@@ -1,0 +1,225 @@
+/*
+ * NetSec brand tokens - THE source of truth for all UIs in the stack.
+ * Extracted from app/dashboard_module.py (the Aurora aesthetic that the
+ * dashboard notebook was built around).
+ *
+ * Load this ONCE per HTML document. Every widget then just uses the
+ * CSS variables and glass helpers below. No inline #hex colors, no
+ * inline fonts - if you find yourself typing a color, add it here
+ * instead.
+ */
+
+/* Inter Tight (dashboard's primary sans) + Newsreader (secondary
+   serif for figure titles). CDN pulls, cached across pages. */
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap");
+
+:root {
+    /* ---- Palette (aurora) - lifted from dashboard's INK/VIOLET/etc. ---- */
+    --ink:            #e8e4f5;
+    --ink-dim:        #9b94b8;
+    --ink-mute:       #5a536f;
+    --bg-base:        #07050f;
+    --bg-panel:       #0f0a1e;
+
+    --violet:         #8b5cf6;
+    --violet-bright:  #a78bfa;
+    --cyan:           #22d3ee;
+    --cyan-bright:    #67e8f9;
+    --magenta:        #f472b6;
+    --lime:           #a3e635;
+    --amber:          #fbbf24;
+    --red-accent:     #f87171;
+    --moss:           #84cc16;
+
+    /* Coral - the NETSEC pixel logo colors */
+    --coral:          #f8a8a8;
+    --coral-dim:      #c87878;
+    --coral-glow:     #ff9a9a;
+
+    /* Semantic verdicts (used in tables/badges/pill chips) */
+    --sev-malicious:  var(--red-accent);
+    --sev-suspicious: var(--amber);
+    --sev-benign:     var(--lime);
+
+    /* ---- Glass morphism ---- */
+    --glass-bg:            rgba(255, 255, 255, 0.04);
+    --glass-bg-strong:     rgba(255, 255, 255, 0.07);
+    --glass-border:        rgba(255, 255, 255, 0.08);
+    --glass-border-strong: rgba(255, 255, 255, 0.14);
+    --glass-blur:          blur(24px) saturate(140%);
+
+    /* ---- Type + spacing ---- */
+    --font-sans:      "Inter Tight", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-serif:     "Newsreader", Georgia, serif;
+    --radius-card:    18px;
+    --radius-pill:    999px;
+    --shadow-lift:    0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Global reset for the Aurora background --------------------------- */
+html, body {
+    background: var(--bg-base);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Faint aurora wash behind everything - matches the dashboard's welcome
+   backdrop. Fixed position, does not scroll with content. */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(ellipse at 20% 10%, rgba(139, 92, 246, 0.18), transparent 40%),
+        radial-gradient(ellipse at 80% 30%, rgba(34, 211, 238, 0.12), transparent 45%),
+        radial-gradient(ellipse at 50% 90%, rgba(244, 114, 182, 0.10), transparent 45%),
+        var(--bg-base);
+    pointer-events: none;
+}
+
+/* ---- Glass helpers (compose with any element) ------------------------- */
+.glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+.glass-strong {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+.card, .netsec-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-card);
+    padding: 18px;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.card:hover, .netsec-card:hover {
+    border-color: var(--glass-border-strong);
+    background: var(--glass-bg-strong);
+    transform: translateY(-1px);
+}
+
+/* ---- Typography ------------------------------------------------------- */
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.01em; }
+h1 { color: var(--ink); font-size: 24px; }
+h2 { color: var(--ink); font-size: 18px; }
+h3 { color: var(--ink); font-size: 15px; }
+a  { color: var(--violet-bright); text-decoration: none; }
+a:hover { color: var(--cyan-bright); }
+code, pre, .mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace; }
+
+/* ---- Pill / badge ----------------------------------------------------- */
+.pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    color: var(--ink-dim);
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.02em;
+    font-family: "SF Mono", monospace;
+}
+.pill.violet  { color: var(--violet-bright); border-color: rgba(139, 92, 246, 0.4); }
+.pill.cyan    { color: var(--cyan-bright);   border-color: rgba(34, 211, 238, 0.4); }
+.pill.magenta { color: var(--magenta);       border-color: rgba(244, 114, 182, 0.4); }
+.pill.lime    { color: var(--lime);          border-color: rgba(163, 230, 53, 0.4); }
+.pill.amber   { color: var(--amber);         border-color: rgba(251, 191, 36, 0.4); }
+.pill.red     { color: var(--red-accent);    border-color: rgba(248, 113, 113, 0.4); }
+
+/* ---- Buttons ---------------------------------------------------------- */
+button, .btn {
+    background: var(--glass-bg-strong);
+    color: var(--ink);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+button:hover, .btn:hover {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-strong);
+}
+button.primary, .btn.primary {
+    background: linear-gradient(135deg, var(--violet) 0%, var(--violet-bright) 100%);
+    color: white; border-color: transparent;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+}
+button.primary:hover, .btn.primary:hover {
+    filter: brightness(1.1);
+}
+
+/* ---- Inputs ----------------------------------------------------------- */
+input[type="text"], input[type="password"], input[type="search"], textarea, select {
+    background: var(--glass-bg);
+    color: var(--ink);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+input:focus, textarea:focus, select:focus {
+    border-color: var(--violet);
+}
+input::placeholder, textarea::placeholder { color: var(--ink-mute); }
+
+/* ---- Tables ----------------------------------------------------------- */
+table.netsec {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+table.netsec th {
+    text-align: left;
+    padding: 10px 12px;
+    color: var(--ink-dim);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    border-bottom: 1px solid var(--glass-border);
+}
+table.netsec td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--ink);
+}
+table.netsec tr:hover td { background: var(--glass-bg); }
+
+/* ---- Brand header (used at the top of every UI) ---------------------- */
+.brand-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(15, 10, 30, 0.55);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+.brand-header .logo {
+    height: 28px; display: block;
+}
+.brand-header .app-name {
+    color: var(--ink); font-weight: 600; font-size: 14px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    font-family: "SF Mono", monospace;
+}
+.brand-header .sep { color: var(--ink-mute); }

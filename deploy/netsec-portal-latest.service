@@ -1,0 +1,8 @@
+[Unit]
+Description=NetSec Portal - refresh /latest.json from the DB
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /home/ubuntu/netsec/deploy/brand/write-latest-json.py

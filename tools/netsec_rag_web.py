@@ -297,82 +297,116 @@ def _default_scope_options(engine):
 # --------------------------------------------------------------------------
 # Dash app
 # --------------------------------------------------------------------------
-_CSS = """
-:root { color-scheme: dark; --bg:#0f0f11; --panel:#17171b; --panel-2:#1c1c22;
-  --ink:#e6edf3; --ink-mute:#8b949e; --accent:#79c0ff; --user-bg:#26262e;
-  --assistant-bg:#1c1c22; --line:#22222a;}
-:root[data-theme="light"] { color-scheme: light;
-  --bg:#ffffff; --panel:#f6f8fa; --panel-2:#eaeef2;
-  --ink:#1f2328; --ink-mute:#57606a; --accent:#0969da; --user-bg:#e8ecf5;
-  --assistant-bg:#f7f8fb; --line:#d0d7de;}
-html, body { background: var(--bg); color: var(--ink); margin: 0;
-  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+def _load_brand_asset(name):
+    """Read a file from deploy/brand/. Returns its text (empty on miss)."""
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    p = os.path.join(repo, "deploy", "brand", name)
+    try:
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return ""
+
+
+# Aurora tokens from deploy/brand/netsec-brand.css, inlined here plus a
+# few app-specific rules (sidebar, chat bubbles, source cards). Loaded
+# once at import time - one HTTP round-trip fewer than a <link href="">.
+_BRAND_CSS = _load_brand_asset("netsec-brand.css")
+_LOGO_DATA_URL = _load_brand_asset("netsec-logo.b64").strip()
+
+_CSS = _BRAND_CSS + """
+/* ---- RAG-specific overrides on top of the shared brand tokens ------- */
 #app-root { display: flex; height: 100vh; }
-.sidebar { width: 260px; background: var(--panel); padding: 14px 10px;
-  overflow-y: auto; border-right: 1px solid var(--line);
-  display: flex; flex-direction: column; }
+.sidebar { width: 260px; padding: 14px 10px;
+  overflow-y: auto; border-right: 1px solid var(--glass-border);
+  display: flex; flex-direction: column;
+  background: rgba(15, 10, 30, 0.6);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur); }
 .sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
-  text-transform: uppercase; margin: 14px 4px 6px; font-weight: 600; }
-.sidebar .q-row { padding: 8px 10px; border-radius: 8px; cursor: pointer;
-  margin: 2px 0; font-size: 13px; color: var(--ink); white-space: nowrap;
+  text-transform: uppercase; margin: 14px 4px 6px; font-weight: 600;
+  font-family: "SF Mono", monospace; }
+.sidebar .q-row { padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  margin: 2px 0; font-size: 13px; color: var(--ink-dim); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
-.sidebar .q-row:hover { background: var(--panel-2); }
+.sidebar .q-row:hover { background: var(--glass-bg-strong); color: var(--ink); }
 .sidebar .new-btn { display: flex; align-items: center; width: 100%;
-  padding: 10px; border: 1px solid var(--line); background: var(--panel-2);
-  color: var(--ink); border-radius: 8px; cursor: pointer; font-size: 14px;
-  margin-bottom: 4px; }
-.sidebar .new-btn:hover { background: var(--panel); }
+  padding: 10px 14px; border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong); color: var(--ink); border-radius: 10px;
+  cursor: pointer; font-size: 13px; margin-bottom: 8px;
+  font-family: var(--font-sans); }
+.sidebar .new-btn:hover { background: var(--glass-bg-strong);
+  border-color: var(--violet); color: var(--violet-bright); }
 .sidebar .footer-note { margin-top: auto; color: var(--ink-mute);
   font-size: 11px; padding: 12px 4px; }
-.backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+.backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
   z-index: 40; }
 .backdrop.show { display: block; }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.topbar { display: flex; align-items: center; padding: 10px 16px;
-  border-bottom: 1px solid var(--line); background: var(--panel);
-  gap: 10px; }
+.topbar { display: flex; align-items: center; padding: 12px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  gap: 12px; }
 .topbar .hamburger { display: none; background: none; border: none;
-  color: var(--ink); font-size: 22px; cursor: pointer; padding: 0 8px;}
-.topbar .title { font-weight: 700; font-size: 15px; }
-.topbar .badge { padding: 3px 8px; border-radius: 12px;
-  background: var(--panel-2); font-size: 11px; color: var(--ink-mute); }
+  color: var(--ink); font-size: 22px; cursor: pointer; padding: 0 4px;}
+.topbar .brand-logo { height: 22px; display: block; }
+.topbar .title { font-weight: 600; font-size: 14px; letter-spacing: 0.06em;
+  text-transform: uppercase; font-family: "SF Mono", monospace;
+  color: var(--ink); }
+.topbar .sep { color: var(--ink-mute); }
 .topbar .grow { flex: 1; }
-.topbar select, .topbar button.icon { background: var(--panel-2);
-  color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
-  padding: 6px 10px; font-size: 12px; }
-.chat { flex: 1; overflow-y: auto; padding: 18px 16px; }
-.suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  max-width: 720px; margin: 32px auto; }
-.suggestions .card { padding: 12px 14px; border: 1px solid var(--line);
-  border-radius: 10px; background: var(--panel); cursor: pointer;
-  color: var(--ink); font-size: 13px; }
-.suggestions .card:hover { background: var(--panel-2); }
-.msg { max-width: 900px; margin: 0 auto 14px; padding: 12px 14px;
-  border-radius: 12px; line-height: 1.5; white-space: pre-wrap;
-  word-wrap: break-word; }
-.msg.user { background: var(--user-bg); }
-.msg.assistant { background: var(--assistant-bg);
-  border: 1px solid var(--line); }
-.msg .meta { margin-top: 8px; font-size: 11px; color: var(--ink-mute); }
+.topbar select, .topbar button.icon { background: var(--glass-bg-strong);
+  color: var(--ink); border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 6px 10px; font-size: 12px; font-family: var(--font-sans); }
+.chat { flex: 1; overflow-y: auto; padding: 22px 20px; }
+.suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  max-width: 760px; margin: 40px auto; }
+.suggestions .card { padding: 14px 16px; cursor: pointer;
+  font-size: 13px; color: var(--ink); }
+.msg { max-width: 900px; margin: 0 auto 14px; padding: 14px 18px;
+  border-radius: 16px; line-height: 1.55; white-space: pre-wrap;
+  word-wrap: break-word; font-size: 14px; }
+.msg.user { background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.18), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(139, 92, 246, 0.28); color: var(--ink); }
+.msg.assistant { background: var(--glass-bg); color: var(--ink);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur); }
+.msg .meta { margin-top: 10px; font-size: 11px; color: var(--ink-mute);
+  font-family: "SF Mono", monospace; }
 .sources-wrap { max-width: 900px; margin: 0 auto 24px; }
-.src-card { background: var(--panel); border: 1px solid var(--line);
-  border-radius: 8px; margin: 6px 0; padding: 6px 12px; font-size: 12px; }
-.src-summary { cursor: pointer; color: var(--accent); font-weight: 500; }
-.src-body { color: var(--ink-mute); font-size: 11px;
-  margin: 8px 0 0; white-space: pre-wrap; background: var(--bg);
-  padding: 8px; border-radius: 6px; max-height: 260px; overflow: auto; }
-.composer { border-top: 1px solid var(--line); background: var(--panel);
-  padding: 12px 16px; display: flex; gap: 8px; align-items: end; }
-.composer textarea { flex: 1; background: var(--panel-2); color: var(--ink);
-  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
-  font-size: 14px; resize: none; min-height: 40px; max-height: 160px;
-  font-family: inherit; }
-.composer button { background: var(--accent); color: white; border: none;
-  border-radius: 999px; width: 42px; height: 42px; font-size: 18px;
-  cursor: pointer; }
+.src-card { background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 12px; margin: 6px 0; padding: 8px 14px; font-size: 12px; }
+.src-summary { cursor: pointer; color: var(--violet-bright); font-weight: 500; }
+.src-body { color: var(--ink-dim); font-size: 11px;
+  margin: 10px 0 0; white-space: pre-wrap; background: rgba(7, 5, 15, 0.5);
+  padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto;
+  font-family: "SF Mono", monospace; }
+.composer { border-top: 1px solid var(--glass-border);
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  padding: 14px 20px; display: flex; gap: 10px; align-items: end; }
+.composer textarea { flex: 1; background: var(--glass-bg-strong);
+  color: var(--ink);
+  border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px 14px;
+  font-size: 14px; resize: none; min-height: 42px; max-height: 160px;
+  font-family: var(--font-sans); }
+.composer textarea:focus { border-color: var(--violet); outline: none; }
+.composer button { background: linear-gradient(135deg,
+    var(--violet) 0%, var(--violet-bright) 100%);
+  color: white; border: none;
+  border-radius: 999px; width: 44px; height: 44px; font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35); }
+.composer button:hover { filter: brightness(1.1); }
 .composer button:disabled { opacity: 0.4; cursor: not-allowed; }
 .footer-line { text-align: center; color: var(--ink-mute); font-size: 11px;
-  padding: 6px 0 10px; border-top: 1px solid var(--line); }
+  padding: 8px 0 12px; border-top: 1px solid var(--glass-border);
+  font-family: "SF Mono", monospace; }
 @media (max-width: 699px) {
   .sidebar { position: fixed; left: 0; top: 0; bottom: 0;
     transform: translateX(-100%); transition: transform .2s ease; z-index: 50; }
@@ -454,8 +488,11 @@ def build_app(engine, history, url_base=None):
             html.Div([
                 html.Button("☰", id="hamburger", className="hamburger",
                             n_clicks=0),
-                html.Span("NetSec RAG", className="title"),
-                html.Span(id="stats-badge", className="badge"),
+                html.Img(src=_LOGO_DATA_URL, className="brand-logo",
+                         alt="NETSEC") if _LOGO_DATA_URL else None,
+                html.Span("RAG", className="title"),
+                html.Span("·", className="sep"),
+                html.Span(id="stats-badge", className="pill"),
                 html.Div(className="grow"),
                 dcc.Dropdown(
                     id="scope-select", clearable=False, searchable=False,
