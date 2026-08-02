@@ -107,10 +107,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    extra_hosts:
-      # Lets the reverse_proxy targets in Caddyfile refer to
-      # host.docker.internal instead of hard-coding the docker bridge IP.
-      - "host.docker.internal:host-gateway"
+    # No extra_hosts: reverse_proxy targets in Caddyfile use the
+    # Tailscale IP directly (that is what the apps bind to).
 
 volumes:
   n8n_data:

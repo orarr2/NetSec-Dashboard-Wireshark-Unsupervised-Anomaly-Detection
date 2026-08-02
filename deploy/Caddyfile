@@ -50,11 +50,15 @@
         format console
     }
 
+    # Upstreams: the apps bind to the Tailscale IP (100.68.246.54:xxxx)
+    # so Caddy proxies straight to it. host.docker.internal would only
+    # reach the docker bridge, which the apps do NOT listen on.
+
     # /rag/ -> the retrieval-augmented chat.
     # handle_path strips the prefix, so the backend sees /
     # (the RAG's inline JS was updated to use relative fetch("ask")).
     handle_path /rag/* {
-        reverse_proxy host.docker.internal:5200
+        reverse_proxy 100.68.246.54:5200
     }
 
     # /chat/ -> the Companion.
@@ -62,11 +66,11 @@
     # assets and callbacks are all prefixed correctly. We use `handle`
     # (not handle_path) so the prefix reaches Dash intact.
     handle /chat/* {
-        reverse_proxy host.docker.internal:5100
+        reverse_proxy 100.68.246.54:5100
     }
 
     # Catch-all: the static portal.
     handle {
-        reverse_proxy host.docker.internal:8080
+        reverse_proxy 100.68.246.54:8080
     }
 }
