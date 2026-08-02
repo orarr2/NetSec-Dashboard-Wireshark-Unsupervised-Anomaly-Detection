@@ -53,9 +53,12 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
 | `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
-| `companion/` | **Optional** local chat client. A single-file Dash app that opens an SSH tunnel to Ollama on your VM and gives you a llama.ui-style browser chat with the locally installed models. Not part of the analysis pipeline; see `companion/README.md` |
+| `companion/` | AI Companion - Dash chat over local Ollama with drag-and-drop file support (text/PDF/DOCX/PCAP). Runs on the VM as `netsec-companion.service`; the same file works from a laptop via SSH tunnel. See `companion/README.md` |
+| `tools/netsec_rag.py` + `tools/netsec_rag_web.py` | Retrieval-augmented QA over the report archive + arbitrary indexed files. Ollama embeddings, SQLite vector store, streaming Dash UI structured like Companion. Runs on the VM as `netsec-rag.service` |
 | `server/` | Analyzer VM stack - signed ingest API, worker, retention, notify. Runs the exact detection pipeline of the dashboard on a small VM you control |
-| `deploy/` | Docker Compose + Dockerfiles for the VM stack, plus `create_sensor.py` |
+| `deploy/` | Docker Compose + Dockerfiles + Caddyfile + systemd units + install scripts for the whole VM stack. See `deploy/README.md` for the fresh-VM quick start |
+| `docs/ARCHITECTURE.md` | End-to-end map: what runs where, ports, persistence, data flow through the stack |
+| `docs/SECURITY_MODEL.md` | Who can reach what, what auth guards each service, threats mitigated and not |
 | `tools/upload_pcap.py` | Signed HMAC upload CLI - streams a PCAP to the VM's `/v1/pcap` with `--email <address>` for the report |
 | `requirements.txt` | Pinned Python dependencies |
 | `docs/MODELS.md` | Reference for the three ML models and their parameters |
@@ -114,6 +117,29 @@ NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
 The notebook locates the JSON data files automatically whether you launch
 from `app/` (Jupyter) or from the repo root (VS Code), so you don't need to
 move anything to run it.
+
+## Architecture (24/7 always-on setup)
+
+The always-on deployment lives on a small Oracle Always Free ARM VM
+reachable exclusively over Tailscale. Everything sits behind ONE URL
+with ONE login:
+
+```
+https://netsec-agent.<your-tailnet>.ts.net/         portal
+                                          /rag/     RAG QA over the archive
+                                          /chat/    AI Companion (files+chat)
+http://netsec-agent:8766                            Ingest API (HMAC)
+http://netsec-agent:5678                            n8n workflows (own login)
+```
+
+Caddy fronts everything with basic-auth + a Tailscale-issued Let's
+Encrypt cert (renewed weekly). The DNS name only resolves inside your
+tailnet - the whole site is invisible from the public internet.
+
+See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full
+service map, ports and data flows, and **[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)** for the auth and threat model.
+
+For a fresh-VM install: **[deploy/README.md](deploy/README.md)**.
 
 ## Run on your own PCAPs (three ways)
 

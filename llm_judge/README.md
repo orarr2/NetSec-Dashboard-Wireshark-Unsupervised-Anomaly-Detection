@@ -105,6 +105,23 @@ cache hits and mean latency. A judge that fails to initialize or answers
 garbage is excluded/logged and the remaining judges carry the batch; the
 run only fails when fewer than two judges can be constructed.
 
+## Ask the archive: RAG on top of the judge output
+
+Every session's `verdicts.json` (rich per-candidate results with
+`evidence` projections + persisted capture `context`) is the perfect
+source material for retrieval-augmented QA. The `tools/netsec_rag.py`
+engine + `tools/netsec_rag_web.py` Dash frontend index every session's
+verdicts and summary into a local vector store (Ollama embeddings,
+SQLite cosine store) and expose them at `https://<vm>/rag/`.
+
+Ask things like "which IPs across all sessions were judged malicious",
+"what did the panel say about 172.10.146.42", "which categories recur
+most on my network" - the RAG retrieves the actual verdicts from the
+archive and grounds a local model's answer in them. See
+`docs/ARCHITECTURE.md` for how it fits with the rest of the stack.
+
+## Adding another judge
+
 Adding another engine = adding one entry to `LLM_JUDGE_PANEL` (optionally
 with a `provider:` prefix). No code changes. Two judges must not share a
 model name - verdicts are cached per model id, so duplicates would fake

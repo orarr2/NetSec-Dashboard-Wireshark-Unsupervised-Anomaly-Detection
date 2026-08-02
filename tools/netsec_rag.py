@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""NetSec RAG - a local retrieval-augmented question engine for the VM.
+"""NetSec RAG - local retrieval-augmented QA engine for the VM.
 
-STANDALONE and NOT WIRED INTO ANYTHING. This file is prepared for the VM
-but nothing in app/, server/ or llm_judge/ imports it. Integrate later
-if wanted; for now it runs entirely on its own.
+Two entry points:
+  * this file is the ENGINE + CLI: `ask`, `index`, `ingest-netsec`,
+    `stats`, `serve` (tiny built-in http.server, kept for scripts).
+  * `tools/netsec_rag_web.py` is the DASH FRONTEND, structured after
+    Companion (sidebar, streaming answers, sources cards). That is
+    the production entry point on the VM (systemd:
+    netsec-rag.service), reached at `/rag/` behind Caddy basicauth.
 
 What it is
 ----------

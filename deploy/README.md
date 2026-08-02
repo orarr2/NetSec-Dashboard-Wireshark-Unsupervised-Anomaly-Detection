@@ -2,24 +2,73 @@
 
 This directory holds the generic, secret-free deployment templates so
 that any fork can stand up the 24/7 analysis stack on its own VM.
-Everything a fork needs to run the four-tier ecosystem lives here or
-under `../server/`, `../sensor/` and `../tools/`.
+Everything a fork needs to run the pipeline + the always-on user
+services (RAG, Companion, Portal, Caddy) lives here or under
+`../server/`, `../sensor/`, `../tools/`, `../companion/`.
 
 ## What ships
 
 | File | Purpose |
 |---|---|
 | `.env.example` | Every environment variable the stack reads, with its code default. |
-| `docker-compose.yml` | n8n + ingest API + worker + retention, each bound to your Tailscale IP only. |
+| `docker-compose.yml` | The docker services: n8n + ingest_api + worker + retention + ollama + caddy. Each bound to your Tailscale IP; ollama on loopback. |
 | `Dockerfile.ingest` | The ingest API image - `server/` + FastAPI, port 8766. |
 | `Dockerfile.worker` | The analysis worker image - runs the detection pipeline, writes verdicts + HTML/PDF reports. |
+| `Caddyfile` | Reverse proxy config: TLS + basicauth + path routing to Portal / RAG / Companion. |
+| `install-caddy.sh` | One-shot installer: writes the basicauth creds, starts Caddy, installs fail2ban with a Caddy jail. Needs BASIC_AUTH_USER + BASIC_AUTH_HASH env vars. |
+| `install-rag.sh` | Installs the RAG service (Ollama embed model + systemd unit + ingest timer). |
+| `install-companion.sh` | Installs the Companion service (dedicated Python venv with dash + pypdf + python-docx, tshark for PCAP file drop, systemd unit). |
+| `netsec-rag.service` + `-ingest.service` + `.timer` | systemd units for RAG. |
+| `netsec-companion.service` | systemd unit for Companion. |
+| `netsec-tls-renew.service` + `.timer` | Weekly refresh of the Tailscale-issued Let's Encrypt cert. |
 | `n8n_workflows/mvp_triage_email.json` | Importable n8n workflow: receives the worker's alert webhook and emails when a verdict is malicious/suspicious. |
 | `create_sensor.py` | Registers a sensor in the history DB and prints its credentials once. |
 | `../server/` | History DB schema, HMAC upload auth, streaming storage, and the FastAPI ingest layer. |
+| `../tools/netsec_rag.py` | RAG engine (retrieval + generation). CLI + Python API. |
+| `../tools/netsec_rag_web.py` | RAG Dash web frontend, structured like Companion. |
+| `../companion/companion.py` | AI Companion (Dash chat over local Ollama, with file drop). |
 | `../tools/upload_pcap.py` | Signed streaming upload from any machine - the no-size-cap replacement for the GitHub 25MB path. |
 | `../tools/measure_pipeline_ratios.py` | Re-measures the PCAP-vs-fields size ratios the plan is built on, against your own long capture (the plan's numbers came from a single 135-second sample). |
 | `../server/retention.py` | Daily housekeeping (runs as the `retention` compose service): DB backup + prune, 7-day raw purge with the permanent field-index backfilled first, 85% disk watermark, monthly VACUUM. `--once --dry-run` shows what it would do. |
 | `../tools/watchdog.py` | Standalone external checker - copy to any always-on machine OUTSIDE the VM, point it at `http://<vm>:8766/healthz`, get one email per outage and one per recovery. No machine monitors itself. |
+
+## Quick start on a fresh VM
+
+```bash
+# 1. Clone the repo on the VM
+git clone <repo> /home/ubuntu/netsec
+cd /home/ubuntu/netsec/deploy
+
+# 2. Write .env with your secrets (SMTP + N8N encryption key + LLM keys)
+cp .env.example .env
+$EDITOR .env
+
+# 3. Bring up the docker services (does NOT include caddy yet)
+sudo docker compose up -d ingest_api worker retention ollama n8n
+
+# 4. Register a sensor (prints its HMAC secret once - save it)
+python3 create_sensor.py my-laptop
+
+# 5. Install the user-facing services (systemd)
+sudo cp ../deploy/netsec-portal.service /etc/systemd/system/    # (create this from a template if not present)
+sudo systemctl enable --now netsec-portal
+bash install-rag.sh
+bash install-companion.sh
+
+# 6. Get a Tailscale HTTPS cert (requires enabling HTTPS in tailscale admin console once)
+sudo mkdir -p /etc/netsec-tls
+sudo tailscale cert netsec-agent.<your-tailnet>.ts.net
+sudo mv netsec-agent.*.crt netsec-agent.*.key /etc/netsec-tls/
+
+# 7. Bring up Caddy with basicauth
+BASIC_AUTH_USER=you \
+BASIC_AUTH_HASH="$(sudo docker run --rm caddy:2 caddy hash-password --plaintext 'YOUR-PW')" \
+    bash install-caddy.sh
+
+# 8. From any Tailscale device open https://netsec-agent.<your-tailnet>.ts.net/
+```
+
+Once the last step returns 200 you have Portal + RAG + Companion + n8n + the pipeline all reachable from any device signed into your Tailscale account. See `../docs/ARCHITECTURE.md` for the routing map and `../docs/SECURITY_MODEL.md` for the auth layers.
 
 ## Requirements
 

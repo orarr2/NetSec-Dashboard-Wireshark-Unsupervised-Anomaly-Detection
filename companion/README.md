@@ -1,66 +1,76 @@
 # AI Companion
 
-Local chat with the Ollama models running on the NetSec VM. Optional
-tool in the NetSec repo - the dashboard and the analysis pipeline
-run fine without it.
+Chat with the Ollama models on your NetSec VM. Runs on the VM itself
+as a systemd service, reachable at `https://netsec-agent.<tailnet>.ts.net/chat/`
+behind Caddy's basic-auth. The same file can also be run on your laptop
+in SSH-tunnel mode (the original design) if you prefer.
 
 ## What it does
 
-Opens a browser UI, styled after llama.ui: sidebar with chat history
-grouped by date, model picker at the top, chat panel, composer at
-the bottom. Every model already installed on the VM (`ollama list`)
-shows up in the picker automatically.
+- Sidebar with saved chats grouped by date (Today / Yesterday / …)
+- Streaming responses (token-by-token as the model generates)
+- Dark + light theme, mobile-friendly hamburger drawer, per-chat
+  system prompt and temperature settings, slash commands
+- **File drop** in the composer: attach a file and the Companion
+  extracts its text and sends it to the model with your next message
+- No cloud, no API keys, no data leaves your machine
 
-**No cloud, no API keys, no data leaves your machine** - the only
-network flow is an SSH tunnel from this host to your own VM.
+## File drop
 
-Mobile-friendly: the sidebar collapses into a hamburger drawer on
-small screens, viewport respects iOS notch, `theme-color` and
-`apple-mobile-web-app-capable` are set so Safari looks native. There
-is a light/dark toggle in the top bar that persists across reloads.
+Click the 📎 icon on the LEFT of the composer, or drag any of these
+formats into it:
 
-## Run
+| Extension | Extractor | Notes |
+|---|---|---|
+| `.txt`, `.md`, `.log`, `.json`, `.csv`, `.py`, `.yaml`, `.sh`, code | direct decode | truncated at 60,000 chars |
+| `.pdf` | `pypdf` | page-by-page text extraction |
+| `.docx` | `python-docx` | paragraph-by-paragraph |
+| `.pcap`, `.pcapng`, `.cap` | `tshark` | capinfos + protocol hierarchy + top IP conversations + first 40 packets |
+
+After a file is attached a chip appears above the composer. Send your
+question - the extracted text prepends the message, so the model sees
+"here is the file, here is what to do with it". The attachment is
+cleared after send.
+
+## Run modes
+
+### On the VM (production - reachable from iPhone via Tailscale)
+
+Handled by `deploy/install-companion.sh`. Creates a dedicated venv
+at `/opt/netsec-companion/venv` with dash + dash_bootstrap_components
++ pypdf + python-docx, installs `tshark`, drops the systemd unit
+`netsec-companion.service`. Direct-mode - no SSH tunnel; talks to
+Ollama at `127.0.0.1:11434`.
+
+```
+sudo systemctl status netsec-companion.service
+```
+
+Reach it at `https://netsec-agent.<tailnet>.ts.net/chat/` (Caddy
+adds the login).
+
+### On the laptop (dev / offline)
 
 ```
 python companion.py
 ```
 
-Opens the browser at `http://127.0.0.1:5100`. From the Tailnet
-(e.g. an iPhone with Tailscale on), reach it as
-`http://<this-host-tailscale-name>:5100`.
+Opens an SSH tunnel to the VM's docker-internal Ollama, serves at
+`http://127.0.0.1:5100`. Requires `~/.ssh/netsec-agent.key/...` to
+exist. See `--help` for all flags.
 
-Defaults:
-- host: `100.68.246.54` (VM's Tailscale IP)
-- user: `ubuntu`
-- key: `~/.ssh/netsec-agent.key/ssh-key-2026-07-12.key`
-- container: `deploy-ollama-1`
-- default model: **qwen2.5:3b** (multilingual, handles Hebrew)
+### Defaults
 
-Override any of them via CLI flags or env vars (`NETSEC_VM_HOST`,
-`NETSEC_VM_USER`, `NETSEC_SSH_KEY`).
+- Ollama URL: from `--ollama-url` or `NETSEC_OLLAMA_URL` (VM mode)
+  or via SSH tunnel (laptop mode).
+- Chat DB: from `--db` or `NETSEC_COMPANION_DB` (default
+  `~/ai-companion/chats.db`).
+- URL base: from `--url-base` or `NETSEC_COMPANION_URL_BASE`
+  (default `/`, VM mode uses `/chat/` so Caddy can path-route).
+- Default model: **qwen2.5:3b** (multilingual - handles Hebrew,
+  English, code).
 
-To let devices in your Tailnet reach this instance
-(iPhone / another laptop): `python companion.py --bind 0.0.0.0`.
-
-## Model expectations - read this
-
-Local 2-3B-parameter models on a CPU-only ARM VM are useful for
-plain chat and single-shot Q&A, but they have real limits:
-
-- **They do not know today's date.** They have no clock and no web.
-  The default system prompt tells them today's date so they stop
-  answering "the current date is [insert current date]".
-- **They cannot look anything up.** No web, no NetSec data.
-- **They are not equally strong in every language.** For Hebrew /
-  mixed English-Hebrew prompts, `qwen2.5:3b` or `gemma2:2b` do
-  better than `granite3.3:2b`. The default picks the best available
-  for language coverage, not raw speed.
-- **Wall-clock is dominated by the ARM CPU**, not this app. Expect
-  first-token latency of a few seconds on a quiet VM, tens of
-  seconds when the NetSec worker is running an analysis at the same
-  time. The status badge in the top bar shows if the VM is reachable.
-
-## Slash commands (typed in the message box)
+### Slash commands (typed in the message box)
 
 - `/model qwen2.5:3b` - switch model mid-chat
 - `/system אתה מומחה לאבטחת מידע.` - set/replace the system prompt
@@ -69,13 +79,35 @@ plain chat and single-shot Q&A, but they have real limits:
 - `/save` - export the current chat to `~/ai-companion/exports/`
 - `/help` - list commands
 
-## Chat storage
+## Model expectations - read this
 
-`~/ai-companion/chats.db` (SQLite, autocommit + WAL). Never syncs
-anywhere. To wipe everything: delete that file.
+Local 2-3B-parameter models on a CPU-only ARM VM are useful for
+plain chat, file explanation, and single-shot Q&A, but they have real
+limits:
+
+- **They do not know today's date.** They have no clock and no web.
+  The default system prompt tells them today's date so they stop
+  answering "the current date is [insert current date]".
+- **They cannot look anything up.** No web, no NetSec data. For
+  questions about YOUR captures use the RAG at `/rag/` instead - it
+  IS indexed on the report archive.
+- **Wall-clock is dominated by the ARM CPU**, not this app. Expect
+  first-token latency of a few seconds on a quiet VM, tens of
+  seconds when the NetSec worker is running an analysis at the same
+  time.
+- **They are not equally strong in every language.** For Hebrew /
+  mixed English-Hebrew prompts, `qwen2.5:3b` or `gemma2:2b` do
+  better than `granite3.3:2b`. The default picks the best available
+  for language coverage.
+- **Embedding models are filtered out of the picker.** If Ollama
+  has `nomic-embed-text` (needed by the RAG) it will not show in
+  the Companion model dropdown - it returns numeric vectors, not
+  text, and would produce garbage in chat.
 
 ## What it does NOT do
 
-- Not connected to NetSec, does not touch its DB or code
-- Does not open any new port on the VM - the tunnel is one-way SSH
-- Does not install models. Pull new ones on the VM: `ollama pull <name>`
+- Not connected to NetSec, does not touch its DB or code (files you
+  drop are read once, held in memory, then let go after the
+  message).
+- Does not install models. Pull new ones on the VM: `docker exec
+  deploy-ollama-1 ollama pull <name>`.
