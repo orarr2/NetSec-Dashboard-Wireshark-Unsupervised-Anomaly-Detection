@@ -743,14 +743,24 @@ def _welcome_screen():
     ])
 
 
-def build_app(tunnel, client, store, port):
+def build_app(tunnel, client, store, port, url_base=None):
     """Assemble and return the Dash app. All state (active chat, streams)
-    lives in dcc.Store components so a browser refresh finds itself again."""
-    app = Dash(__name__,
-               external_stylesheets=[dbc.themes.SLATE],
-               title="AI Companion",
-               update_title=None,
-               suppress_callback_exceptions=True)
+    lives in dcc.Store components so a browser refresh finds itself again.
+
+    url_base: when set (e.g. "/chat/"), Dash prefixes every asset URL,
+    callback and route so the whole app is reachable at that subpath.
+    Needed when the app sits behind a Caddy reverse proxy that uses path
+    routing. Must start AND end with "/" per Dash's rules."""
+    dash_kwargs = dict(external_stylesheets=[dbc.themes.SLATE],
+                       title="AI Companion",
+                       update_title=None,
+                       suppress_callback_exceptions=True)
+    if url_base:
+        if not (url_base.startswith("/") and url_base.endswith("/")):
+            raise ValueError(f"--url-base must start and end with '/', "
+                             f"got {url_base!r}")
+        dash_kwargs["url_base_pathname"] = url_base
+    app = Dash(__name__, **dash_kwargs)
     # viewport-fit=cover + user-scalable=no so iOS Safari respects the
     # notch and does not zoom on textarea focus. Theme-color makes the
     # top status bar blend with the app in dark mode.
@@ -1218,6 +1228,11 @@ def main():
                     help=("Chat history DB path (default: "
                           "~/ai-companion/chats.db). Override on the VM "
                           "so state lives under /srv/netsec/companion/."))
+    ap.add_argument("--url-base",
+                    default=os.environ.get("NETSEC_COMPANION_URL_BASE"),
+                    help=("Serve the app under a subpath (e.g. '/chat/'). "
+                          "Needed behind a reverse proxy that uses path "
+                          "routing. Must start AND end with '/'."))
     args = ap.parse_args()
 
     if args.ollama_url:
@@ -1247,7 +1262,8 @@ def main():
     store = ChatStore(db_path)
     print(f"[companion] chats DB: {db_path}")
 
-    app = build_app(tunnel, client, store, args.port)
+    app = build_app(tunnel, client, store, args.port,
+                    url_base=args.url_base)
     url = f"http://127.0.0.1:{args.port}"
     if args.bind == "0.0.0.0":
         print(f"[companion] serving on 0.0.0.0:{args.port} "

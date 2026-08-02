@@ -1,0 +1,70 @@
+## NetSec Caddy - single-auth entry point for the whole stack.
+#
+# Listens on the VM's Tailscale IP (443 = HTTPS with a Caddy-internal
+# self-signed cert). Everything behind it needs the ONE basicauth
+# credential; the browser caches it for the browser session, so it is
+# a single sign-on across all four apps.
+#
+# Routes (order matters - specific paths win over the catch-all):
+#   /rag/   -> the RAG chat  (host 5200)
+#   /chat/  -> the Companion (host 5100)
+#   /n8n/   -> n8n           (host 5678 - N8N_PATH set to match)
+#   /       -> the portal    (host 8080 - static, no base-path config)
+#
+# NOT proxied:
+#   /api/          the ingest API stays on port 8766 with its HMAC-signed
+#                  upload path. Only the dashboard client hits it and it
+#                  already carries strong auth of its own.
+#   :22 (SSH)      still on the public interface, out of scope for now.
+#
+# ${BASIC_AUTH_USER} / ${BASIC_AUTH_HASH} come from
+# /etc/default/netsec-caddy on the host (mounted via env_file in compose).
+# Never in git; the hash is bcrypt of the plaintext.
+
+{
+    # Do not try to fetch a public CA cert; we use tls internal for the
+    # Tailscale-only site.
+    auto_https disable_redirects
+    admin off
+    email disabled
+}
+
+100.68.246.54:443 {
+    tls internal
+
+    # One credential, one realm. Browsers cache it across paths on the
+    # same origin, so the user authenticates once per browser session.
+    basicauth * {
+        {env.BASIC_AUTH_USER} {env.BASIC_AUTH_HASH}
+    }
+
+    log {
+        output stdout
+        format console
+    }
+
+    # /rag/ -> the retrieval-augmented chat.
+    # handle_path strips the prefix, so the backend sees /
+    # (the RAG's inline JS was updated to use relative fetch("ask")).
+    handle_path /rag/* {
+        reverse_proxy host.docker.internal:5200
+    }
+
+    # /chat/ -> the Companion.
+    # companion.py --url-base=/chat/ sets Dash url_base_pathname so
+    # assets and callbacks are all prefixed correctly. We use `handle`
+    # (not handle_path) so the prefix reaches Dash intact.
+    handle /chat/* {
+        reverse_proxy host.docker.internal:5100
+    }
+
+    # /n8n/ -> n8n. N8N_PATH=/n8n/ tells n8n to use the same prefix.
+    handle /n8n/* {
+        reverse_proxy host.docker.internal:5678
+    }
+
+    # Catch-all: the static portal.
+    handle {
+        reverse_proxy host.docker.internal:8080
+    }
+}

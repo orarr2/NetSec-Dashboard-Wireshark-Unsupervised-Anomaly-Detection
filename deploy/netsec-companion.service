@@ -20,6 +20,7 @@ ExecStart=/opt/netsec-companion/venv/bin/python /home/ubuntu/netsec/companion/co
     --db /srv/netsec/companion/chats.db \
     --bind 100.68.246.54 \
     --port 5100 \
+    --url-base /chat/ \
     --no-browser
 Restart=on-failure
 RestartSec=10

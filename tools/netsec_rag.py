@@ -514,7 +514,9 @@ onkeydown="if(event.key==='Enter')go()"><button onclick="go()">Ask</button></div
 async function go(){const q=document.getElementById('q').value.trim();if(!q)return;
 document.getElementById('q').value='';const log=document.getElementById('log');
 log.innerHTML+='<div class="q">'+q+'</div><div class="a" id="pending">...</div>';
-const r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+// Relative URL - works both at http://host:5200/ (direct) and at
+// https://host/rag/ (behind the Caddy path prefix).
+const r=await fetch('ask',{method:'POST',headers:{'Content-Type':'application/json'},
 body:JSON.stringify({q})});const d=await r.json();
 document.getElementById('pending').removeAttribute('id');
 log.lastChild.textContent=d.answer;

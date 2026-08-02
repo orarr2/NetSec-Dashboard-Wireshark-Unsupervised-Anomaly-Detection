@@ -19,6 +19,10 @@ services:
       - N8N_HOST=${TS_BIND:-127.0.0.1}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - GENERIC_TIMEZONE=${TZ:-UTC}
+      # Path prefix so n8n works behind the Caddy reverse proxy at
+      # /n8n/. Also tells its own frontend where to load assets from.
+      - N8N_PATH=/n8n/
+      - N8N_PROXY_HOPS=1
     volumes:
       - n8n_data:/home/node/.n8n
       # Workflow templates, importable via the n8n UI or the CLI:
@@ -90,6 +94,30 @@ services:
   # judge_api:   # optional - HTTP wrapper around llm_judge/judge_cli.py
   #              # (:8765); the worker supersedes it for the queue path
 
+  # Reverse proxy + single-sign-on for the whole stack (portal, RAG,
+  # Companion, n8n). Basic auth from /etc/default/netsec-caddy.
+  # ingest_api is DELIBERATELY not proxied - it has HMAC signing on
+  # uploads and only the dashboard client hits it.
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      # HTTPS on the Tailscale IP. Not on the public interface.
+      - "${TS_BIND:-127.0.0.1}:443:443"
+    environment:
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER}
+      - BASIC_AUTH_HASH=${BASIC_AUTH_HASH}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      # Lets the reverse_proxy targets in Caddyfile refer to
+      # host.docker.internal instead of hard-coding the docker bridge IP.
+      - "host.docker.internal:host-gateway"
+
 volumes:
   n8n_data:
   ollama_models:
+  caddy_data:
+  caddy_config:
