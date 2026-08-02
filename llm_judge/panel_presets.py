@@ -123,6 +123,25 @@ PRESETS = {
                   "(<5 candidates) where maximum diversity matters "
                   "more than anything."),
     },
+    "reliable_hybrid_4": {
+        "label": "Reliable hybrid x4 (2 proven cloud + 2 local) - ~55 s / candidate",
+        "spec": ("groq:llama-3.1-8b-instant,"
+                 "groq:openai/gpt-oss-120b,"
+                 "ollama:qwen2.5:3b,"
+                 "ollama:granite3.3:2b"),
+        "wallclock_per_candidate_s": 55,
+        "notes": ("Default. Picked from measured production yield, not "
+                  "from model reputation. Over sessions 10-15 on the "
+                  "reference VM: llama-3.1-8b answered 93% of assigned "
+                  "candidates and gpt-oss-120b 88%, while "
+                  "gemini-2.5-flash managed 4% (AI Studio credits "
+                  "exhausted), llama-3.3-70b 22% (100k-token daily pool "
+                  "spent inside one capture) and qwen3.6-27b 15%. The "
+                  "two local judges have no quota at all and answered "
+                  "every timed probe, so a dead cloud key degrades this "
+                  "panel to 2 working judges instead of 0. Families: "
+                  "Meta + OpenAI + Alibaba + IBM."),
+    },
     "single_groq_fast": {
         "label": "Single judge (Groq 8B, no panel) - ~0.5 s / candidate, no debate",
         "spec": "",  # empty spec disables panel; single-judge fallback fires
@@ -135,7 +154,11 @@ PRESETS = {
 }
 
 # The default preset ID for a new upload that did not pick one.
-DEFAULT_PRESET_ID = "balanced_4"
+# Was balanced_4 until 2026-08; its gemini-2.5-flash slot measured 4%
+# yield and its llama-3.3-70b slot 22%, so two of its four judges were
+# effectively absent. reliable_hybrid_4 keeps the two cloud judges that
+# actually answer and backs them with two zero-quota local models.
+DEFAULT_PRESET_ID = "reliable_hybrid_4"
 
 
 def preset_by_id(preset_id):
@@ -160,8 +183,8 @@ def valid_spec(spec):
 
 def choices_for_ui():
     """Return [(id, label)] pairs ordered for a dropdown."""
-    ordered = ["fast_cloud_3", "fresh_cloud_3", "cloud_max_6",
-               "balanced_4", "local_only_2", "local_diverse_5",
-               "hybrid_6", "max_11", "single_groq_fast"]
+    ordered = ["reliable_hybrid_4", "fast_cloud_3", "fresh_cloud_3",
+               "cloud_max_6", "balanced_4", "local_only_2",
+               "local_diverse_5", "hybrid_6", "max_11", "single_groq_fast"]
     return [(pid, PRESETS[pid]["label"]) for pid in ordered
             if pid in PRESETS]
