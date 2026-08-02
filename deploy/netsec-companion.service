@@ -1,0 +1,33 @@
+[Unit]
+# AI Companion - the chat UI over the local Ollama models. Runs on the
+# VM (direct mode - talks to 127.0.0.1:11434 without an SSH tunnel), so
+# the iPhone can reach it via Tailscale without the laptop being on.
+Description=NetSec Companion (chat over local Ollama)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/netsec/companion
+Environment="NETSEC_OLLAMA_URL=http://127.0.0.1:11434"
+Environment="NETSEC_COMPANION_DB=/srv/netsec/companion/chats.db"
+EnvironmentFile=-/etc/default/netsec-companion
+ExecStart=/usr/bin/python3 /home/ubuntu/netsec/companion/companion.py \
+    --ollama-url http://127.0.0.1:11434 \
+    --db /srv/netsec/companion/chats.db \
+    --bind 100.68.246.54 \
+    --port 5100 \
+    --no-browser
+Restart=on-failure
+RestartSec=10
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/netsec/companion
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

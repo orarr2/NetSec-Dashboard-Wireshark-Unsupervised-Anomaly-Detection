@@ -1106,7 +1106,8 @@ def build_app(tunnel, client, store, port):
     def render_vm_badge(_model):
         try:
             client.list_models()
-            return html.Span(f"VM: {tunnel.host}", className="badge")
+            label = tunnel.host if tunnel is not None else "local"
+            return html.Span(f"VM: {label}", className="badge")
         except Exception:
             return html.Span("VM: unreachable", className="badge warn")
 
@@ -1206,22 +1207,43 @@ def main():
                           "network / Tailscale (needed for iPhone access)."))
     ap.add_argument("--no-browser", action="store_true",
                     help="don't auto-open the browser")
+    ap.add_argument("--ollama-url",
+                    default=os.environ.get("NETSEC_OLLAMA_URL"),
+                    help=("Skip the SSH tunnel entirely and use this "
+                          "Ollama URL directly. Set on the VM itself, "
+                          "where Ollama is already reachable at "
+                          "http://127.0.0.1:11434 - no tunnel needed."))
+    ap.add_argument("--db",
+                    default=os.environ.get("NETSEC_COMPANION_DB"),
+                    help=("Chat history DB path (default: "
+                          "~/ai-companion/chats.db). Override on the VM "
+                          "so state lives under /srv/netsec/companion/."))
     args = ap.parse_args()
 
-    print(f"[companion] opening ssh tunnel to {args.user}@{args.host} "
-          f"-> {args.container}:11434 ...")
-    try:
-        tunnel = VMTunnel(host=args.host, user=args.user, key=args.key,
-                          container=args.container,
-                          local_port=args.local_port).open()
-    except Exception as e:
-        print(f"[companion] tunnel setup failed: {e}", file=sys.stderr)
-        sys.exit(1)
-    print(f"[companion] tunnel up: 127.0.0.1:{args.local_port} -> "
-          f"{tunnel.container_ip}:11434")
+    if args.ollama_url:
+        # Direct mode - the process itself can reach Ollama; no tunnel
+        # to open, no ssh, no atexit cleanup. Used by the VM systemd
+        # deployment where the container is reachable on loopback.
+        print(f"[companion] direct mode: using Ollama at "
+              f"{args.ollama_url} (no ssh tunnel)")
+        tunnel = None
+        client = OllamaClient(args.ollama_url)
+    else:
+        print(f"[companion] opening ssh tunnel to {args.user}@{args.host} "
+              f"-> {args.container}:11434 ...")
+        try:
+            tunnel = VMTunnel(host=args.host, user=args.user, key=args.key,
+                              container=args.container,
+                              local_port=args.local_port).open()
+        except Exception as e:
+            print(f"[companion] tunnel setup failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"[companion] tunnel up: 127.0.0.1:{args.local_port} -> "
+              f"{tunnel.container_ip}:11434")
+        client = OllamaClient(f"http://127.0.0.1:{args.local_port}")
 
-    client = OllamaClient(f"http://127.0.0.1:{args.local_port}")
-    db_path = pathlib.Path.home() / "ai-companion" / "chats.db"
+    db_path = pathlib.Path(args.db) if args.db else \
+        pathlib.Path.home() / "ai-companion" / "chats.db"
     store = ChatStore(db_path)
     print(f"[companion] chats DB: {db_path}")
 
@@ -1241,7 +1263,8 @@ def main():
 
     def _stop(*_):
         print("\n[companion] shutting down...")
-        tunnel.close()
+        if tunnel is not None:
+            tunnel.close()
         sys.exit(0)
     signal.signal(signal.SIGINT, _stop)
 
@@ -1249,7 +1272,10 @@ def main():
         app.run(host=args.bind, port=args.port, debug=False,
                 use_reloader=False)
     finally:
-        tunnel.close()
+        # No-op in direct mode - only tunnel-mode has anything to tear
+        # down (tunnel-close is idempotent, safe on already-closed).
+        if tunnel is not None:
+            tunnel.close()
 
 
 if __name__ == "__main__":
