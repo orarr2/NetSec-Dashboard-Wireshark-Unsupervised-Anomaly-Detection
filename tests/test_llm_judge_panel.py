@@ -610,10 +610,12 @@ def test_render_markdown_panel_sections(tmp_path):
     out["analyst_commentary"] = None
     md = judge_cli._render_markdown(
         "x.pcap", out, {"candidates": cands, "capped": []}, clients[0])
-    # S1 restructure: panel identity lives in the exec summary line,
-    # disputes and health are appendix subsections.
+    # Report v2: panel identity lives in the exec summary line; the
+    # appendix carries health + the full per-candidate votes grid
+    # (which replaced the disputes-only table - a split candidate now
+    # shows as a row whose judge cells disagree).
     assert "**Panel**: m-a + m-b" in md
-    assert "### Panel disputes" in md
+    assert "### Panel votes" in md
     assert "### Panel health" in md
     assert "`m-a`" in md and "`m-b`" in md
     assert "⚖" in md

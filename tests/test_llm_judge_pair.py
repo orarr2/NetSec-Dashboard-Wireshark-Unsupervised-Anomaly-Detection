@@ -63,6 +63,80 @@ def test_top_non_benign_ranked_by_confidence():
 
 
 # --------------------------------------------------------------------------
+# build_pair_blob v2: capture metadata, category flow, annotated uniques
+# --------------------------------------------------------------------------
+def _ctx(start, n_packets=1000, file="a.pcap"):
+    return {"time_range": [start, start], "duration_s": 60.0,
+            "n_packets": n_packets, "total_ips": 10,
+            "local_ips_count": 6, "external_ips_count": 4,
+            "top_protocols": {"TCP": 800, "DNS": 100},
+            "original_filename": file, "sensor_name": "lab",
+            "not_flagged_ips": [{"ip": "9.9.9.9"}]}
+
+
+def test_pair_blob_carries_capture_metadata_and_gap():
+    s1 = {"results": [_res("1.1.1.1", "benign")],
+          "context": _ctx("2026-08-01 10:00:00")}
+    s2 = {"results": [_res("1.1.1.1", "benign")],
+          "context": _ctx("2026-08-01 12:30:00", file="b.pcap")}
+    blob = jc.build_pair_blob(s1, s2)
+    cap = blob["capture"]
+    assert cap["s1"]["file"] == "a.pcap"
+    assert cap["s2"]["file"] == "b.pcap"
+    assert cap["s1"]["n_packets"] == 1000
+    assert cap["s1"]["cleared_ips"] == 1
+    assert cap["s1"]["top_protocols"] == ["TCP", "DNS"]
+    assert cap["gap_seconds"] == 2.5 * 3600
+
+
+def test_pair_blob_no_capture_key_for_legacy_outputs():
+    """verdicts.json written before report v2 has no 'context' - the
+    blob must not invent one (renderers show '-' off its absence)."""
+    blob = jc.build_pair_blob({"results": []}, {"results": []})
+    assert "capture" not in blob
+
+
+def test_pair_blob_category_flow_and_annotated_uniques():
+    s1 = {"results": [_res("1.1.1.1", "suspicious"),
+                      _res("2.2.2.2", "suspicious"),
+                      _res("3.3.3.3", "benign"),
+                      _res("6.6.6.6", "benign")]}
+    ev = {"device": {"hostname": "cam-1", "vendor": "Hikvision",
+                     "category": "camera"}}
+    new_bad = dict(_res("5.5.5.5", "malicious", "port_scan", 0.9),
+                   evidence=ev)
+    s2 = {"results": [_res("1.1.1.1", "benign"),
+                      _res("2.2.2.2", "malicious", "port_scan", 0.93),
+                      _res("3.3.3.3", "benign"),
+                      new_bad]}
+    blob = jc.build_pair_blob(s1, s2)
+    assert blob["category_flow"] == {"suspicious -> benign": 1,
+                                     "suspicious -> malicious": 1}
+    assert blob["unchanged_verdicts"] == 1          # 3.3.3.3
+    # Annotated uniques carry verdict + device, non-benign sorted first.
+    detail = blob["unique_s2_detail"]
+    assert detail[0]["ip"] == "5.5.5.5"
+    assert detail[0]["verdict"] == "malicious"
+    assert detail[0]["device"] == "Hikvision cam-1"
+    # ...and surface in the dedicated new_non_benign_s2 list.
+    assert [r["ip"] for r in blob["new_non_benign_s2"]] == ["5.5.5.5"]
+    # Flips carry the S2-side device when evidence exists.
+    flip_242 = [f for f in blob["verdict_flips"] if f["ip"] == "2.2.2.2"]
+    assert flip_242 and flip_242[0]["device"] is None  # no evidence given
+
+
+def test_validate_caps_cut_at_word_boundary():
+    """The 500-char cap must never shear a word in half - job 2 shipped
+    a report ending 'Overall posture esc'."""
+    words = ("alpha bravo charlie delta " * 40).strip()   # > 500 chars
+    out = jc.validate_pair_verdict(dict(GOOD, reasoning=words))
+    assert len(out["reasoning"]) <= 500
+    assert out["reasoning"].endswith(" ...")
+    tail = out["reasoning"][:-4].split()[-1]
+    assert tail in ("alpha", "bravo", "charlie", "delta")  # whole word
+
+
+# --------------------------------------------------------------------------
 # validate_pair_verdict
 # --------------------------------------------------------------------------
 GOOD = {"posture_delta": "escalated", "confidence": 0.8,

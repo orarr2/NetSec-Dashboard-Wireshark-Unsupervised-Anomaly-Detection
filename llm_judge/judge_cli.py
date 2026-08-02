@@ -166,18 +166,12 @@ def build_context(S, findings, assembled):
 
 
 # --------------------------------------------------------------------------
-# Markdown renderer. Sections, in order:
-#   1. Metadata table (PCAP, model, prompt, guardrail, panel summary)
-#   2. Analyst commentary (capped to first 2 sentences)
-#   3. Pipeline stats (2 compact lines - traffic + detectors)
-#   4. Top verdict (highest priority row)
-#   5. Triaged queue (full verdict table, 8 columns)
-#   6. Reasoning per candidate (first sentence per row)
-#   7. Panel disputes (2-judge grid, no Note column)
-#   8. Debate positions (first sentence per model per candidate)
-#   9. Not queued for judgment (one-line summary)
-#  10. Dropped / Capped (only if non-empty)
-#  11. Panel participation (per-judge audit, no caption)
+# Markdown renderer. Sections, in order (report v2, 2026-08-02):
+#   1. Executive summary (same block the email body shows)
+#   2. All candidates - ONE consolidated table
+#   3. Evidence per finding (device, traffic numbers, triggers, history)
+#   4. Appendix: pipeline stats, panel votes (all candidates, named
+#      judges), panel health, disputes, dropped/capped, legend, metadata
 #
 # The report exists to be read once and acted on. Anything a reader would
 # skip on the second capture belongs in verdicts.json, not in the email.
@@ -209,93 +203,184 @@ def _first_sentence(text, max_chars=160):
     return s
 
 
-def _render_consensus_summary(results, stats):
-    """Return a bounded chunk of markdown lines summarising how the
-    panel reached each verdict. Only called in panel mode.
+_TRIGGER_NAMES = {"isolation_forest": "IsolationForest",
+                  "dbscan_noise": "DBSCAN noise",
+                  "scan_rule": "scan rule",
+                  "amp_rule": "DNS-amp rule",
+                  "arp_rule": "ARP rule",
+                  "flood_rule": "flood rule",
+                  "lstm": "LSTM"}
 
-    Layout:
-        ## Consensus summary
-        > N/M candidates unanimous in round 1, K reached agreement in
-        > debate, R still ⚖ REVIEW.
 
-        | # | Candidate | round 1 | after debate | how |
-        |---|---|---|---|---|
-        | 1 | 192.168.1.104 | 2/2 malicious | 2/2 malicious | unanimous |
-        | 2 | 192.168.1.1   | 1 malicious, 1 benign | 1 mal, 1 susp | 1 revised |
-        ...
+def _fmt_bytes(n):
+    """1234567 -> '1.2 MB'. None stays None (unknown, not zero)."""
+    if not isinstance(n, (int, float)):
+        return None
+    n = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
 
-    Nothing here calls the LLM again - it is a projection of the
-    per-result panel block, so it costs zero API tokens and stays
-    deterministic on cache-hit reruns."""
-    total = len(results)
-    if not total:
+
+def _evidence_short(r):
+    """One italic sub-line under a Key finding: the handful of concrete
+    numbers behind the verdict, so the email reader never has to take
+    'port_scan' on faith. Empty string when the result predates the
+    evidence projection (old verdicts.json)."""
+    ev = r.get("evidence") or {}
+    if not ev:
+        return ""
+    bits = []
+    dev = ev.get("device") or {}
+    name = " ".join(str(b) for b in (dev.get("vendor"),
+                                     dev.get("hostname")) if b)
+    if name:
+        bits.append(name)
+    if ev.get("packets") is not None:
+        s = f"{ev['packets']:,} pkts"
+        if ev.get("unique_dsts"):
+            s += f" to {ev['unique_dsts']} dsts"
+        bits.append(s)
+    ports = ev.get("top_dst_ports") or []
+    if ports:
+        bits.append("ports " + ", ".join(p["port"] for p in ports))
+    if ev.get("iso_score") is not None:
+        bits.append(f"iso {ev['iso_score']}")
+    trig = ev.get("trigger_reasons") or []
+    if trig:
+        bits.append("via " + " + ".join(_TRIGGER_NAMES.get(t, t)
+                                        for t in trig))
+    hist = ev.get("history") or {}
+    if hist.get("seen_before"):
+        prior = hist.get("prior_verdict_summary")
+        bits.append(f"seen before ({prior})" if prior else "seen before")
+    elif hist.get("seen_before") is False:
+        bits.append("first appearance")
+    return " · ".join(bits)
+
+
+def _evidence_block(r):
+    """3-5 markdown bullets for the full report's Evidence-per-finding
+    section: device identity, traffic numbers, detector signals and
+    which input fields the judges actually cited."""
+    ev = r.get("evidence") or {}
+    if not ev:
         return []
+    v = r.get("verdict") or {}
+    lines = []
 
-    unanimous_r1 = agreed_after = still_split = single_judge = 0
-    rows = []
-    for i, r in enumerate(results, 1):
-        panel = r.get("panel") or {}
-        judges = panel.get("judges") or []
-        valid = [j for j in judges
-                 if isinstance(j, dict) and j.get("verdict")]
-        if len(valid) < 2:
-            single_judge += 1
-            r1 = _fmt_positions(valid, key="initial_verdict")
-            after = _fmt_positions(valid, key="verdict")
-            how = "1 judge only"
-        else:
-            initial_labels = {j.get("initial_verdict", {}).get("verdict")
-                              for j in valid}
-            final_labels = {j["verdict"]["verdict"] for j in valid}
-            if len(initial_labels) == 1:
-                unanimous_r1 += 1
-                how = "unanimous"
-            elif len(final_labels) == 1:
-                agreed_after += 1
-                n_revised = sum(1 for j in valid if j.get("revised"))
-                how = (f"{n_revised} revised in debate"
-                       if n_revised else "agreed after debate")
-            else:
-                still_split += 1
-                how = ("⚖ split - fail-safe to "
-                       f"{r['verdict']['verdict']}")
-            r1 = _fmt_positions(valid, key="initial_verdict")
-            after = _fmt_positions(valid, key="verdict")
-        rows.append((i, r.get("candidate_id", "?"), r1, after, how))
+    dev = ev.get("device") or {}
+    name_bits = [dev.get("vendor"), dev.get("hostname")]
+    cat = dev.get("category")
+    if cat and cat != "unknown":
+        name_bits.append(f"({cat})")
+    name = " ".join(str(b) for b in name_bits if b) or "unknown device"
+    trig = ", ".join(_TRIGGER_NAMES.get(t, t)
+                     for t in ev.get("trigger_reasons") or []) or "-"
+    lines.append(f"- **device**: {name} · **triggered by**: {trig}")
 
-    lines = [
-        "## Consensus summary",
-        "",
-        f"> **{unanimous_r1}/{total}** unanimous in round 1 · "
-        f"**{agreed_after}** reached agreement in debate · "
-        f"**{still_split}** still ⚖ REVIEW"
-        + (f" · **{single_judge}** with 1 judge only" if single_judge else ""),
-        "",
-        "| # | Candidate | Round 1 | After debate | How |",
-        "|--:|---|---|---|---|",
-    ]
-    for i, cid, r1, after, how in rows:
-        lines.append(f"| {i} | `{cid}` | {r1} | {after} | {how} |")
-    lines.append("")
+    tr_bits = []
+    if ev.get("packets") is not None:
+        tr_bits.append(f"{ev['packets']:,} packets")
+    if ev.get("unique_dsts") is not None:
+        tr_bits.append(f"{ev['unique_dsts']} unique destinations")
+    if ev.get("syn_count"):
+        tr_bits.append(f"{ev['syn_count']:,} SYN")
+    ports = ev.get("top_dst_ports") or []
+    if ports:
+        tr_bits.append("top ports " + ", ".join(
+            p["port"] + (f" ({p['count']})" if p.get("count") else "")
+            for p in ports))
+    bo, bi = ev.get("bytes_out"), ev.get("bytes_in")
+    if bo is not None or bi is not None:
+        tr_bits.append(f"{_fmt_bytes(bo) or '?'} out / "
+                       f"{_fmt_bytes(bi) or '?'} in")
+    if tr_bits:
+        lines.append("- **traffic**: " + " · ".join(tr_bits))
+
+    sig_bits = []
+    if ev.get("iso_score") is not None:
+        sig_bits.append(f"iso_score {ev['iso_score']}")
+    sites = ev.get("top_sites") or []
+    if sites:
+        sig_bits.append("sites: " + ", ".join(sites))
+    if ev.get("tls_weak"):
+        sig_bits.append("**weak TLS**")
+    hist = ev.get("history") or {}
+    if hist.get("seen_before"):
+        prior = hist.get("prior_verdict_summary")
+        sig_bits.append("seen in prior sessions"
+                        + (f" ({prior})" if prior else ""))
+    elif hist.get("seen_before") is False:
+        sig_bits.append("first appearance in this environment")
+    if sig_bits:
+        lines.append("- **signals**: " + " · ".join(sig_bits))
+
+    cited = v.get("evidence_features") or []
+    if cited:
+        lines.append("- **the judges cited**: "
+                     + ", ".join(f"`{c}`" for c in cited[:6]))
     return lines
 
 
-def _fmt_positions(judges, key="verdict"):
-    """Compact per-judge label rollup for the summary table:
-    '2 malicious' when both agree, '1 mal, 1 benign' when split.
-    Judges whose verdict is missing (round-1 failure) are counted as 'X'.
+_VERDICT_ABBR = {"malicious": "mal", "suspicious": "sus", "benign": "ben"}
+
+
+def _render_panel_votes(results, stats):
+    """Appendix table: every candidate x every judge - who voted what.
+
+    Replaces the old aggregate consensus summary (which the 2026-08-01
+    overhaul orphaned): "3/3 unanimous" told a reader THAT the panel
+    agreed but hid WHO the three were and how sure each was. One cell
+    per judge shows the final verdict + confidence, the initial position
+    when the judge revised it in debate (sus→mal ↺), and _failed_ when
+    the provider errored. Nothing here calls the LLM again - it is a
+    projection of the per-result panel block.
     """
-    labels = []
-    for j in judges:
-        v = j.get(key) if isinstance(j, dict) else None
-        labels.append(v["verdict"] if isinstance(v, dict) and v.get("verdict")
-                      else "X")
-    from collections import Counter
-    counter = Counter(labels)
-    if len(counter) == 1:
-        (lbl, n), = counter.items()
-        return f"{n} {lbl}"
-    return ", ".join(f"{n} {lbl[:4]}" for lbl, n in counter.most_common())
+    models = stats.get("models") or []
+    if not models or not results:
+        return []
+    short = [m.split("/")[-1] for m in models]
+
+    def _cell(j):
+        if j is None or j.get("failed"):
+            return "_failed_"
+        v = j.get("verdict") or {}
+        iv = j.get("initial_verdict") or {}
+        final = _VERDICT_ABBR.get(v.get("verdict"), v.get("verdict") or "?")
+        conf = v.get("confidence")
+        conf_s = f" {float(conf):.2f}" if conf is not None else ""
+        if j.get("revised") and iv.get("verdict") \
+                and iv["verdict"] != v.get("verdict"):
+            first = _VERDICT_ABBR.get(iv["verdict"], iv["verdict"])
+            return f"{first}→{final}{conf_s} ↺"
+        return f"{final}{conf_s}"
+
+    lines = [
+        "### Panel votes",
+        "",
+        "| # | Candidate | " + " | ".join(f"`{s}`" for s in short)
+        + " | Effective |",
+        "|--:|---|" + "---|" * len(short) + "---|",
+    ]
+    shown = results[:25]
+    for i, r in enumerate(shown, 1):
+        by_model = {j.get("model"): j
+                    for j in (r.get("panel") or {}).get("judges") or []}
+        cells = [_cell(by_model.get(m)) for m in models]
+        eff = (r.get("verdict") or {}).get("verdict")
+        lines.append(f"| {i} | `{r.get('candidate_id')}` | "
+                     + " | ".join(cells) + f" | **{eff}** |")
+    if len(results) > len(shown):
+        lines.append(f"| … | {len(results) - len(shown)} more in "
+                     f"`verdicts.json` |" + " |" * (len(short) + 1))
+    lines.append("")
+    lines.append("_mal / sus / ben = malicious / suspicious / benign · "
+                 "number = that judge's confidence · sus→mal ↺ = revised "
+                 "in debate._")
+    lines.append("")
+    return lines
 
 
 def _first_n_sentences(text, n=2, max_chars=380):
@@ -440,6 +525,9 @@ def exec_summary_lines(pcap_name, out, ctx=None, for_email=False):
                     f" ({v['category']}, confidence {v['confidence']:.2f},"
                     f" {_votes_cell(r)}) - {reason}"
                     f" **Action: {v['recommended_action']}.**")
+                ev_line = _evidence_short(r)
+                if ev_line:
+                    lines.append(f"  - _{ev_line}_")
             if len(findings) > 5:
                 lines.append(f"- … and {len(findings) - 5} more - see the "
                              f"candidate table.")
@@ -586,19 +674,27 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
                 f"{v['confidence']:.2f} | {v['recommended_action']} | "
                 f"{_votes_cell(r)} | {flags} | {why} |")
         lines.append("")
-        legend_bits = []
-        if any(r.get("guardrail") for r in results):
-            legend_bits.append("⚑ = rule guardrail overrode a benign "
-                               "model verdict on a candidate whose "
-                               "deterministic rule fired (raw model "
-                               "verdict preserved in `verdicts.json`)")
-        if stats.get("panel") and any(_n_valid_judges(r) <= 1
-                                      for r in results):
-            legend_bits.append("⚠ = decided by 1 or 0 valid judges "
-                               "(most of the panel failed on this "
-                               "candidate)")
-        for line in legend_bits:
-            lines += [f"> {line}", ""]
+
+        # ----- 2b. Evidence per finding --------------------------------
+        # The verdict table says WHAT the panel decided; this section
+        # shows the numbers it decided FROM. Non-benign candidates only,
+        # and only when the evidence projection exists (results written
+        # before report v2 render the table alone).
+        ev_findings = [r for r in results
+                       if r["verdict"]["verdict"] in ("malicious",
+                                                      "suspicious")
+                       and r.get("evidence")]
+        if ev_findings:
+            lines += ["## Evidence per finding", ""]
+            for r in ev_findings[:10]:
+                v = r["verdict"]
+                lines.append(f"**`{r['candidate_id']}` - {v['verdict']} "
+                             f"({v['category']})**")
+                lines += _evidence_block(r)
+                lines.append("")
+            if len(ev_findings) > 10:
+                lines += [f"_… and {len(ev_findings) - 10} more findings "
+                          f"- full projections in `verdicts.json`._", ""]
     else:
         lines += [
             "## No verdicts",
@@ -674,35 +770,11 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             lines += [f"_Excluded at startup: {excluded} (failed to "
                       f"initialize; details in the run log)._", ""]
 
-    panel_review = [r for r in results
-                    if (r.get("panel") or {}).get("needs_human_review")]
-    if panel_review:
-        models = stats.get("models") or []
-        lines += [
-            "### Panel disputes",
-            "",
-            "| Candidate | " + " | ".join(f"`{m.split('/')[-1]}`"
-                                          for m in models)
-            + " | Effective |",
-            "|---|" + "---|" * len(models) + "---|",
-        ]
-        for r in panel_review:
-            by_model = {j["model"]: j for j in r["panel"]["judges"]}
-            cells = []
-            for m in models:
-                j = by_model.get(m)
-                if j is None or j.get("failed"):
-                    cells.append("_failed_")
-                else:
-                    jv = j["verdict"]
-                    cell = f"{jv['verdict']} ({jv['confidence']})"
-                    if j.get("revised"):
-                        cell += " ↺"
-                    cells.append(cell)
-            lines.append(
-                f"| `{r['candidate_id']}` | " + " | ".join(cells)
-                + f" | **{r['verdict']['verdict']}** |")
-        lines.append("")
+    # Panel votes: the full who-voted-what grid for EVERY candidate,
+    # not only the disputed ones - "3/3 unanimous" in the main table
+    # hides who the three were and how confident each was.
+    if stats.get("panel"):
+        lines += _render_panel_votes(results, stats)
 
     review = [r for r in results
               if (r.get("committee") or {}).get("needs_human_review")]
@@ -759,6 +831,15 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
             lines += [", ".join(f"`{c}`" for c in assembled["capped"][:20])
                       + ("…" if len(assembled["capped"]) > 20 else ""), ""]
         lines += ["Raise `LLM_JUDGE_MAX_CANDIDATES` to include them.", ""]
+
+    # ----- How to read (one line, replaces the 12-line legend that was
+    # cut on 2026-07-31 - definitions live in docs/LLM_JUDGE_SPEC.md) ----
+    lines += ["### How to read", "",
+              "_Severity: benign < suspicious < malicious · confidence "
+              "0-1 · ⚑ = deterministic guardrail overrode a benign model "
+              "verdict (raw verdict kept in `verdicts.json`) · ⚖ = panel "
+              "split, needs human review · ⚠ = decided by a single judge "
+              "· full definitions: `docs/LLM_JUDGE_SPEC.md`._", ""]
 
     # ----- Run metadata (compact, last) ---------------------------------
     meta = [
@@ -963,6 +1044,10 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     out["analyst_commentary"] = judge_core.analyst_commentary(
         client, context, out, session_label=label,
         provider=commentary_provider, model=commentary_model)
+    # Persist the capture context INSIDE the verdict output. verdicts.json
+    # is the only artifact the pair-compare path reads - without this the
+    # comparison report cannot say when either capture was recorded.
+    out["context"] = context
     if return_session:
         return out, assembled, client, context, S, findings
     return out, assembled, client, context

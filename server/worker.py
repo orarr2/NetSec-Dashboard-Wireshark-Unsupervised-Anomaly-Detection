@@ -279,8 +279,23 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
             print(f"[worker] summary render skipped: {e}", flush=True)
             paths.pop("summary", None)
         session = db.get_session(conn, sid)
+        # Verdict banner: worst verdict on top of the HTML/PDF report.
+        # results are priority-sorted, but "worst" must be severity-
+        # ranked - a high-priority suspicious must not mask a malicious.
+        _sev_rank = {"malicious": 0, "suspicious": 1, "benign": 2}
+        _verdicts = [((r.get("verdict") or {}).get("verdict"))
+                     for r in (out.get("results") or [])]
+        _verdicts = [v for v in _verdicts if v in _sev_rank]
+        worst = min(_verdicts, key=_sev_rank.get) if _verdicts else "benign"
+        counts = {v: _verdicts.count(v) for v in _sev_rank}
+        banner = {"severity": worst,
+                  "text": (f"{worst.upper()} - {counts['malicious']} "
+                           f"malicious / {counts['suspicious']} suspicious "
+                           f"/ {counts['benign']} benign - session {sid} "
+                           f"({session.get('label') or 'capture'})")}
         html = report_html.render(session, md,
-                                  extra={"reconciliation": recon})
+                                  extra={"reconciliation": recon},
+                                  banner=banner)
         with open(paths["html"], "w", encoding="utf-8") as f:
             f.write(html)
         pdf = report_pdf.render(html, paths["pdf"])
@@ -437,9 +452,15 @@ def process_compare_job(conn, job, data_root=None, judge_fn=None,
         with open(paths["md"], "w", encoding="utf-8") as fh:
             fh.write(full_md)
         # HTML wraps the full_md through the same charset-safe wrapper
-        # the per-session report uses
+        # the per-session report uses; the posture drives the banner tint
         from llm_judge import send_report
-        html = send_report.markdown_to_html(full_md)
+        posture = ((pair.get("verdict") or {}).get("posture_delta")
+                   or "mixed")
+        banner = {"severity": posture,
+                  "text": (f"Posture: {posture.upper()} - "
+                           f"{s1_session.get('label') or s1_id} vs "
+                           f"{s2_session.get('label') or s2_id}")}
+        html = send_report.markdown_to_html(full_md, banner=banner)
         with open(paths["html"], "w", encoding="utf-8") as fh:
             fh.write(html)
         try:

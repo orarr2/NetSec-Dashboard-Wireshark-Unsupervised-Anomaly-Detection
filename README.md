@@ -134,6 +134,18 @@ shell before launching the notebook, and `SMTP_USER / SMTP_PASS` set
 in the VM's `.env` (Gmail app-password works). See `docs/VM_OPS.md`
 for the exact ops.
 
+**What lands in your inbox.** The email body is an executive summary
+(verdict counts, key findings with a one-line evidence trail, capture
+metadata, panel health); the full report rides as a PDF attachment with
+a color-coded verdict banner, one consolidated candidate table, an
+Evidence-per-finding section (device identity, traffic numbers, which
+input fields the judges cited), and a Panel-votes grid showing every
+judge's vote per candidate. After analyzing both S1 and S2, the
+**Compare S1 & S2** button mails a second-order comparison report:
+captures side by side with the recording gap, a category-flow table of
+what changed, verdict flips with device identity, and new/gone IPs
+annotated with their verdicts.
+
 ### B. Headless CLI on your own machine
 
 Same detection pipeline, same LLM Judge, no notebook. Two flavours:

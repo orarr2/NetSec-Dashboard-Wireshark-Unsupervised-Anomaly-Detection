@@ -265,12 +265,116 @@ def _panel_result(cand_id, judges_round1, judges_final, effective=None):
     }
 
 
-def test_consensus_summary_counts_unanimous_agreed_split():
-    """Three candidates, three panel outcomes:
-      * unanimous round-1 (both malicious from the start)
-      * agreed after debate (one revised)
-      * still split (fail-safe to malicious)
-    The summary line must report 1/3 unanimous, 1 in debate, 1 review."""
+def test_evidence_projection_compacts_the_candidate_blob():
+    from llm_judge import judge_core as jc
+    cand = {
+        "candidate_id": "10.0.0.7", "kind": "ip",
+        "features": {"count": 3904, "unique_dsts": 90, "syn_count": 120},
+        "ml_signals": {"iso_score": -0.18},
+        "device_context": {"hostname": "pc-lab", "oui_vendor": "Intel",
+                           "category": "computer"},
+        "websites": {"top_tls_sni": [{"host": "example.com", "count": 4}],
+                     "top_http_hosts": None, "top_dns_queries": None},
+        "traffic": {"top_dst_ports": [{"port_proto": "3389/tcp",
+                                       "count": 90},
+                                      {"port_proto": "445/tcp",
+                                       "count": 44}],
+                    "bytes_in": 40_000, "bytes_out": 1_200_000},
+        "tls": {"has_weak_version": True, "weak_cipher_count": 2},
+        "baseline_history": {"seen_before": False},
+        "trigger_reasons": ["scan_rule", "isolation_forest"],
+    }
+    ev = jc.evidence_projection(cand)
+    assert ev["device"] == {"hostname": "pc-lab", "vendor": "Intel",
+                            "category": "computer"}
+    assert ev["packets"] == 3904 and ev["unique_dsts"] == 90
+    assert ev["top_dst_ports"][0] == {"port": "3389/tcp", "count": 90}
+    assert ev["top_sites"] == ["example.com"]
+    assert ev["tls_weak"] is True
+    assert ev["trigger_reasons"] == ["scan_rule", "isolation_forest"]
+    assert ev["history"]["seen_before"] is False
+    # Defensive on garbage.
+    assert jc.evidence_projection(None) is None
+    empty = jc.evidence_projection({})
+    assert empty["packets"] is None and empty["top_dst_ports"] is None
+
+
+def _evidence_result(ip="10.0.0.7", verdict="malicious"):
+    return {
+        "candidate_id": ip, "kind": "ip",
+        "verdict": {"verdict": verdict, "category": "port_scan",
+                    "confidence": 0.93, "reasoning": "Scan fired.",
+                    "recommended_action": "investigate",
+                    "evidence_features": ["features.unique_dsts",
+                                          "rule_signals.scan_alerts"]},
+        "evidence": {
+            "device": {"hostname": "pc-lab", "vendor": "Intel",
+                       "category": "computer"},
+            "trigger_reasons": ["scan_rule", "isolation_forest"],
+            "packets": 3904, "unique_dsts": 90, "syn_count": 120,
+            "bytes_out": 1_200_000, "bytes_in": 40_000,
+            "iso_score": -0.18,
+            "top_dst_ports": [{"port": "3389/tcp", "count": 90}],
+            "top_sites": ["example.com"], "tls_weak": True,
+            "history": {"seen_before": False,
+                        "prior_verdict_summary": None}},
+        "guardrail": None, "priority": 0.9, "cached": False,
+        "latency_ms": 100,
+    }
+
+
+def test_exec_summary_shows_evidence_line_under_key_findings():
+    out = {"stats": {"total": 1, "judged": 1, "cache_hits": 0,
+                     "dropped": 0, "prompt_version": "v",
+                     "model": "fake"},
+           "results": [_evidence_result()], "dropped": []}
+    md = "\n".join(judge_cli.exec_summary_lines("x.pcap", out, {}))
+    assert "Intel pc-lab" in md
+    assert "3,904 pkts to 90 dsts" in md
+    assert "ports 3389/tcp" in md
+    assert "via scan rule + IsolationForest" in md
+    assert "first appearance" in md
+
+
+def test_full_report_renders_evidence_per_finding_section():
+    out = {"stats": {"total": 1, "judged": 1, "cache_hits": 0,
+                     "dropped": 0, "prompt_version": "v",
+                     "model": "fake"},
+           "results": [_evidence_result()], "dropped": []}
+    assembled = {"candidates": [], "capped": []}
+    md = judge_cli._render_markdown("x.pcap", out, assembled,
+                                    _fake_client(),
+                                    context=_fake_context())
+    assert "## Evidence per finding" in md
+    assert "**device**: Intel pc-lab (computer)" in md
+    assert "3,904 packets" in md and "90 unique destinations" in md
+    assert "top ports 3389/tcp (90)" in md
+    assert "1.1 MB out / 39.1 KB in" in md
+    assert "**weak TLS**" in md
+    assert "`features.unique_dsts`" in md
+    # Benign results and results without evidence stay out.
+    out2 = {"stats": out["stats"],
+            "results": [_evidence_result(verdict="benign")],
+            "dropped": []}
+    md2 = judge_cli._render_markdown("x.pcap", out2, assembled,
+                                     _fake_client(),
+                                     context=_fake_context())
+    assert "## Evidence per finding" not in md2
+
+
+def test_analyze_and_judge_persists_context_in_out():
+    """verdicts.json must carry the capture context - the pair compare
+    reads ONLY that file. Checked via source to avoid a full pipeline
+    run here (the E2E path is covered by evaluate.py)."""
+    import inspect
+    src = inspect.getsource(judge_cli.analyze_and_judge)
+    assert 'out["context"] = context' in src
+
+
+def test_panel_votes_names_every_judge_per_candidate():
+    """The votes table must show WHO voted WHAT for every candidate,
+    not only the disputed ones: one column per judge, initial→final
+    with ↺ when a judge revised in debate, and the effective verdict."""
     results = [
         _panel_result("192.168.1.1", ["malicious", "malicious"],
                       ["malicious", "malicious"]),
@@ -281,30 +385,39 @@ def test_consensus_summary_counts_unanimous_agreed_split():
                       effective="malicious"),
     ]
     stats = {"panel": True, "models": ["m-a", "m-b"]}
-    md = "\n".join(judge_cli._render_consensus_summary(results, stats))
+    md = "\n".join(judge_cli._render_panel_votes(results, stats))
 
-    assert "## Consensus summary" in md
-    assert "**1/3** unanimous in round 1" in md
-    assert "**1** reached agreement in debate" in md
-    assert "**1** still ⚖ REVIEW" in md
-
-    # Per-candidate table rows.
+    assert "### Panel votes" in md
+    # One column per judge, by (short) name.
+    assert "`m-a`" in md and "`m-b`" in md
+    # Every candidate appears - including the unanimous one.
     assert "| 1 | `192.168.1.1` |" in md
     assert "| 2 | `192.168.1.2` |" in md
     assert "| 3 | `192.168.1.3` |" in md
-    # Row 2 shows 1 revised in debate.
-    assert "1 revised in debate" in md
-    # Row 3 shows the fail-safe verdict in the 'how' column.
-    assert "split - fail-safe to malicious" in md
+    # The revised judge shows the movement, with confidence + ↺.
+    assert "ben→mal 0.70 ↺" in md
+    # A non-revised vote is just verdict + confidence.
+    assert "mal 0.70" in md
+    # Effective verdict lands in the last column, bolded.
+    assert "**malicious**" in md
 
 
-def test_consensus_summary_only_appears_in_panel_mode():
+def test_panel_votes_marks_failed_judges():
+    r = _panel_result("10.0.0.9", ["malicious", "malicious"],
+                      ["malicious", "malicious"])
+    r["panel"]["judges"][1]["failed"] = True
+    md = "\n".join(judge_cli._render_panel_votes(
+        [r], {"panel": True, "models": ["m-a", "m-b"]}))
+    assert "_failed_" in md
+
+
+def test_panel_votes_only_appear_in_panel_mode():
     """Single-judge output has no 'panel' key on stats; the section is
-    skipped, since 'consensus' has no meaning for one judge."""
+    skipped, since a votes grid has no meaning for one judge."""
     out, assembled, client = _judged_batch()  # single-judge shape
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=_fake_context())
-    assert "## Consensus summary" not in md
+    assert "### Panel votes" not in md
 
 
 def test_first_sentence_helpers():
@@ -394,7 +507,8 @@ def test_render_markdown_notes_guardrail_when_used():
     md = judge_cli._render_markdown("x.pcap", out, assembled, client,
                                     context=_fake_context())
     assert "⚑" in md
-    assert "rule guardrail overrode" in md
+    # The flag's meaning lives in the always-on How-to-read legend now.
+    assert "guardrail overrode a benign model verdict" in md
 
 
 def test_render_markdown_capped_section():

@@ -15,12 +15,14 @@ def _row(k, v):
             f"</td><td><code>{_html.escape(str(v))}</code></td></tr>")
 
 
-def render(session, markdown_body, extra=None):
+def render(session, markdown_body, extra=None, banner=None):
     """session: the db.get_session() dict; markdown_body: the judge's
-    verdicts.md text; extra: optional dict appended to the footer."""
+    verdicts.md text; extra: optional dict appended to the footer;
+    banner: optional {"severity", "text"} forwarded to markdown_to_html
+    as the colored verdict strip at the top of the page."""
     from llm_judge import send_report
 
-    body = send_report.markdown_to_html(markdown_body)
+    body = send_report.markdown_to_html(markdown_body, banner=banner)
     meta = {
         "session": session.get("id"),
         "label": session.get("label"),

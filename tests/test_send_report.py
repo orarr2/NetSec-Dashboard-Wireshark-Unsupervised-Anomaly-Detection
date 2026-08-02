@@ -156,7 +156,55 @@ def test_markdown_renders_expected_structures():
     assert "<blockquote" in html    # reasoning quote
     assert "<ul" in html and "<li>" in html
     assert "<code>tcp_syn_scan.pcap</code>" in html
-    assert "<strong>MALICIOUS</strong>" in html
+    # Bolded severity words carry an inline color chip (report v2).
+    assert ('<strong><span style="color:#cf222e">MALICIOUS</span>'
+            '</strong>') in html
+
+
+def test_markdown_colors_bare_verdict_cells_and_zebra_stripes():
+    md = ("| IP | From | To |\n"
+          "|---|---|---|\n"
+          "| `1.1.1.1` | suspicious | malicious |\n"
+          "| `2.2.2.2` | benign | suspicious |\n")
+    html = sr.markdown_to_html(md)
+    # A bare verdict word alone in a cell gets its severity color even
+    # without bold markup (the flip tables render them unbolded).
+    assert '<span style="color:#cf222e">malicious</span>' in html
+    assert '<span style="color:#1a7f37">benign</span>' in html
+    # Second data row is zebra-striped for readability.
+    assert 'style="background:#fafbfc"' in html
+    # benign_anomaly-style compound words must stay uncolored.
+    html2 = sr.markdown_to_html("| x |\n|---|\n| benign_anomaly |\n")
+    assert "color:#1a7f37" not in html2
+
+
+def test_markdown_renders_italics_without_shearing_snake_case():
+    # Whole-segment underscore italics (legend lines, '_failed_' cells).
+    html = sr.markdown_to_html("_S2 was recorded 3h after S1._\n")
+    assert "<em" in html and "S2 was recorded 3h after S1." in html
+    assert "_S2" not in html
+    # Asterisk italics mid-line (capture timestamp note).
+    html2 = sr.markdown_to_html("*recorded Sat 01 Aug, 10:02*.\n")
+    assert "<em>recorded Sat 01 Aug, 10:02</em>." in html2
+    # snake_case words and code paths must never become italics.
+    html3 = sr.markdown_to_html(
+        "| benign_anomaly | `features.unique_dsts` |\n|---|---|\n"
+        "| a | b |\n")
+    assert "benign_anomaly" in html3
+    assert "<code>features.unique_dsts</code>" in html3
+    assert "<em>" not in html3
+
+
+def test_markdown_banner_renders_tinted_strip():
+    html = sr.markdown_to_html(
+        "# t\n", banner={"severity": "malicious",
+                         "text": "MALICIOUS - 1 malicious / 0 benign"})
+    assert "background:#ffebe9" in html
+    assert "MALICIOUS - 1 malicious / 0 benign" in html
+    # Banner sits before the first heading.
+    assert html.index("background:#ffebe9") < html.index("<h1")
+    # No banner argument -> no strip.
+    assert "background:#ffebe9" not in sr.markdown_to_html("# t\n")
 
 
 def test_markdown_declares_utf8_in_the_document():

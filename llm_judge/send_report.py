@@ -92,11 +92,68 @@ def _escape(text):
                 .replace(">", "&gt;"))
 
 
+# Severity words get a color wherever the report bolds them or puts them
+# alone in a table cell. Inline styles (not classes): the same HTML is an
+# email body, a browser page and the weasyprint PDF source, and inline is
+# the only styling all three honor. DE-ESCALATED before ESCALATED so the
+# alternation cannot half-match the hyphenated form.
+_SEVERITY_COLORS = {
+    "malicious": "#cf222e", "MALICIOUS": "#cf222e",
+    "suspicious": "#9a6700", "SUSPICIOUS": "#9a6700",
+    "benign": "#1a7f37", "BENIGN": "#1a7f37",
+    "DE-ESCALATED": "#1a7f37", "ESCALATED": "#cf222e",
+    "STABLE": "#1a7f37", "MIXED": "#9a6700",
+}
+_SEVERITY_RE = re.compile(
+    r"\b(DE-ESCALATED|ESCALATED|STABLE|MIXED|"
+    r"malicious|suspicious|benign|MALICIOUS|SUSPICIOUS|BENIGN)\b")
+
+# Banner tints per overall severity/posture (bg, border+text).
+_BANNER_STYLES = {
+    "malicious": ("#ffebe9", "#cf222e"),
+    "escalated": ("#ffebe9", "#cf222e"),
+    "suspicious": ("#fff8c5", "#9a6700"),
+    "mixed": ("#fff8c5", "#9a6700"),
+    "benign": ("#dafbe1", "#1a7f37"),
+    "stable": ("#dafbe1", "#1a7f37"),
+    "de-escalated": ("#dafbe1", "#1a7f37"),
+}
+
+
+def _colorize_words(text):
+    """Wrap severity words in colored spans. Input is already-escaped
+    HTML text; word boundaries keep benign_anomaly untouched ('_' is a
+    word char, so there is no boundary before it)."""
+    return _SEVERITY_RE.sub(
+        lambda m: (f'<span style="color:{_SEVERITY_COLORS[m.group(1)]}">'
+                   f'{m.group(1)}</span>'),
+        text)
+
+
 def _inline(text):
-    """Escape, then re-apply the inline markup the report uses."""
+    """Escape, then re-apply the inline markup the report uses.
+
+    Italics need two distinct treatments: *asterisk* pairs are safe as
+    a plain regex (the reports never use bare asterisks otherwise), but
+    _underscore_ pairs are only honored when they wrap the WHOLE
+    segment - snake_case identifiers (benign_anomaly, unique_dsts) and
+    paths inside <code> would otherwise shear mid-word."""
     out = _escape(text)
+    s = out.strip()
+    whole_em = (len(s) > 2 and s.startswith("_") and s.endswith("_")
+                and not s.startswith("__"))
+    if whole_em:
+        out = s[1:-1]
     out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
     out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"(?<!\*)\*([^*\s][^*]*)\*(?!\*)", r"<em>\1</em>", out)
+    # Severity words inside BOLD spans become colored chips (prose
+    # mentions stay plain - coloring every occurrence reads as noise).
+    out = re.sub(r"<strong>([^<]+)</strong>",
+                 lambda m: f"<strong>{_colorize_words(m.group(1))}</strong>",
+                 out)
+    if whole_em:
+        out = f"<em style='color:#57606a'>{out}</em>"
     return out
 
 
@@ -105,11 +162,28 @@ def _split_row(line):
     return [c.strip() for c in cells]
 
 
-def markdown_to_html(md):
-    """Render the verdict report as standalone HTML for an email body."""
+def _render_cell(c):
+    """One table cell: inline markup plus a color when the whole cell is
+    a bare severity word (flip tables carry them unbolded)."""
+    rendered = _inline(c)
+    color = _SEVERITY_COLORS.get(c.strip())
+    if color and "<" not in rendered:
+        return f'<span style="color:{color}">{rendered}</span>'
+    return rendered
+
+
+def markdown_to_html(md, banner=None):
+    """Render the verdict report as standalone HTML for an email body.
+
+    banner: optional {"severity": word, "text": str} rendered as a
+    color-tinted strip at the very top - the report's verdict box. The
+    severity picks the tint (malicious/escalated red, suspicious/mixed
+    amber, benign/stable green); unknown words get a neutral grey.
+    """
     html = []
     in_table = False
     in_list = False
+    td_row = 0
 
     def close_blocks():
         nonlocal in_table, in_list
@@ -140,14 +214,20 @@ def markdown_to_html(md):
                             'style="border-collapse:collapse;'
                             'border:1px solid #d0d7de;font-size:13px">')
                 in_table = True
+                td_row = 0
                 tag, extra = "th", (
                     'style="background:#f6f8fa;text-align:left;'
                     'border:1px solid #d0d7de"')
+                tr_style = ""
             else:
                 tag, extra = "td", 'style="border:1px solid #d0d7de"'
-            row = "".join(f"<{tag} {extra}>{_inline(c)}</{tag}>"
+                td_row += 1
+                # zebra striping - readability on the wide vote tables
+                tr_style = (' style="background:#fafbfc"'
+                            if td_row % 2 == 0 else "")
+            row = "".join(f"<{tag} {extra}>{_render_cell(c)}</{tag}>"
                           for c in cells)
-            html.append(f"<tr>{row}</tr>")
+            html.append(f"<tr{tr_style}>{row}</tr>")
             continue
 
         close_blocks()
@@ -156,8 +236,12 @@ def markdown_to_html(md):
             level = len(stripped) - len(stripped.lstrip("#"))
             level = min(max(level, 1), 4)
             body = _inline(stripped[level:].strip())
-            html.append(f"<h{level} style='margin:18px 0 8px'>{body}"
-                        f"</h{level}>")
+            # h2 gets a hairline underline - it is the section separator
+            # in a report that is mostly tables.
+            rule = ("border-bottom:1px solid #d8dee4;padding-bottom:4px;"
+                    if level == 2 else "")
+            html.append(f"<h{level} style='margin:18px 0 8px;{rule}'>"
+                        f"{body}</h{level}>")
             continue
 
         if stripped.startswith(">"):
@@ -182,6 +266,15 @@ def markdown_to_html(md):
         html.append(f"<p style='margin:8px 0'>{_inline(stripped)}</p>")
 
     close_blocks()
+    banner_html = ""
+    if isinstance(banner, dict) and banner.get("text"):
+        sev = str(banner.get("severity") or "").lower()
+        bg, fg = _BANNER_STYLES.get(sev, ("#f6f8fa", "#57606a"))
+        banner_html = (
+            f'<div style="background:{bg};border:1px solid {fg};'
+            f'border-radius:8px;padding:12px 16px;margin:0 0 16px;'
+            f'color:{fg};font-weight:600;font-size:15px">'
+            f'{_escape(str(banner["text"]))}</div>')
     body = "\n".join(html)
     # The charset declaration has to travel INSIDE the document. As an
     # email body the MIME part carries charset=utf-8, but the same HTML
@@ -196,7 +289,7 @@ def markdown_to_html(md):
         "initial-scale=1\"></head>"
         "<body style=\"font-family:-apple-system,Segoe UI,Helvetica,"
         "Arial,sans-serif;color:#1f2328;line-height:1.5;max-width:820px\">"
-        f"{body}"
+        f"{banner_html}{body}"
         "</body></html>")
 
 

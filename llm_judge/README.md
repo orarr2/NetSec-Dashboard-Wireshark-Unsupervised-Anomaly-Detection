@@ -156,8 +156,15 @@ python llm_judge/judge_cli.py path/to.pcap \
 Same detection pipeline as the notebook, same guardrail, same provider
 env vars. Writes:
 
-- `verdicts.json` - full machine-readable batch (stats + ranked results + drops + capped).
-- `verdicts.md` - GitHub-Issue-friendly report with the verdict table.
+- `verdicts.json` - full machine-readable batch (stats + ranked results
+  + drops + capped). Since report v2 each result also carries a compact
+  `evidence` projection (device identity, trigger reasons, key traffic
+  numbers, top ports/sites, baseline history) and the file carries the
+  capture `context` (when recorded, packets, protocols, source file) -
+  both feed the report renderers and the S1-vs-S2 pair compare.
+- `verdicts.md` - the human report: executive summary with per-finding
+  evidence lines, one consolidated candidate table, Evidence-per-finding
+  blocks, and in panel mode a Panel-votes grid naming every judge's vote.
 
 This is the entry point of the autonomous-agent path below.
 

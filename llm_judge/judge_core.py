@@ -698,6 +698,75 @@ def local_inv_to_device_context(inv):
     return out
 
 
+def evidence_projection(cand):
+    """Compact, render-ready slice of a candidate blob, persisted per
+    result in verdicts.json.
+
+    The full input blob is huge (and lives in the DB's candidates table
+    on the server path); reports need a dozen facts to show WHAT the
+    judges actually saw - device identity, the triggering detectors, the
+    key traffic numbers. Persisting this projection also makes
+    verdicts.json self-contained for the pair-compare renderer, which
+    has only the two JSON files to work with."""
+    if not isinstance(cand, dict):
+        return None
+    feats = cand.get("features") or {}
+    ml = cand.get("ml_signals") or {}
+    dev = cand.get("device_context") or {}
+    web = cand.get("websites") or {}
+    traffic = cand.get("traffic") or {}
+    tls = cand.get("tls") or {}
+    hist = cand.get("baseline_history") or {}
+
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    sites = []
+    for block in (web.get("top_tls_sni"), web.get("top_http_hosts"),
+                  web.get("top_dns_queries")):
+        for row in block or []:
+            host = (row or {}).get("host")
+            if host and host not in sites:
+                sites.append(host)
+            if len(sites) >= 3:
+                break
+        if len(sites) >= 3:
+            break
+
+    ports = []
+    for row in traffic.get("top_dst_ports") or []:
+        pp = (row or {}).get("port_proto")
+        if pp:
+            ports.append({"port": str(pp), "count": _int(row.get("count"))})
+        if len(ports) >= 3:
+            break
+
+    weak_tls = bool(tls.get("has_weak_version")) \
+        or bool(_int(tls.get("weak_cipher_count")))
+    return {
+        "device": {"hostname": dev.get("hostname"),
+                   "vendor": dev.get("oui_vendor"),
+                   "category": dev.get("category")},
+        "trigger_reasons": list(cand.get("trigger_reasons") or []),
+        "packets": _int(feats.get("count")),
+        "unique_dsts": _int(feats.get("unique_dsts")),
+        "syn_count": _int(feats.get("syn_count")),
+        "bytes_out": _int(traffic.get("bytes_out")),
+        "bytes_in": _int(traffic.get("bytes_in")),
+        "iso_score": _num(ml["iso_score"]) if ml.get("iso_score")
+        is not None else None,
+        "top_dst_ports": ports or None,
+        "top_sites": sites or None,
+        "tls_weak": weak_tls or None,
+        "history": {"seen_before": hist.get("seen_before"),
+                    "prior_verdict_summary":
+                        hist.get("prior_verdict_summary")},
+    }
+
+
 def assemble_candidates(S, findings, lstm_flags=None, max_candidates=None,
                         advanced_signals=None, device_context=None):
     """Union of everything any detector flagged, one JSON blob each.
@@ -1327,6 +1396,7 @@ def judge_candidates(candidates, client=None, cache_db=None,
                 "kind": cand["kind"],
                 "verdict": verdict,
                 "guardrail": guardrail_info,
+                "evidence": evidence_projection(cand),
                 "priority": priority_score(cand, verdict, iso_min, iso_max),
                 "cached": was_cached,
                 "latency_ms": latency_ms,
@@ -1474,6 +1544,7 @@ def judge_candidates_committee(candidates, clients, cache_db=None,
                 "verdict": eff,
                 "guardrail": guardrail_info,
                 "committee": committee,
+                "evidence": evidence_projection(cand),
                 "priority": priority_score(cand, eff, iso_min, iso_max),
                 "cached": bool(ca and cb),
                 "latency_ms": la + lb,
@@ -1996,6 +2067,7 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
                     "debate": did_debate,
                     **info,
                 },
+                "evidence": evidence_projection(cand),
                 "priority": priority_score(cand, effective, iso_min,
                                            iso_max),
                 "cached": all(p["cached"] for p in positions),
@@ -2096,12 +2168,18 @@ Rules:
    - "stable" - roughly the same picture in both.
    - "mixed" - some IPs escalated AND some de-escalated.
 2. confidence in [0.0, 1.0]. headline is ONE sentence, at most 240 chars.
-   reasoning is ONE paragraph, no newlines, at most 500 characters.
-3. Ground every claim in the pair blob - cite fields by dotted path
-   (e.g. "verdict_flips[0].ip", "counts.s2.malicious").
+   reasoning is ONE paragraph, no newlines, at most 450 characters.
+3. Write headline and reasoning in plain English for a human reader:
+   name concrete IPs, devices, counts and categories in words. NEVER
+   cite JSON field paths (no "verdict_flips[3]", no "counts.s2.x") -
+   say "172.10.146.42 flipped from suspicious to malicious" instead.
+   End on a complete sentence; do not run against the length cap.
 4. notable_flips: pull the 1-5 most important verdict changes for
    individual IPs from the input's verdict_flips list. Leave [] when
-   nothing flipped.
+   nothing flipped. When capture.s1/capture.s2 are present, factor the
+   recording times in (a scan at 03:00 reads differently from 14:00;
+   a long gap between captures weakens direct comparison) and mention
+   timing in the reasoning only when it changes the interpretation.
 5. recommended_action:
    - "no_change" - stable, benign both sides.
    - "monitor" - stable but with unresolved suspicious signals.
@@ -2123,6 +2201,53 @@ def _verdict_counts(results):
     return counts
 
 
+def _capture_summary(out):
+    """Slice the per-session context (persisted in verdicts.json since
+    the report v2 work) down to what the pair judge and the compare
+    report need. Returns None for verdict files that predate the
+    context persistence - callers render '-' in that case."""
+    ctx = (out or {}).get("context")
+    if not isinstance(ctx, dict):
+        return None
+    tr = ctx.get("time_range") or [None, None]
+    return {
+        "recorded_start": tr[0] if len(tr) > 0 else None,
+        "recorded_end": tr[1] if len(tr) > 1 else None,
+        "duration_s": ctx.get("duration_s"),
+        "n_packets": ctx.get("n_packets"),
+        "total_ips": ctx.get("total_ips"),
+        "local_ips": ctx.get("local_ips_count"),
+        "external_ips": ctx.get("external_ips_count"),
+        "top_protocols": list(ctx.get("top_protocols") or {})[:5],
+        "file": ctx.get("original_filename"),
+        "sensor": ctx.get("sensor_name"),
+        "cleared_ips": len(ctx.get("not_flagged_ips") or []),
+    }
+
+
+def _capture_gap_s(cap1, cap2):
+    """Seconds from S1's recording start to S2's, or None when either
+    side lacks a parseable timestamp."""
+    try:
+        from datetime import datetime
+        t1 = datetime.fromisoformat(
+            str(cap1["recorded_start"]).replace(" ", "T"))
+        t2 = datetime.fromisoformat(
+            str(cap2["recorded_start"]).replace(" ", "T"))
+        return (t2 - t1).total_seconds()
+    except Exception:
+        return None
+
+
+def _device_of(r):
+    """'vendor hostname' one-liner from a result's evidence projection,
+    or None when the session predates evidence persistence."""
+    ev = (r or {}).get("evidence") or {}
+    dev = ev.get("device") or {}
+    bits = [b for b in (dev.get("vendor"), dev.get("hostname")) if b]
+    return " ".join(str(b) for b in bits) or None
+
+
 def build_pair_blob(s1_out, s2_out, s1_label="S1", s2_label="S2"):
     """Turn two per-session verdict outputs into ONE compact pair blob
     the panel judges as a single unit. Everything the LLM sees comes
@@ -2134,23 +2259,51 @@ def build_pair_blob(s1_out, s2_out, s1_label="S1", s2_label="S2"):
     s2_by_ip = {r.get("candidate_id"): r for r in s2_res
                 if r.get("candidate_id")}
     ips_s1, ips_s2 = set(s1_by_ip), set(s2_by_ip)
-    only_s1 = sorted(ips_s1 - ips_s2)[:20]
-    only_s2 = sorted(ips_s2 - ips_s1)[:20]
+
+    def _annotate(ip, by_ip):
+        r = by_ip.get(ip) or {}
+        v = r.get("verdict") or {}
+        return {"ip": ip, "verdict": v.get("verdict"),
+                "category": v.get("category"),
+                "confidence": v.get("confidence"),
+                "device": _device_of(r)}
+
+    _SEV = {"malicious": 0, "suspicious": 1, "benign": 2}
+
+    def _bad_first(rows):
+        return sorted(rows, key=lambda r: (_SEV.get(r["verdict"], 3),
+                                           -float(r["confidence"] or 0),
+                                           r["ip"]))
+
+    only_s1 = _bad_first(_annotate(ip, s1_by_ip)
+                         for ip in ips_s1 - ips_s2)[:20]
+    only_s2 = _bad_first(_annotate(ip, s2_by_ip)
+                         for ip in ips_s2 - ips_s1)[:20]
+
     flips = []
+    flow = {}
+    unchanged = 0
     for ip in sorted(ips_s1 & ips_s2):
         v1 = ((s1_by_ip[ip].get("verdict") or {}).get("verdict"))
         v2 = ((s2_by_ip[ip].get("verdict") or {}).get("verdict"))
-        if v1 and v2 and v1 != v2:
-            flips.append({"ip": ip, "from": v1, "to": v2,
-                          "from_confidence":
-                              (s1_by_ip[ip].get("verdict") or {})
-                                  .get("confidence"),
-                          "to_confidence":
-                              (s2_by_ip[ip].get("verdict") or {})
-                                  .get("confidence"),
-                          "s2_category":
-                              (s2_by_ip[ip].get("verdict") or {})
-                                  .get("category")})
+        if not (v1 and v2):
+            continue
+        if v1 == v2:
+            unchanged += 1
+            continue
+        flow[f"{v1} -> {v2}"] = flow.get(f"{v1} -> {v2}", 0) + 1
+        flips.append({"ip": ip, "from": v1, "to": v2,
+                      "from_confidence":
+                          (s1_by_ip[ip].get("verdict") or {})
+                              .get("confidence"),
+                      "to_confidence":
+                          (s2_by_ip[ip].get("verdict") or {})
+                              .get("confidence"),
+                      "s2_category":
+                          (s2_by_ip[ip].get("verdict") or {})
+                              .get("category"),
+                      "device": _device_of(s2_by_ip[ip])})
+
     # Pull the top-3 non-benign verdicts from each side so the model has
     # concrete examples to cite even when nothing flipped.
     def _top_bad(by_ip):
@@ -2162,20 +2315,39 @@ def build_pair_blob(s1_out, s2_out, s1_label="S1", s2_label="S2"):
         return [{"ip": ip,
                  "verdict": (r.get("verdict") or {}).get("verdict"),
                  "category": (r.get("verdict") or {}).get("category"),
-                 "confidence": (r.get("verdict") or {}).get("confidence")}
+                 "confidence": (r.get("verdict") or {}).get("confidence"),
+                 "device": _device_of(r)}
                 for ip, r in bad[:3]]
-    return {
+
+    cap1, cap2 = _capture_summary(s1_out), _capture_summary(s2_out)
+    blob = {
         "labels": {"s1": s1_label, "s2": s2_label},
         "counts": {"s1": _verdict_counts(s1_res),
                    "s2": _verdict_counts(s2_res)},
         "totals": {"s1": len(s1_res), "s2": len(s2_res)},
-        "unique_ips_s1_only": only_s1,
-        "unique_ips_s2_only": only_s2,
+        # Backward-compatible bare lists (older consumers + tests),
+        # plus the annotated rows the v2 report renders.
+        "unique_ips_s1_only": [r["ip"] for r in only_s1],
+        "unique_ips_s2_only": [r["ip"] for r in only_s2],
+        "unique_s1_detail": only_s1,
+        "unique_s2_detail": only_s2,
+        "new_non_benign_s2": [r for r in only_s2
+                              if r["verdict"] in ("malicious",
+                                                  "suspicious")],
         "verdict_flips": flips[:20],
         "flip_count_total": len(flips),
+        "category_flow": flow,
+        "unchanged_verdicts": unchanged,
         "top_non_benign_s1": _top_bad(s1_by_ip),
         "top_non_benign_s2": _top_bad(s2_by_ip),
     }
+    if cap1 or cap2:
+        blob["capture"] = {"s1": cap1, "s2": cap2}
+        if cap1 and cap2:
+            gap = _capture_gap_s(cap1, cap2)
+            if gap is not None:
+                blob["capture"]["gap_seconds"] = round(gap)
+    return blob
 
 
 def validate_pair_verdict(obj):
@@ -2198,11 +2370,31 @@ def validate_pair_verdict(obj):
     if not isinstance(conf, (int, float)) or isinstance(conf, bool) \
             or not (0.0 <= float(conf) <= 1.0):
         raise JudgeValidationError(f"confidence {conf!r} outside [0, 1]")
+
+    def _cap_words(text, limit):
+        """Cap at `limit` chars WITHOUT shearing a word in half - the
+        old hard slice shipped reports ending in 'Overall posture esc'.
+        Prefer the last sentence end inside the window; fall back to the
+        last space (or a hard cut for a single spaceless run); mark the
+        cut with '...'. Result is always <= limit chars."""
+        s = " ".join(str(text).split())
+        if len(s) <= limit:
+            return s
+        head = s[:limit - 4]
+        for stop in (". ", "! ", "? "):
+            i = head.rfind(stop)
+            if i >= limit // 2:
+                return head[:i + 1]
+        i = head.rfind(" ")
+        if i > 0:
+            head = head[:i]
+        return head.rstrip(",;:- ") + " ..."
+
     # Fold newlines out of the free-text fields so a stray \n cannot
     # break the emailed markdown; cap lengths per schema.
     out = dict(obj)
-    out["headline"] = " ".join(str(obj["headline"]).split())[:240]
-    out["reasoning"] = " ".join(str(obj["reasoning"]).split())[:500]
+    out["headline"] = _cap_words(obj["headline"], 240)
+    out["reasoning"] = _cap_words(obj["reasoning"], 500)
     flips = obj.get("notable_flips") or []
     if not isinstance(flips, list):
         flips = []
@@ -2242,8 +2434,12 @@ def judge_session_pair(s1_out, s2_out, clients, s1_label="S1",
      "headline": "no judge succeeded"} so the caller can still mail a
     report that explains what happened.
     """
+    # "-pair2" = the human-readable pair prompt + v2 blob (capture
+    # metadata, category flow, annotated uniques). Suffix-only bump:
+    # per-candidate verdict caching keys off judge_config.PROMPT_VERSION
+    # and must NOT be invalidated by a pair-prompt change.
     prompt_version = prompt_version or (
-        judge_config.PROMPT_VERSION + "-pair")
+        judge_config.PROMPT_VERSION + "-pair2")
     blob = build_pair_blob(s1_out, s2_out, s1_label, s2_label)
     user_content = json.dumps(blob, indent=2)
     per_model = {}

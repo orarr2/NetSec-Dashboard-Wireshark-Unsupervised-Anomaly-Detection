@@ -252,3 +252,114 @@ def test_compare_report_renders_both_outputs():
     assert "All verdict flips" in full
     assert "IPs unique to one side" in full
     assert "Panel audit" in full
+
+
+def _v2_out(rows, start=None):
+    """Per-session verdict output shaped like report v2 writes it:
+    results with evidence projections + persisted context."""
+    out = {"results": []}
+    for (ip, v, cat, conf, dev) in rows:
+        r = {"candidate_id": ip, "kind": "ip",
+             "verdict": {"verdict": v, "category": cat,
+                         "confidence": conf}}
+        if dev:
+            r["evidence"] = {"device": {"hostname": dev,
+                                        "vendor": "Acme",
+                                        "category": "iot"}}
+        out["results"].append(r)
+    if start:
+        out["context"] = {
+            "time_range": [start, start], "duration_s": 300.0,
+            "n_packets": 5000, "total_ips": 12, "local_ips_count": 8,
+            "external_ips_count": 4, "top_protocols": {"TCP": 1},
+        }
+    return out
+
+
+def test_compare_report_v2_captures_changes_and_single_judge():
+    s1 = _v2_out([("1.1.1.1", "suspicious", "benign_anomaly", 0.6, None),
+                  ("2.2.2.2", "benign", "benign_anomaly", 0.7, None)],
+                 start="2026-08-01 10:00:00")
+    s1["context"]["original_filename"] = "new3.pcapng"
+    s2 = _v2_out([("1.1.1.1", "malicious", "port_scan", 0.93, "cam-7"),
+                  ("2.2.2.2", "benign", "benign_anomaly", 0.7, None),
+                  ("9.9.9.9", "malicious", "dns_amp", 0.88, "nas-1")],
+                 start="2026-08-01 13:00:00")
+    s2["context"]["original_filename"] = "new4.pcapng"
+    from llm_judge import judge_core as jc
+    blob = jc.build_pair_blob(s1, s2, "cap1", "cap2")
+    pair = {
+        "verdict": {"posture_delta": "escalated", "confidence": 0.9,
+                    "headline": "New scan and amp traffic in S2.",
+                    "reasoning": "1.1.1.1 flipped to malicious.",
+                    "recommended_action": "investigate",
+                    "notable_flips": [{"ip": "1.1.1.1",
+                                       "from": "suspicious",
+                                       "to": "malicious",
+                                       "why": "port scan"}],
+                    "panel_agreement": {"picked": "escalated",
+                                        "votes": {"escalated": 1},
+                                        "answered": 1}},
+        "pair_blob": blob,
+        "panel_report": {
+            "groq/big": {"answered": True, "latency_ms": 900,
+                         "error": None},
+            "groq/small": {"answered": False, "latency_ms": 12000,
+                           "error": "Rate limit reached ... tokens per "
+                                    "day (TPD): quota exhausted"}},
+        "models_answered": ["groq/big"], "models_total": 2,
+        "prompt_version": "v0.5.0-pair2"}
+    summary, full = compare_report.render(
+        {"id": 7}, {"id": 1, "label": "cap1"},
+        {"id": 2, "label": "cap2"}, pair)
+
+    # Captures at a glance: metadata side by side + the recording gap.
+    for md in (summary, full):
+        assert "Captures at a glance" in md
+        assert "new3.pcapng" in md and "new4.pcapng" in md
+        assert "5,000" in md
+        assert "S2 was recorded 3h 0m after S1" in md
+        # What changed: category flow + new non-benign, in one table.
+        assert "What changed" in md
+        assert "suspicious → **malicious**" in md
+        assert "New in S2" in md and "non-benign" in md
+        # Single-judge warning is loud and names the judge.
+        assert "Single-judge verdict" in summary
+        assert "`big`" in md
+    # New non-benign S2 IP surfaces with its device even in the mail.
+    assert "9.9.9.9" in summary and "Acme nas-1" in summary
+    # Flip rows carry the S2-side device identity.
+    assert "cam-7" in full
+    # Panel audit classifies the failure - never the raw provider dump.
+    assert "daily quota" in full
+    assert "Rate limit reached" not in full
+    # Run metadata renders votes humanized, not as a python dict.
+    assert "escalated x1" in full
+    assert "{'escalated': 1}" not in full
+
+
+def test_compare_report_v2_graceful_without_context():
+    """Legacy verdicts.json (no context, no evidence) must render the
+    v2 report without the capture table and without crashing."""
+    from llm_judge import judge_core as jc
+    s1 = {"results": [{"candidate_id": "1.1.1.1",
+                       "verdict": {"verdict": "benign",
+                                   "category": "benign_anomaly",
+                                   "confidence": 0.7}}]}
+    s2 = {"results": [{"candidate_id": "1.1.1.1",
+                       "verdict": {"verdict": "suspicious",
+                                   "category": "benign_anomaly",
+                                   "confidence": 0.6}}]}
+    blob = jc.build_pair_blob(s1, s2, "a", "b")
+    pair = {"verdict": {"posture_delta": "mixed", "confidence": 0.4,
+                        "headline": "h", "reasoning": "r",
+                        "recommended_action": "monitor",
+                        "notable_flips": []},
+            "pair_blob": blob, "panel_report": {},
+            "models_answered": ["m1", "m2"], "models_total": 2,
+            "prompt_version": "v"}
+    summary, full = compare_report.render(
+        {"id": 8}, {"id": 3, "label": "a"}, {"id": 4, "label": "b"}, pair)
+    assert "Captures at a glance" not in summary
+    assert "What changed" in full          # flips still exist
+    assert "Single-judge" not in summary   # two judges answered
