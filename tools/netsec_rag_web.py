@@ -392,6 +392,33 @@ def build_app(engine, history, url_base=None):
             raise ValueError("--url-base must start AND end with '/'")
         dash_kwargs["url_base_pathname"] = url_base
     app = Dash(__name__, **dash_kwargs)
+
+    # ---- REST endpoint for scripted / cross-service queries ------------
+    # The old http.server exposed POST <base>/ask; keep it working so
+    # cron jobs and other services (curl, evaluate.py, future NetSec
+    # webhooks) don't need to reverse-engineer the Dash callback shape.
+    from flask import request, jsonify
+
+    @app.server.route((url_base or "/") + "ask", methods=["POST"])
+    def _ask():
+        data = request.get_json(silent=True) or {}
+        q = (data.get("q") or data.get("question") or "").strip()
+        if not q:
+            return jsonify({"error": "missing 'q'"}), 400
+        gen = data.get("generator") or "local"
+        where = data.get("where") or None
+        try:
+            res = engine.answer(q, k=int(data.get("k") or 6),
+                                generator=gen, where=where)
+        except Exception as e:
+            return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+        return jsonify({
+            "answer": res.get("answer") or "",
+            "sources": [{"source": h.get("source"),
+                         "score": h.get("score"),
+                         "text": (h.get("text") or "")[:400]}
+                        for h in (res.get("sources") or [])],
+        })
     _META = ('<meta name="viewport" content="width=device-width,'
              'initial-scale=1,viewport-fit=cover,user-scalable=no">'
              '<meta name="theme-color" content="#0f0f11" '
