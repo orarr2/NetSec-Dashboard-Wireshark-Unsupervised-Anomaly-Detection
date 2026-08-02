@@ -418,6 +418,35 @@ def generate_local(question, hits, model=GEN_MODEL, base=OLLAMA_URL):
     return (out.get("message") or {}).get("content", "").strip()
 
 
+def stream_local(question, hits, model=GEN_MODEL, base=OLLAMA_URL):
+    """Yield incremental token dicts from Ollama's /api/chat stream.
+
+    Each yielded dict is what Ollama emitted: usually {"message":
+    {"content": "..."}}. Consumers concatenate the .content chunks to
+    build the growing answer. The RAG web UI uses this for
+    llama.ui-style token-by-token rendering."""
+    payload = {
+        "model": model, "stream": True, "keep_alive": "30m",
+        "messages": [{"role": "system", "content": _SYSTEM},
+                     {"role": "user",
+                      "content": _build_prompt(question, hits)}],
+        "options": {"temperature": 0.1},
+    }
+    req = urllib.request.Request(
+        f"{base}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    # 900s: even the ARM CPU finishes any reasonable answer within.
+    with urllib.request.urlopen(req, timeout=900) as r:
+        for raw in r:
+            if not raw:
+                continue
+            try:
+                yield json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError:
+                continue
+
+
 def generate_groq(question, hits, model=GROQ_MODEL):
     key = os.environ.get("GROQ_API_KEY", "").strip()
     if not key:
@@ -492,6 +521,46 @@ class RagEngine:
         gen = generate_groq if generator == "groq" else generate_local
         text = gen(question, hits)
         return {"answer": text, "sources": hits}
+
+    def stream_answer(self, question, k=6, where=None):
+        """Yield (kind, payload) tuples for a UI to render live:
+
+            ("sources", [hit_dict, ...])          # first, exactly once
+            ("token", "text chunk")               # zero or more
+            ("done", {"tokens_out": N, ...})      # last, exactly once
+            ("error", "explanation")              # instead of done, on fail
+
+        Only the LOCAL generator is streamable (Ollama supports token
+        streaming). The Groq path is fire-and-forget - callers that want
+        streaming force generator=local."""
+        try:
+            hits = self.retrieve(question, k=k, where=where)
+        except Exception as e:
+            yield ("error", f"retrieval failed: {e}")
+            return
+        if not hits:
+            yield ("sources", [])
+            yield ("token", "That is not in the indexed material.")
+            yield ("done", {"tokens_out": 0})
+            return
+        yield ("sources", hits)
+        n = 0
+        try:
+            for chunk in stream_local(question, hits, base=OLLAMA_URL):
+                text = ((chunk.get("message") or {}).get("content") or "")
+                if text:
+                    n += 1
+                    yield ("token", text)
+                if chunk.get("done"):
+                    yield ("done", {"tokens_out":
+                                    chunk.get("eval_count") or n,
+                                    "total_ms":
+                                    (chunk.get("total_duration") or 0)
+                                    // 1_000_000})
+                    return
+            yield ("done", {"tokens_out": n})
+        except Exception as e:
+            yield ("error", f"generation failed: {e}")
 
 
 # --------------------------------------------------------------------------
