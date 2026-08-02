@@ -19,14 +19,11 @@ NETSEC_DIR="${NETSEC_DIR:-/home/ubuntu/netsec}"
 DB_DIR="${DB_DIR:-/srv/netsec/companion}"
 DEPLOY_DIR="${NETSEC_DIR}/deploy"
 
-echo "[companion] installing host Python deps (dash + bootstrap)..."
-# Prefer apt where the wheel is prebuilt; pip3 for dbc which is not
-# packaged. Both use system python3, matching the systemd unit's
-# /usr/bin/python3 interpreter.
-sudo apt-get install -y python3-flask python3-dash 2>&1 | tail -1 || true
-if ! python3 -c "import dash_bootstrap_components" 2>/dev/null; then
-  sudo pip3 install --break-system-packages dash_bootstrap_components
-fi
+echo "[companion] installing host Python deps (pip + dash + dbc)..."
+# NB: the ubuntu 'dash' apt package is the shell, NOT the Python framework.
+# Use pip for the actual Dash and Bootstrap Components wheels.
+sudo apt-get install -y python3-pip python3-flask 2>&1 | tail -1
+sudo pip3 install --break-system-packages dash dash_bootstrap_components 2>&1 | tail -2
 
 echo "[companion] creating ${DB_DIR}..."
 sudo mkdir -p "${DB_DIR}"
