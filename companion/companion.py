@@ -169,13 +169,36 @@ class OllamaClient:
     def __init__(self, base_url="http://127.0.0.1:11434"):
         self.base = base_url.rstrip("/")
 
+    # Model families that produce embedding VECTORS, not chat text - if
+    # picked in the dropdown they would return numeric garbage. Filter
+    # them out. Anything that clearly is an embedder (name contains
+    # "embed", or family is one of the known embedding architectures)
+    # is hidden from the chat picker.
+    _EMBED_FAMILY_HINTS = {"nomic-bert", "bert", "roberta", "mxbai-embed"}
+    _EMBED_NAME_HINTS = ("embed", "-e5-", "bge-")
+
+    def _is_chat_model(self, entry):
+        name = (entry.get("name") or "").lower()
+        if any(h in name for h in self._EMBED_NAME_HINTS):
+            return False
+        details = entry.get("details") or {}
+        family = (details.get("family") or "").lower()
+        families = [str(f).lower() for f in (details.get("families") or [])]
+        if family in self._EMBED_FAMILY_HINTS:
+            return False
+        if any(f in self._EMBED_FAMILY_HINTS for f in families):
+            return False
+        return True
+
     def list_models(self):
         req = urllib.request.Request(f"{self.base}/api/tags")
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode("utf-8"))
+        # Filter out embedding-only models (nomic-embed-text etc.); they
+        # return vectors, not text, and are useless in a chat dropdown.
         # Sort by name so the dropdown order is stable across restarts.
         return sorted([m.get("name") for m in (data.get("models") or [])
-                       if m.get("name")])
+                       if m.get("name") and self._is_chat_model(m)])
 
     def stream_chat(self, model, messages, options=None):
         """Yield dicts as Ollama emits them: each has 'message.content'
