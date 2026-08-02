@@ -1,0 +1,81 @@
+{
+  "_comment": "Registry of real, reputable captures that exercise the advanced-threat engines in app/advanced_engines.py. Every entry names a signal family, its origin, a direct URL, an sha256 of the FETCHED artifact (pre-extraction for .zip / .gz), and expected_signals reflecting what actually fired when the engines were run against the file - NOT what the source page claims. `commit` files live at pcaps/<file>; `fetch` files download to _cache/<file> via fetch.py and are gitignored.",
+
+  "captures": [
+    {
+      "family": "arp_mac_many_ips",
+      "action": "commit",
+      "file": "arp-storm.pcap",
+      "url": "https://gitlab.com/wireshark/wireshark/-/wikis/uploads/__moin_import__/attachments/SampleCaptures/arp-storm.pcap",
+      "source": "wireshark-wiki",
+      "license": "public-domain (Wireshark SampleCaptures)",
+      "sha256": "dc101ea9bfda59f56b54bfb949195c3f169032c045b47f98e6952a86933c1b8d",
+      "expected_signals": {
+        "arp_mac_many_ips": 1
+      },
+      "notes": "622 pkts. Single MAC 00:07:0d:af:f4:54 announces 9 distinct IPv4 addresses in ARP requests - textbook arp_mac_many_ips."
+    },
+    {
+      "family": "dns_tunneling",
+      "action": "commit",
+      "file": "dns-tunnel-iodine.pcap",
+      "url": "https://raw.githubusercontent.com/elastic/examples/master/Security%20Analytics/dns_tunnel_detection/dns-tunnel-iodine.pcap",
+      "source": "elastic/examples on GitHub (Apache-2.0)",
+      "license": "apache-2.0",
+      "sha256": "91fd221e07107507c8327a9d9487cd7f7531a1fd87cf543b1a76160ff0609b7b",
+      "expected_signals": {
+        "dns_tunneling": 1
+      },
+      "notes": "438 pkts. iodine over pirate.sea - 222 unique subdomains, uniq_ratio=1.00, max entropy 5.74, mean label length 47."
+    },
+    {
+      "family": "rogue_dhcp",
+      "action": "fetch",
+      "file": "The-Ultimate-PCAP.pcapng",
+      "url": "https://weberblog.net/wp-content/uploads/2020/02/The-Ultimate-PCAP.pcapng.gz",
+      "source": "Johannes Weber - The Ultimate PCAP (listed on wireshark.org Resources)",
+      "license": "research-only (weberblog.net)",
+      "sha256": "96359b8119ec53f347af4b7e55727d020d2ff60f30b0906da350b8564f49f49c",
+      "sha256_note": "sha256 is of the fetched .gz artifact, verified before decompression",
+      "expected_signals": {
+        "rogue_dhcp": 6,
+        "arp_mac_many_ips": 1,
+        "arp_ip_multi_mac": 1,
+        "nxdomain_storm": 1
+      },
+      "notes": "51k pkts. Fires FOUR distinct advanced signals in one capture. 6 DHCP servers offer leases (rogue_dhcp), 3 MACs claim 192.168.42.1 (arp_ip_multi_mac), a Raspberry Pi MAC announces 4 IPs (arp_mac_many_ips), and 47 NXDOMAIN responses to one host (nxdomain_storm)."
+    },
+    {
+      "family": "dga_and_nxdomain",
+      "action": "fetch",
+      "file": "ctu-botnet-91-conficker.pcap",
+      "url": "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-91/capture.botnet2.infected.1.pcap",
+      "source": "Stratosphere IPS / Malware Capture Facility Project, CTU University Prague (Sebastian Garcia)",
+      "license": "cc-licensed - cite Stratosphere/CTU-13",
+      "sha256": "c8c66b3f4a56144eb3d0246e64cf65942d92afa07d1c18019f255225f93a5974",
+      "expected_signals": {
+        "nxdomain_storm": 10,
+        "beaconing": 6,
+        "rogue_dhcp": 2
+      },
+      "notes": "199k pkts. Conficker botnet capture. NXDOMAIN storm (155 failed lookups on one host) is the primary DGA symptom the engine catches; the dga_domain engine itself did not fire because Conficker's 8-char labels have vowel ratio >= 0.25, above the current threshold - a known engine limitation, not a test failure. Also produces beaconing (median 5s intervals) and rogue_dhcp as bonus signals."
+    },
+    {
+      "family": "tls_c2",
+      "action": "fetch",
+      "file": "hancitor-cobaltstrike.pcap",
+      "url": "https://www.malware-traffic-analysis.net/2021/05/13/2021-05-13-Hancitor-traffic-with-Ficker-Stealer-and-Cobalt-Strike.pcap.zip",
+      "source": "malware-traffic-analysis.net (Brad Duncan)",
+      "license": "research-only",
+      "sha256": "e99f7cb95d00830a874e8c7118488d0cddd142730f126dc5eb5d750ec0569992",
+      "sha256_note": "sha256 is of the fetched .zip artifact, verified before extraction. The extracted .pcap sha256 is 09721b1e3203d78aeb282f0012e2f6d0959c65e8c1a9399e43912c640bfbc7e1.",
+      "zip_password": "infected_20210513",
+      "zip_member": "2021-05-13-Hancitor-traffic-with-Ficker-Stealer-and-Cobalt-Strike.pcap",
+      "expected_signals": {
+        "sni_ip_mismatch": 5,
+        "tls_no_sni_external": 1
+      },
+      "notes": "15k pkts. Real Cobalt Strike C2 traffic. sni_ip_mismatch fires 5x (SNIs like a.docusign.com resolving to AWS ranges - possible domain fronting). Beaconing did NOT fire: this Hancitor C2 is HTTP over port 80, not TCP-SYN periodic, so it falls outside the beaconing engine's TCP-start filter. Documented gap - not a test failure."
+    }
+  ]
+}

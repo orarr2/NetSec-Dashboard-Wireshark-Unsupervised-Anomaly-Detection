@@ -50,6 +50,10 @@ automation/
 # PCAPs moved out of incoming/ after successful triage. Local-only.
 processed/
 
+# Advanced-engine real captures too large or research-licensed to commit -
+# fetched on demand by attack_tests/advanced/fetch.py into this cache.
+attack_tests/advanced/_cache/
+
 # Runtime stdout/stderr logs from launching the dashboard / judge_api locally.
 *.log
 
