@@ -455,18 +455,29 @@ def test_openai_compat_exhausted_429_is_permanent(monkeypatch):
     the panel ~16s per stuck judge for zero gain."""
     from llm_judge.llm_clients import JudgeClientError
 
+    body = b'{"error":"rate limited"}'
+
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
+            # Read the request body up front - without this the client
+            # can hit WinError 10053 on Windows when the retry thread
+            # closes its half of the socket before the response is
+            # framed, which flakes the (permanent=True) assertion below.
+            _ = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             self.send_response(429)
             self.send_header("Retry-After", "0")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(b'{"error":"rate limited"}')
+            self.wfile.write(body)
 
         def log_message(self, *a):
             pass
 
-    # Cap retry waits to 0.01s so the test stays fast
-    monkeypatch.setattr(OpenAICompatClient, "_MAX_WAIT_S", 0.01)
+    # Cap the retry wait low enough that the test stays fast but high
+    # enough that the second attempt actually gets a fresh response back
+    # on Windows (10 ms was flaky under load).
+    monkeypatch.setattr(OpenAICompatClient, "_MAX_WAIT_S", 0.1)
     monkeypatch.setattr(OpenAICompatClient, "_MAX_RETRIES", 1)
     srv = HTTPServer(("127.0.0.1", 0), Handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True); t.start()
