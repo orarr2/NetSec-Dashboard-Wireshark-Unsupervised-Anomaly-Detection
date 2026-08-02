@@ -9,6 +9,10 @@ _*.json
 # ...but never ignore package __init__.py files (they start with underscore)
 !**/__init__.py
 netsec_upload_*.pcapng
+# User captures placed alongside the repo for interactive analysis -
+# never checked in (they are the user's data, not the project's).
+/new*.pcap
+/new*.pcapng
 
 # Hebrew documentation versions - kept locally, English-only in the repo.
 # Explicit exceptions for docs the user has approved for the shared repo.

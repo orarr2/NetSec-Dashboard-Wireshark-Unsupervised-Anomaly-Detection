@@ -53,6 +53,7 @@ analysis, security, comparison, inventory, external traffic, coverage).
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
 | `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
+| `companion/` | **Optional** local chat client. A single-file Dash app that opens an SSH tunnel to Ollama on your VM and gives you a llama.ui-style browser chat with the locally installed models. Not part of the analysis pipeline; see `companion/README.md` |
 | `server/` | Analyzer VM stack - signed ingest API, worker, retention, notify. Runs the exact detection pipeline of the dashboard on a small VM you control |
 | `deploy/` | Docker Compose + Dockerfiles for the VM stack, plus `create_sensor.py` |
 | `tools/upload_pcap.py` | Signed HMAC upload CLI - streams a PCAP to the VM's `/v1/pcap` with `--email <address>` for the report |
@@ -105,6 +106,7 @@ NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection/
 ├── attack_tests/                           ← 5 real attack PCAPs + CLI pipeline + labeled ground truth
 ├── tests/                                  ← pytest regression suite vs labeled ground truth
 ├── llm_judge/                              ← OPTIONAL: standalone LLM-as-Judge triage notebook (own README)
+├── companion/                              ← OPTIONAL: browser chat with the VM's local Ollama models (own README)
 ├── tools/                                  ← export_dashboard_module.py (notebook → .py sync)
 └── docs/                                   ← MODELS.md + deep-dive docs + decision graphs + LLM_JUDGE_SPEC.md
 ```
