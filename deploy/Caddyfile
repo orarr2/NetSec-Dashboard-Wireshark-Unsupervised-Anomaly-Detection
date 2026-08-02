@@ -26,9 +26,17 @@
     auto_https disable_redirects
     admin off
     email disabled
+    # Fall-back SNI: clients that connect by raw IP do not send an SNI
+    # extension (RFC 6066: SNI is for hostnames), so Caddy would not
+    # know which cert to serve. Point them at netsec-agent, which is
+    # the primary internal name.
+    default_sni netsec-agent
 }
 
-100.68.246.54:443 {
+# One site, three names. Caddy signs a single internal cert that
+# covers the Tailscale IP AND the Tailscale MagicDNS name (both plain
+# and FQDN), so every way you reach the VM gets the SAME cert.
+100.68.246.54, netsec-agent, netsec-agent.tail37ac21.ts.net {
     tls internal
 
     # One credential, one realm. Browsers cache it across paths on the
