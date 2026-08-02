@@ -323,6 +323,18 @@ def _failure_causes(examples):
     return causes
 
 
+def _n_valid_judges(r):
+    """Count of judges whose verdict actually landed for this result.
+
+    Used to mark verdicts decided by a single voter with ⚠: on a large
+    panel where 5 of 6 judges failed on a candidate, "1 judge" tucked
+    inside the Votes cell is easy to skim past - readers were treating
+    the effective verdict as if it had a real panel behind it."""
+    p = r.get("panel") or {}
+    return sum(1 for j in (p.get("judges") or [])
+               if j and not j.get("failed"))
+
+
 def _votes_cell(r):
     """One compact phrase for how the panel arrived at this verdict."""
     p = r.get("panel")
@@ -505,26 +517,40 @@ def _render_markdown(pcap_path, out, assembled, client, context=None):
         ]
         for i, r in enumerate(results, 1):
             v = r["verdict"]
+            # ⚠ marks candidates decided by ≤1 valid judge, so a reader
+            # can tell "3/3 unanimous benign" apart from a lone vote in
+            # a panel where 5 of 6 failed - both used to look identical
+            # once the votes cell was rendered.
+            valid_n = _n_valid_judges(r)
             flags = ("⚑" if r.get("guardrail") else "") \
                 + ("⚖" if ((r.get("committee") or r.get("panel") or {})
-                           .get("needs_human_review")) else "")
+                           .get("needs_human_review")) else "") \
+                + ("⚠" if valid_n <= 1 and stats.get("panel") else "")
             # a literal | inside the reasoning would split the table
             # cell - swap for a middot (escaping with \| renders as the
-            # backslash in some email clients)
+            # backslash in some email clients). Widened from 110 -> 250
+            # after production feedback: 110 truncated most "Why" cells
+            # mid-clause and buried the action rationale.
             why = _first_sentence(v["reasoning"],
-                                  max_chars=110).replace("|", "·")
+                                  max_chars=250).replace("|", "·")
             lines.append(
                 f"| {i} | `{r['candidate_id']}` | **{v['verdict']}** | "
                 f"{v['confidence']:.2f} | {v['recommended_action']} | "
                 f"{_votes_cell(r)} | {flags} | {why} |")
         lines.append("")
+        legend_bits = []
         if any(r.get("guardrail") for r in results):
-            lines += [
-                "> ⚑ = rule guardrail overrode a benign model verdict "
-                "on a candidate whose deterministic rule fired. Raw model "
-                "verdict is preserved in `verdicts.json`.",
-                "",
-            ]
+            legend_bits.append("⚑ = rule guardrail overrode a benign "
+                               "model verdict on a candidate whose "
+                               "deterministic rule fired (raw model "
+                               "verdict preserved in `verdicts.json`)")
+        if stats.get("panel") and any(_n_valid_judges(r) <= 1
+                                      for r in results):
+            legend_bits.append("⚠ = decided by 1 or 0 valid judges "
+                               "(most of the panel failed on this "
+                               "candidate)")
+        for line in legend_bits:
+            lines += [f"> {line}", ""]
     else:
         lines += [
             "## No verdicts",
