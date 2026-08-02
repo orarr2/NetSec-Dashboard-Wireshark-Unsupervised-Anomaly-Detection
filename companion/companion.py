@@ -713,14 +713,27 @@ body { overflow: hidden; margin: 0; height: 100%; }
 .sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
   text-transform: uppercase; margin: 14px 6px 6px; font-weight: 600;
   font-family: "SF Mono", monospace; }
-.sidebar .chat-row { padding: 8px 10px; border-radius: 10px; cursor: pointer;
-  font-size: 13px; color: var(--ink-dim); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; margin: 2px 0; }
+.sidebar .chat-row { padding: 8px 10px; border-radius: 10px;
+  font-size: 13px; color: var(--ink-dim); margin: 2px 0;
+  display: flex; align-items: center; gap: 4px; }
 .sidebar .chat-row:hover { background: var(--glass-bg-strong);
   color: var(--ink); }
 .sidebar .chat-row.active { background: var(--glass-bg-strong);
   color: var(--violet-bright); font-weight: 500;
   border-left: 2px solid var(--violet); padding-left: 8px; }
+.sidebar .chat-title { flex: 1; cursor: pointer; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .chat-actions { display: none; gap: 2px; flex-shrink: 0; }
+.sidebar .chat-row:hover .chat-actions { display: flex; }
+.sidebar .chat-action { background: transparent; border: none;
+  color: var(--ink-mute); cursor: pointer; font-size: 13px;
+  padding: 2px 6px; border-radius: 6px; line-height: 1; }
+.sidebar .chat-action:hover { color: var(--violet-bright);
+  background: rgba(139, 92, 246, 0.15); }
+/* Mobile: actions always visible (no hover on touch) */
+@media (max-width: 699px) {
+  .sidebar .chat-actions { display: flex; }
+}
 .sidebar .new-btn { display: flex; align-items: center; width: 100%;
   padding: 10px 14px; background: var(--glass-bg-strong); color: var(--ink);
   border: 1px solid var(--glass-border); border-radius: 10px;
@@ -890,17 +903,37 @@ body { overflow: hidden; margin: 0; height: 100%; }
 
 
 def _render_history(store, active_chat_id):
+    """One row per chat: title on the left, hover-visible action icons on
+    the right (rename, delete). Same pattern as Claude/ChatGPT sidebars.
+    Clicking the title loads the chat; clicking an icon fires its own
+    pattern-matching callback and skips the load."""
     rows = []
     for label, chats in store.list_chats_by_date_group():
         rows.append(html.H2(label, className="section-title"))
         for c in chats:
-            rows.append(html.Div(
-                c["title"] or "(untitled)",
-                id={"type": "load-chat", "id": c["id"]},
-                n_clicks=0,
-                className=("chat-row active"
-                           if c["id"] == active_chat_id else "chat-row"),
-                title=(f"{c['updated_at']} · {c.get('model') or '?'}")))
+            row = html.Div([
+                html.Div(
+                    c["title"] or "(untitled)",
+                    id={"type": "load-chat", "id": c["id"]},
+                    n_clicks=0,
+                    className="chat-title",
+                    title=(f"{c['updated_at']} · "
+                           f"{c.get('model') or '?'}")),
+                html.Div([
+                    html.Button("✎",
+                                id={"type": "rename-chat", "id": c["id"]},
+                                n_clicks=0,
+                                className="chat-action",
+                                title="Rename"),
+                    html.Button("🗑",
+                                id={"type": "delete-chat", "id": c["id"]},
+                                n_clicks=0,
+                                className="chat-action",
+                                title="Delete"),
+                ], className="chat-actions"),
+            ], className=("chat-row active"
+                          if c["id"] == active_chat_id else "chat-row"))
+            rows.append(row)
     if not rows:
         rows.append(html.Div("No chats yet. Say hi!",
                              style={"color": "#55555c", "fontSize": "11.5px",
@@ -1032,9 +1065,10 @@ def build_app(tunnel, client, store, port, url_base=None):
         dcc.Store(id="active-chat-id", storage_type="session"),
         dcc.Store(id="stream-token"),           # bumps on send to arm poll
         dcc.Store(id="sidebar-open", data=False),
-        # Attached file waiting to be sent with the next user message.
-        # Cleared after send. {"name","kind","chars","text"} or None.
-        dcc.Store(id="attached-file", data=None),
+        # Payload from the sidebar rename/delete icons - the browser
+        # runs prompt()/confirm() and drops the result here for the
+        # server to apply.
+        dcc.Store(id="sidebar-action"),
         # Poll is always on: 300 ms while a stream is live (fast paint),
         # 2 s otherwise (light background refresh so a new chat opened
         # from another window shows up, and so the final assistant frame
@@ -1085,21 +1119,7 @@ def build_app(tunnel, client, store, port, url_base=None):
                 ], className="topbar"),
                 html.Div(id="chat-area", className="chat-area"),
                 html.Div([
-                    # Attachment chip (hidden when no file attached).
-                    html.Div(id="attach-chip", className="attach-chip"),
                     html.Div([
-                        # File-drop / paperclip button. Sits inside the
-                        # composer, opens the OS file picker on tap.
-                        # Also accepts drag+drop across the whole page
-                        # target so mobile long-press-share works too.
-                        dcc.Upload(
-                            id="file-upload",
-                            children=html.Button(
-                                "📎", id="attach-btn",
-                                className="attach-btn",
-                                title="Attach a file"),
-                            multiple=False,
-                            style={"display": "inline-block"}),
                         dcc.Textarea(id="composer-text",
                                      placeholder=("Type a message "
                                                   "(Shift+Enter for a new "
@@ -1110,8 +1130,7 @@ def build_app(tunnel, client, store, port, url_base=None):
                     ], className="composer-inner"),
                     html.Div("Content is generated by a local model on your VM"
                              " and may be inaccurate. Not stored anywhere but"
-                             " ~/ai-companion/chats.db. Attached files stay"
-                             " local and get pasted into the next message.",
+                             " ~/ai-companion/chats.db.",
                              className="footer"),
                 ], className="composer"),
                 # Settings modal
@@ -1174,6 +1193,67 @@ def build_app(tunnel, client, store, port, url_base=None):
         # stream-token bump / initial render: just repaint with current
         return active, _render_history(store, active)
 
+    # -------- sidebar row actions (rename / delete) ----------------------
+    # Browser handles the prompt/confirm UX, drops the outcome in a Store.
+    app.clientside_callback(
+        """function(rename_clicks, delete_clicks) {
+            const ctx = window.dash_clientside.callback_context;
+            const trg = ctx.triggered_id;
+            if (!trg || typeof trg !== 'object') {
+                return window.dash_clientside.no_update;
+            }
+            // Guard against initial-render fake fires (all zero).
+            const clicks = trg.type === 'rename-chat'
+                ? (rename_clicks || []) : (delete_clicks || []);
+            if (!clicks.some(function(n){ return n; })) {
+                return window.dash_clientside.no_update;
+            }
+            if (trg.type === 'rename-chat') {
+                const t = window.prompt('New title:');
+                if (t === null || !t.trim()) {
+                    return window.dash_clientside.no_update;
+                }
+                return {action: 'rename', id: trg.id, title: t.trim()};
+            }
+            if (trg.type === 'delete-chat') {
+                if (!window.confirm('Delete this chat? This cannot be undone.')) {
+                    return window.dash_clientside.no_update;
+                }
+                return {action: 'delete', id: trg.id};
+            }
+            return window.dash_clientside.no_update;
+        }""",
+        Output("sidebar-action", "data"),
+        Input({"type": "rename-chat", "id": dash.ALL}, "n_clicks"),
+        Input({"type": "delete-chat", "id": dash.ALL}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+
+    @app.callback(
+        Output("history-list", "children", allow_duplicate=True),
+        Output("active-chat-id", "data", allow_duplicate=True),
+        Input("sidebar-action", "data"),
+        State("active-chat-id", "data"),
+        prevent_initial_call=True,
+    )
+    def apply_sidebar_action(action, active):
+        if not isinstance(action, dict):
+            return no_update, no_update
+        cid = action.get("id")
+        if not cid:
+            return no_update, no_update
+        if action.get("action") == "rename":
+            title = (action.get("title") or "").strip()
+            if title:
+                store.rename_chat(cid, title)
+            return _render_history(store, active), no_update
+        if action.get("action") == "delete":
+            store.delete_chat(cid)
+            # If the deleted chat was the active one, drop the pointer.
+            new_active = None if cid == active else active
+            return _render_history(store, new_active), new_active
+        return no_update, no_update
+
     @app.callback(
         Output("chat-area", "children"),
         Input("active-chat-id", "data"),
@@ -1192,62 +1272,21 @@ def build_app(tunnel, client, store, port, url_base=None):
             stream = _STREAMS.get(chat_id)
         return _render_messages(msgs, live_stream=stream)
 
-    # --- attachment: pick up the file, extract text, store in attached-file
-    @app.callback(
-        Output("attached-file", "data"),
-        Output("attach-chip", "children"),
-        Output("attach-chip", "className"),
-        Input("file-upload", "contents"),
-        Input("attach-remove-btn", "n_clicks"),
-        State("file-upload", "filename"),
-        prevent_initial_call=True,
-    )
-    def on_attach(contents, rm_click, filename):
-        trig = dash.ctx.triggered_id
-        if trig == "attach-remove-btn":
-            return None, "", "attach-chip"
-        if not contents or not filename:
-            return no_update, no_update, no_update
-        text, meta = extract_file(filename, contents)
-        if text is None:
-            # extraction failed: show error chip but keep no attachment
-            return None, [
-                html.Span("!", className="kind"),
-                html.Span(f"{filename}: {meta}", className="name"),
-                html.Button("×", id="attach-remove-btn",
-                            className="rm", n_clicks=0)
-            ], "attach-chip has-file error"
-        chip = [
-            html.Span((meta.get("kind") or "?").upper(), className="kind"),
-            html.Span(meta.get("name") or filename, className="name"),
-            html.Span(_pretty_bytes(meta.get("size") or 0),
-                      className="size"),
-            html.Button("×", id="attach-remove-btn", className="rm",
-                        n_clicks=0),
-        ]
-        return {"name": meta.get("name"), "kind": meta.get("kind"),
-                "chars": meta.get("chars"), "text": text}, chip, \
-            "attach-chip has-file"
-
     @app.callback(
         Output("stream-poll", "interval"),      # 300 while streaming, else 2000
         Output("composer-text", "value"),
         Output("stream-token", "data"),
         Output("active-chat-id", "data", allow_duplicate=True),
-        Output("attached-file", "data", allow_duplicate=True),
-        Output("attach-chip", "children", allow_duplicate=True),
-        Output("attach-chip", "className", allow_duplicate=True),
         Input("send-btn", "n_clicks"),
         Input({"type": "suggestion", "text": dash.ALL}, "n_clicks"),
         Input("stream-poll", "n_intervals"),
         State("composer-text", "value"),
         State("active-chat-id", "data"),
         State("model-select", "value"),
-        State("attached-file", "data"),
         prevent_initial_call=True,
     )
     def kick_send(send_clicks, sugg_clicks, _tick, composer_text, chat_id,
-                  model, attached):
+                  model):
         trig = dash.ctx.triggered_id
         # 1. suggestion clicked -> send its prompt
         if isinstance(trig, dict) and trig.get("type") == "suggestion":
@@ -1256,8 +1295,7 @@ def build_app(tunnel, client, store, port, url_base=None):
             # this trigger when SOMEONE actually clicked.
             n_now = next((n for n in (sugg_clicks or []) if n), None)
             if not n_now:
-                return (no_update, no_update, no_update, no_update,
-                    no_update, no_update, no_update)
+                return no_update, no_update, no_update, no_update
             composer_text = trig.get("text", "")
         elif trig == "stream-poll":
             # tick: slow the poll IF nothing is streaming anymore. The
@@ -1274,12 +1312,10 @@ def build_app(tunnel, client, store, port, url_base=None):
                         _STREAMS.pop(cid, None)
             token_out = time.time() if had_finished else no_update
             new_interval = 300 if any_active else 2000
-            return (new_interval, no_update, token_out, no_update,
-                    no_update, no_update, no_update)
+            return new_interval, no_update, token_out, no_update
         # 2. actual send
         if not composer_text or not composer_text.strip():
-            return (no_update, no_update, no_update, no_update,
-                    no_update, no_update, no_update)
+            return no_update, no_update, no_update, no_update
         chat_id_out = no_update
         # Session-storage keeps active-chat-id across browser refreshes,
         # so a chat_id from a previous run can survive after the DB was
@@ -1296,14 +1332,12 @@ def build_app(tunnel, client, store, port, url_base=None):
                 store.set_chat_model(chat_id, arg.strip())
                 store.append_message(chat_id, "system",
                                      f"[model set to {arg.strip()}]")
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         if verb == "system":
             store.set_chat_system(chat_id, arg)
             store.append_message(chat_id, "system",
                                  f"[system prompt updated]")
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         if verb in ("temp", "temperature"):
             try:
                 store.set_chat_temperature(chat_id, float(arg))
@@ -1312,8 +1346,7 @@ def build_app(tunnel, client, store, port, url_base=None):
             except ValueError:
                 store.append_message(chat_id, "system",
                                      f"[bad temperature: {arg!r}]")
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         if verb == "clear":
             with _STREAMS_LOCK:
                 _STREAMS.pop(chat_id, None)
@@ -1321,14 +1354,12 @@ def build_app(tunnel, client, store, port, url_base=None):
             with store._lock:
                 store._db.execute("DELETE FROM messages WHERE chat_id=?",
                                   (chat_id,))
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         if verb == "help":
             store.append_message(chat_id, "system",
                                  "commands: /model <name> · /system <text> "
                                  "· /temp <0.0-2.0> · /clear · /save · /help")
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         if verb == "save":
             path = pathlib.Path.home() / "ai-companion" / "exports"
             path.mkdir(parents=True, exist_ok=True)
@@ -1342,8 +1373,7 @@ def build_app(tunnel, client, store, port, url_base=None):
             out_path.write_text("\n".join(body), encoding="utf-8")
             store.append_message(chat_id, "system",
                                  f"[saved to {out_path}]")
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
 
         # 3. real chat message.
         # get_chat MUST already see the row we just inserted - autocommit
@@ -1351,20 +1381,13 @@ def build_app(tunnel, client, store, port, url_base=None):
         # mismatch, disk full, whatever), surface it loudly instead of
         # silently AttributeError'ing on chat.get(...).
 
-        # If a file was attached, prepend its extracted text so the
-        # model sees "here is a file, here is my question about it".
-        # The stored user message includes the WHOLE thing so scrolling
-        # back the conversation still shows the context.
-        if attached and (attached.get("text") or "").strip():
-            text = attached["text"] + "\n\n---\n\n" + text
         store.append_message(chat_id, "user", text)
         chat = store.get_chat(chat_id) or {}
         if not chat:
             print(f"[companion] get_chat({chat_id}) returned None right "
                   "after new_chat/append; storage is misbehaving",
                   file=sys.stderr)
-            return (no_update, "", no_update, chat_id_out,
-                    no_update, no_update, no_update)
+            return no_update, "", no_update, chat_id_out
         chosen_model = chat.get("model") or model
         # build the messages array Ollama wants
         history = []
@@ -1386,8 +1409,7 @@ def build_app(tunnel, client, store, port, url_base=None):
         t.start()
         # arm the poll and clear the composer; stream-token bump forces the
         # paint callback to re-render even before the first token lands
-        return (300, "", (send_clicks or 0), chat_id_out,
-                None, "", "attach-chip")   # clear the attachment
+        return 300, "", (send_clicks or 0), chat_id_out
 
     @app.callback(
         Output("settings-modal", "is_open"),

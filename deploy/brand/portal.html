@@ -15,16 +15,19 @@
 <title>NetSec Portal</title>
 <link rel="stylesheet" href="/brand/netsec-brand.css">
 <style>
-    .wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 60px; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 60px;
+        text-align: center; }
     .hero {
-        display: flex; align-items: center; gap: 20px; margin: 22px 0 36px;
+        display: flex; align-items: center; justify-content: center;
+        gap: 20px; margin: 22px 0 36px;
         padding: 22px 26px; border-radius: 22px;
     }
     .hero img { height: 46px; }
-    .hero .titles { flex: 1; }
+    .hero .titles { text-align: center; }
     .hero h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
     .hero p  { margin: 0; color: var(--ink-dim); font-size: 13px; }
-    .status-row { display: flex; gap: 8px; flex-wrap: wrap; margin: -12px 0 24px; }
+    .status-row { display: flex; gap: 8px; flex-wrap: wrap; margin: -12px 0 24px;
+        justify-content: center; }
 
     .grid {
         display: grid; gap: 18px;
@@ -34,37 +37,37 @@
         display: flex; flex-direction: column; gap: 10px; padding: 20px;
         cursor: pointer; color: var(--ink);
         text-decoration: none;
+        text-align: center;
+        align-items: center;
     }
     .card .icon { font-size: 26px; line-height: 1; }
     .card h2 { margin: 0; font-size: 16px; }
     .card p  { margin: 0; color: var(--ink-dim); font-size: 13px; line-height: 1.55; flex: 1; }
-    .card .meta { display: flex; align-items: center; justify-content: space-between;
+    .card .meta { display: flex; align-items: center; justify-content: center;
         gap: 10px; margin-top: 6px; font-size: 11px; color: var(--ink-mute); }
     .card.disabled { opacity: 0.7; }
 
     /* Latest-session card is FEATURED, spans wide */
     .latest {
         grid-column: 1 / -1;
-        padding: 22px 26px; display: grid;
-        grid-template-columns: 1fr auto; gap: 16px 24px;
+        padding: 22px 26px;
+        display: flex; flex-direction: column; align-items: center;
+        gap: 14px;
     }
     .latest .title { color: var(--ink-dim); font-size: 11px; letter-spacing: 0.14em;
         text-transform: uppercase; margin: 0 0 6px; }
     .latest h2 { margin: 0 0 6px; font-size: 20px; color: var(--ink); }
     .latest .sub { margin: 0; color: var(--ink-dim); font-size: 13px; }
-    .latest .counts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    .latest .counts { display: flex; gap: 6px; flex-wrap: wrap;
+        align-items: center; justify-content: center;
         margin-top: 12px; }
-    .latest .actions { display: flex; flex-direction: column; gap: 8px;
-        align-items: flex-end; justify-content: center; }
+    .latest .actions { display: flex; gap: 10px;
+        align-items: center; justify-content: center; flex-wrap: wrap;
+        margin-top: 8px; }
     .latest a.btn { color: var(--ink); }
 
-    .footer-links { margin: 40px 0 0; display: flex; gap: 10px; flex-wrap: wrap;
-        justify-content: center; }
-
     @media (max-width: 640px) {
-        .hero { flex-direction: column; align-items: flex-start; padding: 18px; }
-        .latest { grid-template-columns: 1fr; }
-        .latest .actions { flex-direction: row; align-items: flex-start; }
+        .hero { flex-direction: column; padding: 18px; }
     }
 </style>
 </head>
@@ -75,17 +78,16 @@
         <img class="logo" src="/brand/netsec-logo.svg" alt="NETSEC">
         <div class="titles">
             <h1>NetSec Portal</h1>
-            <p>Private tools over Tailscale &middot; no public exposure &middot;
-               single-sign-on via Caddy basicauth.</p>
+            <p>Private tools over Tailscale.</p>
         </div>
     </header>
 
     <div class="status-row">
-        <span class="pill" id="badge-latest">latest &mdash; checking&hellip;</span>
-        <span class="pill" id="badge-rag">RAG &mdash; checking&hellip;</span>
-        <span class="pill" id="badge-chat">Companion &mdash; checking&hellip;</span>
-        <span class="pill" id="badge-dash">Dashboard &mdash; checking&hellip;</span>
-        <span class="pill" id="badge-n8n">n8n &mdash; checking&hellip;</span>
+        <span class="pill" id="badge-latest">latest - checking&hellip;</span>
+        <span class="pill" id="badge-rag">RAG - checking&hellip;</span>
+        <span class="pill" id="badge-chat">Companion - checking&hellip;</span>
+        <span class="pill" id="badge-dash">Dashboard - checking&hellip;</span>
+        <span class="pill" id="badge-n8n">n8n - checking&hellip;</span>
     </div>
 
     <div class="grid">
@@ -135,7 +137,7 @@
             <h2>NetSec Dashboard</h2>
             <p>The forensic notebook running in Jupyter on the LAPTOP
                (<span class="mono">or-pc-1:8055</span>). Requires the laptop on
-               with the notebook started &mdash; not always-on like the VM.</p>
+               with the notebook started - not always-on like the VM.</p>
             <div class="meta">
                 <span class="mono">or-pc-1:8055</span>
                 <span id="dash-state">&hellip;</span>
@@ -155,13 +157,7 @@
         </a>
     </div>
 
-    <div class="footer-links">
-        <a class="pill" href="https://github.com/orarr2/NetSec-Dashboard-Wireshark-Unsupervised-Anomaly-Detection"
-           target="_blank" rel="noopener">GitHub repo (private)</a>
-        <a class="pill" href="http://netsec-agent:8766/healthz"
-           target="_blank" rel="noopener">VM /healthz</a>
-        <span class="pill" id="portal-host"></span>
-    </div>
+
 </div>
 
 <script>
@@ -260,7 +256,6 @@ async function probeAll() {
     setCardState("dash-state", dashOk);
 }
 
-document.getElementById("portal-host").textContent = "served from " + location.host;
 probeAll();
 setInterval(probeAll, 30000);
 </script>

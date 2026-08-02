@@ -316,7 +316,7 @@ _LOGO_DATA_URL = _load_brand_asset("netsec-logo.b64").strip()
 
 _CSS = _BRAND_CSS + """
 /* ---- RAG-specific overrides on top of the shared brand tokens ------- */
-#app-root { display: flex; height: 100vh; }
+.rag-shell { display: flex; height: 100vh; height: 100dvh; }
 .sidebar { width: 260px; padding: 14px 10px;
   overflow-y: auto; border-right: 1px solid var(--glass-border);
   display: flex; flex-direction: column;
@@ -471,6 +471,11 @@ def build_app(engine, history, url_base=None):
         dcc.Store(id="sidebar-open", data=False),
         dcc.Store(id="stream-tick", data=0),
         dcc.Interval(id="poll", interval=2000, disabled=True),
+        # The shell div is the flex container that puts sidebar + main
+        # side by side. Without this wrapper (with its own className)
+        # Dash's react-entry-point puts a plain block-level div in the
+        # way and the two children stack vertically.
+        html.Div([
         html.Div(id="sidebar-backdrop", className="backdrop", n_clicks=0),
 
         # Sidebar
@@ -525,6 +530,7 @@ def build_app(engine, history, url_base=None):
                      f"internet.",
                      className="footer-line"),
         ], className="main"),
+        ], className="rag-shell"),
     ])
 
     # -------- clientside: theme toggle + hamburger + backdrop close ------

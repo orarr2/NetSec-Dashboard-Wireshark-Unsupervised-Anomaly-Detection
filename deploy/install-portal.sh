@@ -19,8 +19,18 @@ echo "[portal] writing ${PORTAL_DIR}/index.html..."
 sudo mkdir -p "${PORTAL_DIR}"
 sudo cp "${NETSEC_DIR}/deploy/brand/portal.html" "${PORTAL_DIR}/index.html"
 
-echo "[portal] symlinking /brand -> ${NETSEC_DIR}/deploy/brand..."
-sudo ln -sfn "${NETSEC_DIR}/deploy/brand" "${PORTAL_DIR}/brand"
+echo "[portal] copying brand assets -> ${PORTAL_DIR}/brand/..."
+# NOT a symlink: the portal http.server runs as User=nobody and
+# /home/ubuntu is 0750, so a symlink target inside there is unreadable.
+# One copy is fine - the brand kit is tiny (30KB) and refresh is
+# handled by re-running install-portal.sh (idempotent).
+sudo rm -rf "${PORTAL_DIR}/brand"
+sudo mkdir -p "${PORTAL_DIR}/brand"
+sudo cp "${NETSEC_DIR}/deploy/brand/netsec-brand.css" \
+        "${NETSEC_DIR}/deploy/brand/netsec-logo.svg" \
+        "${NETSEC_DIR}/deploy/brand/netsec-logo.b64" \
+        "${PORTAL_DIR}/brand/"
+sudo chmod -R a+r "${PORTAL_DIR}/brand"
 
 echo "[portal] symlinking /reports -> /srv/netsec/reports..."
 sudo ln -sfn /srv/netsec/reports "${PORTAL_DIR}/reports"

@@ -56,6 +56,20 @@
     --shadow-lift:    0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+/* Light mode - toggled by the theme button on any UI. Same accent
+   colors as dark mode, only the ink and glass swap to light-on-light. */
+:root[data-theme="light"] {
+    --ink:            #1f1c2e;
+    --ink-dim:        #5a536f;
+    --ink-mute:       #9b94b8;
+    --bg-base:        #fafafd;
+    --bg-panel:       #f2eff8;
+    --glass-bg:            rgba(20, 15, 40, 0.04);
+    --glass-bg-strong:     rgba(20, 15, 40, 0.07);
+    --glass-border:        rgba(20, 15, 40, 0.10);
+    --glass-border-strong: rgba(20, 15, 40, 0.18);
+}
+
 /* ---- Global reset for the Aurora background --------------------------- */
 html, body {
     background: var(--bg-base);
@@ -80,6 +94,13 @@ body::before {
         var(--bg-base);
     pointer-events: none;
 }
+:root[data-theme="light"] body::before {
+    background:
+        radial-gradient(ellipse at 20% 10%, rgba(139, 92, 246, 0.10), transparent 40%),
+        radial-gradient(ellipse at 80% 30%, rgba(34, 211, 238, 0.08), transparent 45%),
+        radial-gradient(ellipse at 50% 90%, rgba(244, 114, 182, 0.07), transparent 45%),
+        var(--bg-base);
+}
 
 /* ---- Glass helpers (compose with any element) ------------------------- */
 .glass {
@@ -101,6 +122,7 @@ body::before {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-card);
     padding: 18px;
+    text-align: center;
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
