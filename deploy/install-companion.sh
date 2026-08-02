@@ -24,13 +24,15 @@ echo "[companion] setting up a dedicated venv (no system Python pollution)..."
 # flask) that conflict with the apt-provided ones on Ubuntu 24.04.
 # Isolate in /opt/netsec-companion/venv so the system python stays clean
 # and the systemd unit points at THIS interpreter.
-sudo apt-get install -y python3-venv 2>&1 | tail -1
+# tshark is needed so the file-drop feature can summarize .pcap uploads.
+# pypdf + python-docx are the file-drop extractors for PDF and DOCX.
+sudo apt-get install -y python3-venv tshark 2>&1 | tail -1
 VENV=/opt/netsec-companion/venv
 if [ ! -x "${VENV}/bin/python" ]; then
   sudo python3 -m venv "${VENV}"
 fi
 sudo "${VENV}/bin/pip" install --quiet --upgrade pip
-sudo "${VENV}/bin/pip" install --quiet dash dash_bootstrap_components
+sudo "${VENV}/bin/pip" install --quiet dash dash_bootstrap_components pypdf python-docx
 
 echo "[companion] creating ${DB_DIR}..."
 sudo mkdir -p "${DB_DIR}"

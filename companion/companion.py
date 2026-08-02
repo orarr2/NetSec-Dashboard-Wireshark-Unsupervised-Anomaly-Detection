@@ -13,15 +13,19 @@ The tunnel goes down cleanly on Ctrl+C or when the browser closes the tab.
 """
 import argparse
 import atexit
+import base64
+import io
 import json
 import os
 import pathlib
 import queue
 import shlex
+import shutil
 import signal
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -256,6 +260,148 @@ CREATE INDEX IF NOT EXISTS idx_chats_updated ON chats(updated_at DESC);
 """
 
 
+# --------------------------------------------------------------------------
+# File extraction - drag a file into the chat and get its text into the
+# model context. Each format has its own extractor; dispatch on extension.
+# Called from a Dash callback, so all failures return (None, error_str)
+# instead of raising - the UI shows the error as a chip.
+# --------------------------------------------------------------------------
+# Cap the extracted text to keep context sane: a 3B model has a ~32k
+# token window (~120k chars); leave headroom for the actual question.
+MAX_ATTACH_CHARS = 60_000
+_TEXTY_EXTS = {".txt", ".md", ".log", ".json", ".csv", ".tsv",
+               ".py", ".yaml", ".yml", ".ini", ".conf", ".sh", ".ps1",
+               ".xml", ".html", ".css", ".js", ".ts", ".c", ".h",
+               ".cpp", ".rs", ".go", ".java", ".sql"}
+_PCAP_EXTS = {".pcap", ".pcapng", ".cap"}
+
+
+def _cap_text(text, limit=MAX_ATTACH_CHARS):
+    if not text:
+        return text
+    if len(text) <= limit:
+        return text
+    kept = limit - 200
+    return (text[:kept] + f"\n\n[...truncated {len(text) - kept:,} more chars]")
+
+
+def _pretty_bytes(n):
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def extract_file(name, contents_b64):
+    """Return (text, meta) on success or (None, error) on failure.
+
+    contents_b64 is the Dash Upload "contents" property:
+    "data:application/octet-stream;base64,<payload>". name is the
+    original filename (the extension picks the extractor)."""
+    if not name or not contents_b64:
+        return None, "empty upload"
+    if "," in contents_b64:
+        contents_b64 = contents_b64.split(",", 1)[1]
+    try:
+        data = base64.b64decode(contents_b64)
+    except Exception as e:
+        return None, f"base64 decode failed: {e}"
+    size = len(data)
+    ext = os.path.splitext(name)[1].lower()
+    meta = {"name": name, "size": size, "kind": ext.lstrip(".")}
+
+    if ext in _TEXTY_EXTS:
+        try:
+            text = data.decode("utf-8", errors="replace")
+        except Exception as e:
+            return None, f"text decode: {e}"
+        meta["chars"] = len(text)
+        header = f"FILE: {name} ({size:,} bytes, text)\n\n"
+        return header + _cap_text(text), meta
+
+    if ext == ".pdf":
+        try:
+            from pypdf import PdfReader  # noqa: PLC0415
+        except ImportError:
+            try:
+                from PyPDF2 import PdfReader  # noqa: PLC0415
+            except ImportError:
+                return None, ("PDF support needs `pip install pypdf` "
+                              "in the companion venv")
+        try:
+            reader = PdfReader(io.BytesIO(data))
+            pages = [(p.extract_text() or "") for p in reader.pages]
+        except Exception as e:
+            return None, f"PDF parse failed: {type(e).__name__}: {e}"
+        text = "\n\n".join(pages).strip()
+        meta.update({"pages": len(pages), "chars": len(text)})
+        header = f"FILE: {name} ({size:,} bytes, PDF, {len(pages)} page(s))\n\n"
+        return header + _cap_text(text), meta
+
+    if ext == ".docx":
+        try:
+            from docx import Document  # noqa: PLC0415
+        except ImportError:
+            return None, ("DOCX support needs `pip install python-docx` "
+                          "in the companion venv")
+        try:
+            doc = Document(io.BytesIO(data))
+            paras = [p.text for p in doc.paragraphs if p.text]
+        except Exception as e:
+            return None, f"DOCX parse failed: {type(e).__name__}: {e}"
+        text = "\n".join(paras)
+        meta["chars"] = len(text)
+        header = (f"FILE: {name} ({size:,} bytes, DOCX, "
+                  f"{len(paras)} paragraph(s))\n\n")
+        return header + _cap_text(text), meta
+
+    if ext in _PCAP_EXTS:
+        tsh = shutil.which("tshark")
+        if not tsh:
+            return None, ("PCAP summary needs tshark on the machine "
+                          "running Companion. On the VM: "
+                          "`sudo apt install tshark`.")
+        # Write to a temp file so tshark can seek. cleanup is unconditional.
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            def _run(cmd, timeout=30):
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       timeout=timeout, errors="replace")
+                    return r.stdout or (r.stderr or "").strip()
+                except Exception as e:
+                    return f"[{type(e).__name__}: {e}]"
+
+            caps = _run(["capinfos", "-c", "-d", "-t", "-i", "-u", path])
+            protos = _run([tsh, "-r", path, "-q", "-z", "io,phs"])
+            convo = _run([tsh, "-r", path, "-q", "-z", "conv,ip"])
+            head = _run([tsh, "-r", path, "-c", "40",
+                         "-T", "fields", "-e", "frame.time_relative",
+                         "-e", "ip.src", "-e", "ip.dst",
+                         "-e", "_ws.col.Protocol",
+                         "-e", "_ws.col.Info"])
+        finally:
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
+        summary = (
+            f"FILE: {name} ({size:,} bytes, PCAP)\n\n"
+            f"== capinfos ==\n{caps}\n\n"
+            f"== protocol hierarchy ==\n{protos[:3000]}\n\n"
+            f"== IP conversations (top) ==\n{convo[:3000]}\n\n"
+            f"== first 40 packets ==\n{head[:3000]}")
+        meta["chars"] = len(summary)
+        return _cap_text(summary), meta
+
+    return None, (f"Unsupported file type: {ext or '(no extension)'}. "
+                  f"Supported: text/code, PDF, DOCX, PCAP.")
+
+
+# --------------------------------------------------------------------------
 class ChatStore:
     def __init__(self, db_path):
         db_path = pathlib.Path(db_path)
@@ -655,6 +801,33 @@ _APP_CSS = """
     width: 34px; height: 34px; border-radius: 50%;
     background: var(--violet); color: #fff; border: none;
     cursor: pointer; font-size: 15px; }
+  /* Paperclip button in the composer: same absolute style as send, on
+     the LEFT. The dcc.Upload wrapper is display:inline-block so this
+     works. */
+  .composer .attach-btn { position: absolute; left: 8px; bottom: 8px;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: transparent; color: var(--ink-mute);
+    border: 1px solid var(--border); cursor: pointer; font-size: 15px; }
+  .composer .attach-btn:hover { color: var(--ink); background: var(--panel); }
+  .composer textarea { padding-left: 52px; }  /* room for the paperclip */
+  /* Attachment chip: sits ABOVE the composer showing the current file. */
+  .attach-chip { max-width: 820px; margin: 0 auto 6px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 4px; min-height: 0; }
+  .attach-chip.has-file { padding: 6px 10px; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12.5px; color: var(--ink); }
+  .attach-chip .kind { font-family: "SF Mono", monospace; color: var(--violet);
+    background: var(--panel); padding: 2px 6px; border-radius: 4px;
+    font-size: 11px; }
+  .attach-chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .attach-chip .size { color: var(--ink-mute); font-size: 11px; }
+  .attach-chip .rm { background: none; border: none; color: var(--ink-mute);
+    cursor: pointer; font-size: 15px; padding: 0 6px; }
+  .attach-chip .rm:hover { color: var(--ink); }
+  .attach-chip.error { background: #3a1c1c; color: #ffa0a0;
+    border-color: #5a2a2a; }
   .footer { text-align: center; color: var(--ink-mute); font-size: 10.5px;
     padding: 6px 8px 0; }
   .badge { display: inline-flex; align-items: center; padding: 3px 8px;
@@ -824,6 +997,9 @@ def build_app(tunnel, client, store, port, url_base=None):
         dcc.Store(id="active-chat-id", storage_type="session"),
         dcc.Store(id="stream-token"),           # bumps on send to arm poll
         dcc.Store(id="sidebar-open", data=False),
+        # Attached file waiting to be sent with the next user message.
+        # Cleared after send. {"name","kind","chars","text"} or None.
+        dcc.Store(id="attached-file", data=None),
         # Poll is always on: 300 ms while a stream is live (fast paint),
         # 2 s otherwise (light background refresh so a new chat opened
         # from another window shows up, and so the final assistant frame
@@ -871,7 +1047,21 @@ def build_app(tunnel, client, store, port, url_base=None):
                 ], className="topbar"),
                 html.Div(id="chat-area", className="chat-area"),
                 html.Div([
+                    # Attachment chip (hidden when no file attached).
+                    html.Div(id="attach-chip", className="attach-chip"),
                     html.Div([
+                        # File-drop / paperclip button. Sits inside the
+                        # composer, opens the OS file picker on tap.
+                        # Also accepts drag+drop across the whole page
+                        # target so mobile long-press-share works too.
+                        dcc.Upload(
+                            id="file-upload",
+                            children=html.Button(
+                                "📎", id="attach-btn",
+                                className="attach-btn",
+                                title="Attach a file"),
+                            multiple=False,
+                            style={"display": "inline-block"}),
                         dcc.Textarea(id="composer-text",
                                      placeholder=("Type a message "
                                                   "(Shift+Enter for a new "
@@ -882,7 +1072,8 @@ def build_app(tunnel, client, store, port, url_base=None):
                     ], className="composer-inner"),
                     html.Div("Content is generated by a local model on your VM"
                              " and may be inaccurate. Not stored anywhere but"
-                             " ~/ai-companion/chats.db.",
+                             " ~/ai-companion/chats.db. Attached files stay"
+                             " local and get pasted into the next message.",
                              className="footer"),
                 ], className="composer"),
                 # Settings modal
@@ -963,21 +1154,62 @@ def build_app(tunnel, client, store, port, url_base=None):
             stream = _STREAMS.get(chat_id)
         return _render_messages(msgs, live_stream=stream)
 
+    # --- attachment: pick up the file, extract text, store in attached-file
+    @app.callback(
+        Output("attached-file", "data"),
+        Output("attach-chip", "children"),
+        Output("attach-chip", "className"),
+        Input("file-upload", "contents"),
+        Input("attach-remove-btn", "n_clicks"),
+        State("file-upload", "filename"),
+        prevent_initial_call=True,
+    )
+    def on_attach(contents, rm_click, filename):
+        trig = dash.ctx.triggered_id
+        if trig == "attach-remove-btn":
+            return None, "", "attach-chip"
+        if not contents or not filename:
+            return no_update, no_update, no_update
+        text, meta = extract_file(filename, contents)
+        if text is None:
+            # extraction failed: show error chip but keep no attachment
+            return None, [
+                html.Span("!", className="kind"),
+                html.Span(f"{filename}: {meta}", className="name"),
+                html.Button("×", id="attach-remove-btn",
+                            className="rm", n_clicks=0)
+            ], "attach-chip has-file error"
+        chip = [
+            html.Span((meta.get("kind") or "?").upper(), className="kind"),
+            html.Span(meta.get("name") or filename, className="name"),
+            html.Span(_pretty_bytes(meta.get("size") or 0),
+                      className="size"),
+            html.Button("×", id="attach-remove-btn", className="rm",
+                        n_clicks=0),
+        ]
+        return {"name": meta.get("name"), "kind": meta.get("kind"),
+                "chars": meta.get("chars"), "text": text}, chip, \
+            "attach-chip has-file"
+
     @app.callback(
         Output("stream-poll", "interval"),      # 300 while streaming, else 2000
         Output("composer-text", "value"),
         Output("stream-token", "data"),
         Output("active-chat-id", "data", allow_duplicate=True),
+        Output("attached-file", "data", allow_duplicate=True),
+        Output("attach-chip", "children", allow_duplicate=True),
+        Output("attach-chip", "className", allow_duplicate=True),
         Input("send-btn", "n_clicks"),
         Input({"type": "suggestion", "text": dash.ALL}, "n_clicks"),
         Input("stream-poll", "n_intervals"),
         State("composer-text", "value"),
         State("active-chat-id", "data"),
         State("model-select", "value"),
+        State("attached-file", "data"),
         prevent_initial_call=True,
     )
     def kick_send(send_clicks, sugg_clicks, _tick, composer_text, chat_id,
-                  model):
+                  model, attached):
         trig = dash.ctx.triggered_id
         # 1. suggestion clicked -> send its prompt
         if isinstance(trig, dict) and trig.get("type") == "suggestion":
@@ -986,7 +1218,8 @@ def build_app(tunnel, client, store, port, url_base=None):
             # this trigger when SOMEONE actually clicked.
             n_now = next((n for n in (sugg_clicks or []) if n), None)
             if not n_now:
-                return no_update, no_update, no_update, no_update
+                return (no_update, no_update, no_update, no_update,
+                    no_update, no_update, no_update)
             composer_text = trig.get("text", "")
         elif trig == "stream-poll":
             # tick: slow the poll IF nothing is streaming anymore. The
@@ -1003,10 +1236,12 @@ def build_app(tunnel, client, store, port, url_base=None):
                         _STREAMS.pop(cid, None)
             token_out = time.time() if had_finished else no_update
             new_interval = 300 if any_active else 2000
-            return new_interval, no_update, token_out, no_update
+            return (new_interval, no_update, token_out, no_update,
+                    no_update, no_update, no_update)
         # 2. actual send
         if not composer_text or not composer_text.strip():
-            return no_update, no_update, no_update, no_update
+            return (no_update, no_update, no_update, no_update,
+                    no_update, no_update, no_update)
         chat_id_out = no_update
         # Session-storage keeps active-chat-id across browser refreshes,
         # so a chat_id from a previous run can survive after the DB was
@@ -1023,12 +1258,14 @@ def build_app(tunnel, client, store, port, url_base=None):
                 store.set_chat_model(chat_id, arg.strip())
                 store.append_message(chat_id, "system",
                                      f"[model set to {arg.strip()}]")
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         if verb == "system":
             store.set_chat_system(chat_id, arg)
             store.append_message(chat_id, "system",
                                  f"[system prompt updated]")
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         if verb in ("temp", "temperature"):
             try:
                 store.set_chat_temperature(chat_id, float(arg))
@@ -1037,7 +1274,8 @@ def build_app(tunnel, client, store, port, url_base=None):
             except ValueError:
                 store.append_message(chat_id, "system",
                                      f"[bad temperature: {arg!r}]")
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         if verb == "clear":
             with _STREAMS_LOCK:
                 _STREAMS.pop(chat_id, None)
@@ -1045,12 +1283,14 @@ def build_app(tunnel, client, store, port, url_base=None):
             with store._lock:
                 store._db.execute("DELETE FROM messages WHERE chat_id=?",
                                   (chat_id,))
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         if verb == "help":
             store.append_message(chat_id, "system",
                                  "commands: /model <name> · /system <text> "
                                  "· /temp <0.0-2.0> · /clear · /save · /help")
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         if verb == "save":
             path = pathlib.Path.home() / "ai-companion" / "exports"
             path.mkdir(parents=True, exist_ok=True)
@@ -1064,20 +1304,29 @@ def build_app(tunnel, client, store, port, url_base=None):
             out_path.write_text("\n".join(body), encoding="utf-8")
             store.append_message(chat_id, "system",
                                  f"[saved to {out_path}]")
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
 
         # 3. real chat message.
         # get_chat MUST already see the row we just inserted - autocommit
         # + WAL make that guarantee across threads. If it doesn't (schema
         # mismatch, disk full, whatever), surface it loudly instead of
         # silently AttributeError'ing on chat.get(...).
+
+        # If a file was attached, prepend its extracted text so the
+        # model sees "here is a file, here is my question about it".
+        # The stored user message includes the WHOLE thing so scrolling
+        # back the conversation still shows the context.
+        if attached and (attached.get("text") or "").strip():
+            text = attached["text"] + "\n\n---\n\n" + text
         store.append_message(chat_id, "user", text)
         chat = store.get_chat(chat_id) or {}
         if not chat:
             print(f"[companion] get_chat({chat_id}) returned None right "
                   "after new_chat/append; storage is misbehaving",
                   file=sys.stderr)
-            return no_update, "", no_update, chat_id_out
+            return (no_update, "", no_update, chat_id_out,
+                    no_update, no_update, no_update)
         chosen_model = chat.get("model") or model
         # build the messages array Ollama wants
         history = []
@@ -1099,7 +1348,8 @@ def build_app(tunnel, client, store, port, url_base=None):
         t.start()
         # arm the poll and clear the composer; stream-token bump forces the
         # paint callback to re-render even before the first token lands
-        return 300, "", (send_clicks or 0), chat_id_out
+        return (300, "", (send_clicks or 0), chat_id_out,
+                None, "", "attach-chip")   # clear the attachment
 
     @app.callback(
         Output("settings-modal", "is_open"),
