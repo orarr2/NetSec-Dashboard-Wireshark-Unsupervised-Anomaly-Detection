@@ -134,6 +134,29 @@ def test_worker_happy_path(env):
                            md_fn=_stub_md, data_root=str(root)) is None
 
 
+def test_worker_writes_provenance_into_context(env):
+    """The report's 'source: file X, sensor Y' line reads context, and
+    build_context already ran inside analyze_fn - so the worker must
+    patch `context` itself, not only S. Sessions 19-23 shipped with
+    'source: -' because the keys landed on S after the fact."""
+    conn, sid, sensor, root = env
+    seen = {}
+
+    def md_fn(pcap_path, out, assembled, client, context):
+        seen["context"] = context
+        seen["out_context"] = out.get("context")
+        return "# Verdicts\n"
+
+    worker.run_once(conn, analyze_fn=_stub_analyze(), md_fn=md_fn,
+                    data_root=str(root))
+    ctx = seen["context"]
+    assert ctx["original_filename"] == "cap.pcap"
+    assert ctx["sensor_name"] == "s"
+    # verdicts.json carries the same dict, so the S1-vs-S2 compare report
+    # (which only ever reads that file) sees the provenance too.
+    assert seen["out_context"] is ctx
+
+
 def test_worker_error_path(env):
     conn, sid, _, root = env
 

@@ -219,15 +219,36 @@ def process_job(conn, job, analyze_fn=None, md_fn=None, data_root=None):
         # the sha-named storage path (0bbe30ec_new4.pcapng). The user-
         # facing metadata (original filename, which sensor uploaded)
         # lives in the DB row we already have.
-        S["_source_pcap_name"] = job.get("orig_name")
+        #
+        # It has to be written into `context`, not only into S: build_context
+        # already ran INSIDE analyze_fn, so an S key set here arrives too
+        # late and the report renders "source: -" (which is exactly what
+        # sessions 19-23 shipped). `context` is the same object as
+        # out["context"], so patching it here also fixes verdicts.json and
+        # therefore the S1-vs-S2 compare report. S keeps the keys too, for
+        # any caller that re-derives a context from it.
+        sensor_name = None
         try:
             sensor_row = conn.execute(
                 "SELECT name FROM sensors WHERE id=?",
                 (job.get("sensor_id"),)).fetchone()
             if sensor_row:
-                S["_source_sensor"] = sensor_row["name"]
+                sensor_name = sensor_row["name"]
         except Exception:
             pass
+        S["_source_pcap_name"] = job.get("orig_name")
+        if sensor_name:
+            S["_source_sensor"] = sensor_name
+        if isinstance(context, dict):
+            if job.get("orig_name"):
+                context["original_filename"] = job["orig_name"]
+            if sensor_name:
+                context["sensor_name"] = sensor_name
+            # The worker owns verdicts.json, so it guarantees the capture
+            # context is in it rather than trusting analyze_fn to have
+            # done it. The pair-compare report reads only this file.
+            if isinstance(out, dict):
+                out["context"] = context
 
         # OSINT threat-intel re-rank (stage YA) BEFORE persistence, so the
         # stored priority reflects an external peer's reputation. Off
