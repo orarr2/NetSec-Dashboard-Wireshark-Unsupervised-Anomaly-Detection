@@ -23,14 +23,19 @@ sudo cp "${NETSEC_DIR}/deploy/brand/sessions.html" "${PORTAL_DIR}/sessions.html"
 echo "[portal] copying brand assets -> ${PORTAL_DIR}/brand/..."
 # NOT a symlink: the portal http.server runs as User=nobody and
 # /home/ubuntu is 0750, so a symlink target inside there is unreadable.
-# One copy is fine - the brand kit is tiny (30KB) and refresh is
-# handled by re-running install-portal.sh (idempotent).
+# One copy is fine - the brand kit is tiny (~170KB with the fonts) and
+# refresh is handled by re-running install-portal.sh (idempotent).
 sudo rm -rf "${PORTAL_DIR}/brand"
-sudo mkdir -p "${PORTAL_DIR}/brand"
+sudo mkdir -p "${PORTAL_DIR}/brand/fonts"
 sudo cp "${NETSEC_DIR}/deploy/brand/netsec-brand.css" \
         "${NETSEC_DIR}/deploy/brand/netsec-logo.svg" \
         "${NETSEC_DIR}/deploy/brand/netsec-logo.b64" \
+        "${NETSEC_DIR}/deploy/brand/favicon.svg" \
+        "${NETSEC_DIR}/deploy/brand/apple-touch-icon.png" \
         "${PORTAL_DIR}/brand/"
+# Self-hosted Inter Tight (replaces the Google Fonts pull; see the
+# @font-face block in netsec-brand.css).
+sudo cp "${NETSEC_DIR}/deploy/brand/fonts/"*.woff2 "${PORTAL_DIR}/brand/fonts/"
 sudo chmod -R a+r "${PORTAL_DIR}/brand"
 
 echo "[portal] symlinking /reports -> /srv/netsec/reports..."

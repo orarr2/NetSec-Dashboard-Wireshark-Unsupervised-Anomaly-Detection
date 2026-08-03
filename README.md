@@ -54,7 +54,7 @@ traffic, coverage).
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
 | `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
-| `companion/` | AI Companion - Dash chat over local Ollama with drag-and-drop file support (text/PDF/DOCX/PCAP). Runs on the VM as `netsec-companion.service`; the same file works from a laptop via SSH tunnel. See `companion/README.md` |
+| `companion/` | AI Companion - Dash chat over local Ollama (streaming, markdown replies, stop button, per-chat settings). Runs on the VM as `netsec-companion.service`; the same file works from a laptop via SSH tunnel. See `companion/README.md` |
 | `tools/netsec_rag.py` + `tools/netsec_rag_web.py` | Retrieval-augmented QA over the report archive + arbitrary indexed files. Ollama embeddings, SQLite vector store, streaming Dash UI structured like Companion. Runs on the VM as `netsec-rag.service` |
 | `server/` | Analyzer VM stack - signed ingest API, worker, retention, notify. Runs the exact detection pipeline of the dashboard on a small VM you control |
 | `deploy/` | Docker Compose + Dockerfiles + Caddyfile + systemd units + install scripts for the whole VM stack. See `deploy/README.md` for the fresh-VM quick start |

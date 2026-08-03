@@ -23,7 +23,6 @@ import argparse
 import json
 import os
 import pathlib
-import queue
 import sqlite3
 import sys
 import threading
@@ -35,13 +34,15 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import netsec_rag as R  # noqa: E402
 
+# Dash only. No bootstrap: nothing in this layout used it, yet every
+# page load pulled the 200KB SLATE theme from a CDN (and hung on it
+# when the tailnet client had no internet).
 try:
     import dash
     from dash import Dash, dcc, html, Input, Output, State, no_update, ALL, ctx
-    import dash_bootstrap_components as dbc
 except ImportError as e:
     print(f"[rag-web] missing dep: {e}\n"
-          "  install with: pip install dash dash_bootstrap_components",
+          "  install with: pip install dash",
           file=sys.stderr)
     sys.exit(2)
 
@@ -259,13 +260,19 @@ def _source_card(i, hit):
 
 
 def _history_group(label, rows):
+    # The text loads the query; the trash icon deletes it (the DB
+    # method existed all along, there was just no way to reach it from
+    # the UI). Text and icon are SIBLINGS, Companion-style, so a tap on
+    # the icon does not also count as a tap on the row.
     return [
         html.H2(label),
         *[html.Div([
             html.Span(row["question"][:60] or "(untitled)",
-                      className="q-text"),
-        ], id={"type": "hist-row", "id": row["id"]},
-            className="q-row", n_clicks=0)
+                      id={"type": "hist-row", "id": row["id"]},
+                      n_clicks=0, className="q-text"),
+            html.Button("🗑", id={"type": "hist-del", "id": row["id"]},
+                        n_clicks=0, className="q-del", title="Delete"),
+        ], className="q-row")
           for row in rows],
     ]
 
@@ -316,20 +323,33 @@ _LOGO_DATA_URL = _load_brand_asset("netsec-logo.b64").strip()
 
 _CSS = _BRAND_CSS + """
 /* ---- RAG-specific overrides on top of the shared brand tokens ------- */
+* { box-sizing: border-box; }
 .rag-shell { display: flex; height: 100vh; height: 100dvh; }
-.sidebar { width: 260px; padding: 14px 10px;
-  overflow-y: auto; border-right: 1px solid var(--glass-border);
+.sidebar { width: 260px;
+  padding: 14px 10px calc(14px + env(safe-area-inset-bottom));
+  overflow-y: auto; overscroll-behavior: contain;
+  border-right: 1px solid var(--glass-border);
   display: flex; flex-direction: column;
-  background: rgba(15, 10, 30, 0.6);
+  background: var(--bar-bg-strong);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur); }
 .sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
   text-transform: uppercase; margin: 14px 4px 6px; font-weight: 600;
   font-family: "SF Mono", monospace; }
 .sidebar .q-row { padding: 8px 10px; border-radius: 10px; cursor: pointer;
-  margin: 2px 0; font-size: 13px; color: var(--ink-dim); white-space: nowrap;
+  margin: 2px 0; font-size: 13px; color: var(--ink-dim);
+  display: flex; align-items: center; gap: 4px; }
+.sidebar .q-row .q-text { flex: 1; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .sidebar .q-row:hover { background: var(--glass-bg-strong); color: var(--ink); }
+.sidebar .q-del { display: none; background: transparent; border: none;
+  color: var(--ink-mute); cursor: pointer; font-size: 13px;
+  padding: 2px 6px; border-radius: 6px; line-height: 1; flex-shrink: 0; }
+.sidebar .q-row:hover .q-del { display: block; }
+.sidebar .q-del:hover { color: var(--red-accent);
+  background: rgba(248, 113, 113, 0.15); }
+/* touch screens have no hover: keep the delete visible */
+@media (max-width: 699px) { .sidebar .q-del { display: block; } }
 .sidebar .new-btn { display: flex; align-items: center; width: 100%;
   padding: 10px 14px; border: 1px solid var(--glass-border);
   background: var(--glass-bg-strong); color: var(--ink); border-radius: 10px;
@@ -343,12 +363,13 @@ _CSS = _BRAND_CSS + """
   z-index: 40; }
 .backdrop.show { display: block; }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.topbar { display: flex; align-items: center; padding: 12px 20px;
+.topbar { display: flex; align-items: center;
+  padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
   border-bottom: 1px solid var(--glass-border);
-  background: rgba(15, 10, 30, 0.55);
+  background: var(--bar-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  gap: 12px; }
+  gap: 12px; position: relative; z-index: 100; }
 .topbar .hamburger { display: none; background: none; border: none;
   color: var(--ink); font-size: 22px; cursor: pointer; padding: 0 4px;}
 .topbar .brand-logo { height: 22px; display: block; }
@@ -360,7 +381,26 @@ _CSS = _BRAND_CSS + """
 .topbar select, .topbar button.icon { background: var(--glass-bg-strong);
   color: var(--ink); border: 1px solid var(--glass-border); border-radius: 10px;
   padding: 6px 10px; font-size: 12px; font-family: var(--font-sans); }
-.chat { flex: 1; overflow-y: auto; padding: 22px 20px; }
+/* Dash dropdowns follow the theme (they rendered as stock white
+   react-select boxes with hardcoded black text before) and their open
+   menu paints above the chat instead of clipping under it. */
+.Select-control, .Select-value, .Select-input {
+  background: var(--glass-bg-strong) !important; color: var(--ink) !important;
+  border-color: var(--glass-border) !important; }
+.Select-value-label { color: var(--ink) !important; }
+.Select-option { background: var(--bg-panel) !important;
+  color: var(--ink) !important; }
+.Select-option.is-focused { background: var(--glass-bg-strong) !important; }
+.Select-menu-outer { z-index: 200 !important;
+  background: var(--bg-panel) !important;
+  color: var(--ink) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+.dd { font-size: 12px; }
+.dd-scope { width: 220px; }
+.dd-gen { width: 100px; }
+.chat { flex: 1; overflow-y: auto; padding: 22px 20px;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   max-width: 760px; margin: 40px auto; }
 .suggestions .card { padding: 14px 16px; cursor: pointer;
@@ -374,7 +414,23 @@ _CSS = _BRAND_CSS + """
 .msg.assistant { background: var(--glass-bg); color: var(--ink);
   border: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur); }
+  -webkit-backdrop-filter: var(--glass-blur);
+  white-space: normal; }
+/* answers render as markdown; keep the blocks tight inside the bubble */
+.msg.assistant .md > p:first-child { margin-top: 0; }
+.msg.assistant .md > p:last-child { margin-bottom: 0; }
+.msg.assistant .md p { margin: 8px 0; }
+.msg.assistant .md ul, .msg.assistant .md ol {
+  margin: 8px 0; padding-left: 22px; }
+.msg.assistant .md pre { background: #0c0818;
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 10px 12px; overflow-x: auto; font-size: 12px;
+  white-space: pre; }
+.msg.assistant .md pre code, .msg.assistant .md .hljs {
+  background: transparent; }
+.msg.assistant .md :not(pre) > code {
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
+  border-radius: 5px; padding: 1px 5px; font-size: 12px; }
 .msg .meta { margin-top: 10px; font-size: 11px; color: var(--ink-mute);
   font-family: "SF Mono", monospace; }
 .sources-wrap { max-width: 900px; margin: 0 auto 24px; }
@@ -386,15 +442,18 @@ _CSS = _BRAND_CSS + """
   padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto;
   font-family: "SF Mono", monospace; }
 .composer { border-top: 1px solid var(--glass-border);
-  background: rgba(15, 10, 30, 0.55);
+  background: var(--bar-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  padding: 14px 20px; display: flex; gap: 10px; align-items: end; }
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; align-items: end; }
 .composer textarea { flex: 1; background: var(--glass-bg-strong);
   color: var(--ink);
   border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px 14px;
   font-size: 14px; resize: none; min-height: 42px; max-height: 160px;
   font-family: var(--font-sans); }
+/* 16px on touch screens or iOS Safari force-zooms the page on focus */
+@media (pointer: coarse) { .composer textarea { font-size: 16px; } }
 .composer textarea:focus { border-color: var(--violet); outline: none; }
 .composer button { background: linear-gradient(135deg,
     var(--violet) 0%, var(--violet-bright) 100%);
@@ -408,18 +467,27 @@ _CSS = _BRAND_CSS + """
   padding: 8px 0 12px; border-top: 1px solid var(--glass-border);
   font-family: "SF Mono", monospace; }
 @media (max-width: 699px) {
+  /* z 150/140: above the topbar so the drawer is not clipped by it */
   .sidebar { position: fixed; left: 0; top: 0; bottom: 0;
-    transform: translateX(-100%); transition: transform .2s ease; z-index: 50; }
+    width: 82vw; max-width: 320px;
+    transform: translateX(-100%); transition: transform .2s ease; z-index: 150; }
+  .backdrop { z-index: 140; }
   .sidebar.open { transform: translateX(0); }
   .topbar .hamburger { display: block; }
-  .suggestions { grid-template-columns: 1fr; }
+  .suggestions { grid-template-columns: 1fr; margin: 24px auto; }
+  /* the two dropdowns get their own row instead of overflowing the bar */
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .dd-scope { flex: 1 1 140px; width: auto; min-width: 0; }
+  .dd-gen { width: 90px; }
+}
+@media (max-width: 480px) {
+  .topbar #stats-badge { display: none; }
 }
 """
 
 
 def build_app(engine, history, url_base=None):
-    dash_kwargs = dict(external_stylesheets=[dbc.themes.SLATE],
-                       title="NetSec RAG", update_title=None,
+    dash_kwargs = dict(title="NetSec RAG", update_title=None,
                        suppress_callback_exceptions=True)
     if url_base:
         if not (url_base.startswith("/") and url_base.endswith("/")):
@@ -453,24 +521,59 @@ def build_app(engine, history, url_base=None):
                          "text": (h.get("text") or "")[:400]}
                         for h in (res.get("sources") or [])],
         })
+    # Zoom stays enabled (a11y); the 16px composer font is what stops
+    # the iOS focus-zoom now. Icons come from the portal's /brand/
+    # path; standalone runs 404 them harmlessly.
     _META = ('<meta name="viewport" content="width=device-width,'
-             'initial-scale=1,viewport-fit=cover,user-scalable=no">'
-             '<meta name="theme-color" content="#0f0f11" '
-             'media="(prefers-color-scheme: dark)">'
-             '<meta name="theme-color" content="#ffffff" '
-             'media="(prefers-color-scheme: light)">'
-             '<meta name="apple-mobile-web-app-capable" content="yes">')
+             'initial-scale=1,viewport-fit=cover">'
+             '<meta name="theme-color" content="#07050f">'
+             '<meta name="apple-mobile-web-app-capable" content="yes">'
+             '<link rel="icon" href="/brand/favicon.svg" '
+             'type="image/svg+xml">'
+             '<link rel="apple-touch-icon" '
+             'href="/brand/apple-touch-icon.png">')
+    # Document-level listeners survive React re-renders: Enter asks on
+    # keyboards (Shift+Enter for a newline), and the answer view stays
+    # pinned to the bottom while tokens stream unless the user scrolls
+    # up to read.
+    _BOOT_JS = """<script>
+(function () {
+  document.addEventListener("keydown", function (e) {
+    if (e.target && e.target.id === "q-input"
+        && e.key === "Enter" && !e.shiftKey && !e.isComposing
+        && window.matchMedia("(pointer: fine)").matches) {
+      e.preventDefault();
+      var btn = document.getElementById("ask-btn");
+      if (btn) btn.click();
+    }
+  });
+  var follow = true;
+  document.addEventListener("scroll", function (e) {
+    var a = e.target;
+    if (!a || a.id !== "chat-view") return;
+    follow = (a.scrollHeight - a.scrollTop - a.clientHeight) < 220;
+  }, true);
+  new MutationObserver(function () {
+    var a = document.getElementById("chat-view");
+    if (a && follow) a.scrollTop = a.scrollHeight;
+  }).observe(document.body, {childList: true, subtree: true});
+})();
+</script>"""
     app.index_string = ("<!DOCTYPE html><html><head>{%metas%}<title>"
                         "{%title%}</title>" + _META + "<style>" + _CSS
                         + "</style></head><body><div id='app-root'>"
                         "{%app_entry%}</div><footer>{%config%}{%scripts%}"
-                        "{%renderer%}</footer></body></html>")
+                        "{%renderer%}</footer>" + _BOOT_JS
+                        + "</body></html>")
 
     app.layout = html.Div([
         dcc.Store(id="active-qid", data=None),
         dcc.Store(id="sidebar-open", data=False),
         dcc.Store(id="stream-tick", data=0),
-        dcc.Interval(id="poll", interval=2000, disabled=True),
+        dcc.Store(id="hist-action"),
+        # 400ms, not 2s: this only runs while an answer is streaming,
+        # and at 2s the tokens landed in visible chunks.
+        dcc.Interval(id="poll", interval=400, disabled=True),
         # The shell div is the flex container that puts sidebar + main
         # side by side. Without this wrapper (with its own className)
         # Dash's react-entry-point puts a plain block-level div in the
@@ -502,16 +605,13 @@ def build_app(engine, history, url_base=None):
                 dcc.Dropdown(
                     id="scope-select", clearable=False, searchable=False,
                     options=_default_scope_options(engine),
-                    value="__all__",
-                    style={"width": "220px", "fontSize": "12px",
-                           "color": "black"}),
+                    value="__all__", className="dd dd-scope"),
                 dcc.Dropdown(
                     id="gen-select", clearable=False, searchable=False,
                     options=[{"label": "local", "value": "local"},
                              {"label": "groq", "value": "groq"}],
                     value=(R.GEN_MODEL and "local") or "local",
-                    style={"width": "100px", "fontSize": "12px",
-                           "color": "black"}),
+                    className="dd dd-gen"),
                 html.Button("🌙", id="theme-btn", n_clicks=0,
                             className="icon"),
             ], className="topbar"),
@@ -534,27 +634,39 @@ def build_app(engine, history, url_base=None):
     ])
 
     # -------- clientside: theme toggle + hamburger + backdrop close ------
+    # Shared "netsec-theme" key: flipping the theme here also flips the
+    # portal and Companion (same origin), and vice versa. The meta
+    # theme-color follows so the iOS status bar matches.
     app.clientside_callback(
         """function(n) {
-            const cur = document.documentElement.getAttribute('data-theme')
-                        || (window.matchMedia('(prefers-color-scheme: dark)')
-                            .matches ? 'dark' : 'light');
-            const next = cur === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
-            try { localStorage.setItem('rag-theme', next); } catch(e){}
-            return next === 'dark' ? '🌙' : '☀️';
+            const apply = (theme) => {
+                if (theme === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                }
+                const meta = document.querySelector('meta[name="theme-color"]');
+                if (meta) meta.content =
+                    theme === 'light' ? '#f4f2fa' : '#07050f';
+            };
+            if (!n) {
+                let saved = null;
+                try {
+                    saved = localStorage.getItem('netsec-theme')
+                        || localStorage.getItem('rag-theme');
+                } catch (e) {}
+                if (saved === 'light') { apply('light'); return '☀️'; }
+                return '🌙';
+            }
+            const cur = document.documentElement.getAttribute('data-theme');
+            const next = cur === 'light' ? 'dark' : 'light';
+            apply(next);
+            try { localStorage.setItem('netsec-theme', next); } catch(e){}
+            return next === 'light' ? '☀️' : '🌙';
         }""",
         Output("theme-btn", "children"),
         Input("theme-btn", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    app.clientside_callback(
-        """function(){ try {
-            const t = localStorage.getItem('rag-theme');
-            if (t) document.documentElement.setAttribute('data-theme', t);
-        } catch(e){} return window.dash_clientside.no_update; }""",
-        Output("theme-btn", "className"),
-        Input("theme-btn", "id"),
+        prevent_initial_call=False,
     )
 
     # -------- sidebar toggle (mobile) ------------------------------------
@@ -605,6 +717,21 @@ def build_app(engine, history, url_base=None):
         return out
 
     # -------- ask ---------------------------------------------------------
+    def _start_query(q, generator, scope, tick):
+        where = None
+        if scope and scope != "__all__":
+            try:
+                where = json.loads(scope)
+            except Exception:
+                where = None
+        qid = history.new_query(q, generator=generator, scope=where)
+        threading.Thread(
+            target=_stream_worker,
+            args=(engine, history, qid, q, generator, where),
+            daemon=True,
+        ).start()
+        return qid, "", False, (tick or 0) + 1
+
     @app.callback(
         Output("active-qid", "data"),
         Output("q-input", "value"),
@@ -621,19 +748,71 @@ def build_app(engine, history, url_base=None):
         q = (q or "").strip()
         if not q:
             return no_update, no_update, no_update, no_update
-        where = None
-        if scope and scope != "__all__":
-            try:
-                where = json.loads(scope)
-            except Exception:
-                where = None
-        qid = history.new_query(q, generator=generator, scope=where)
-        threading.Thread(
-            target=_stream_worker,
-            args=(engine, history, qid, q, generator, where),
-            daemon=True,
-        ).start()
-        return qid, "", False, (tick or 0) + 1
+        return _start_query(q, generator, scope, tick)
+
+    # -------- suggestion cards run their question on tap ------------------
+    # (they rendered fine before but were wired to nothing - clicking
+    # them did nothing at all)
+    @app.callback(
+        Output("active-qid", "data", allow_duplicate=True),
+        Output("q-input", "value", allow_duplicate=True),
+        Output("poll", "disabled", allow_duplicate=True),
+        Output("stream-tick", "data", allow_duplicate=True),
+        Input({"type": "suggest", "text": ALL}, "n_clicks"),
+        State("gen-select", "value"),
+        State("scope-select", "value"),
+        State("stream-tick", "data"),
+        prevent_initial_call=True,
+    )
+    def on_suggest(all_clicks, generator, scope, tick):
+        trg = ctx.triggered_id
+        if not isinstance(trg, dict) or all(not c for c in all_clicks):
+            return no_update, no_update, no_update, no_update
+        q = (trg.get("text") or "").strip()
+        if not q:
+            return no_update, no_update, no_update, no_update
+        return _start_query(q, generator, scope, tick)
+
+    # -------- history row delete -----------------------------------------
+    # Browser confirm() happens clientside; the outcome lands in a
+    # Store and the server applies it (Companion's rename/delete shape).
+    app.clientside_callback(
+        """function(del_clicks) {
+            const ctx = window.dash_clientside.callback_context;
+            const trg = ctx.triggered_id;
+            if (!trg || typeof trg !== 'object') {
+                return window.dash_clientside.no_update;
+            }
+            if (!(del_clicks || []).some(function(n){ return n; })) {
+                return window.dash_clientside.no_update;
+            }
+            if (!window.confirm('Delete this query? This cannot be undone.')) {
+                return window.dash_clientside.no_update;
+            }
+            return {action: 'delete', id: trg.id};
+        }""",
+        Output("hist-action", "data"),
+        Input({"type": "hist-del", "id": ALL}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+
+    @app.callback(
+        Output("active-qid", "data", allow_duplicate=True),
+        Output("stream-tick", "data", allow_duplicate=True),
+        Input("hist-action", "data"),
+        State("active-qid", "data"),
+        State("stream-tick", "data"),
+        prevent_initial_call=True,
+    )
+    def apply_hist_action(action, active, tick):
+        if not isinstance(action, dict) or action.get("action") != "delete":
+            return no_update, no_update
+        qid = action.get("id")
+        if not qid:
+            return no_update, no_update
+        history.delete(qid)
+        new_active = None if qid == active else no_update
+        return new_active, (tick or 0) + 1
 
     # -------- history row click loads a past query -----------------------
     @app.callback(
@@ -728,11 +907,15 @@ def _render_qa(question, answer, sources, streaming=False, error=None,
     if error:
         children.append(html.Div(f"Error: {error}",
                                  className="msg assistant",
-                                 style={"color": "var(--accent)"}))
+                                 style={"color": "var(--red-accent)"}))
     else:
         cls = "msg assistant" + (" streaming" if streaming else "")
+        # The generator writes markdown (lists, code spans); render it
+        # instead of showing the raw source text.
         body = html.Div([
-            html.Span(answer or ("..." if streaming else "(no answer)")),
+            dcc.Markdown(answer or ("..." if streaming else "(no answer)"),
+                         className="md", link_target="_blank",
+                         highlight_config={"theme": "dark"}),
             html.Div(meta, className="meta") if meta and not streaming
             else None,
         ], className=cls)
@@ -747,21 +930,6 @@ def _render_qa(question, answer, sources, streaming=False, error=None,
             + [_source_card(i + 1, h) for i, h in enumerate(sources)],
             className="sources-wrap"))
     return children
-
-
-# --------------------------------------------------------------------------
-# Suggest-card click -> fill the composer with the suggestion text
-# --------------------------------------------------------------------------
-def _wire_suggestions(app):
-    app.clientside_callback(
-        """function(){
-            const el = document.querySelector('[data-dash-is-loading=\"true\"]');
-            return window.dash_clientside.no_update;
-        }""",
-        Output("q-input", "value", allow_duplicate=True),
-        Input("q-input", "id"),
-        prevent_initial_call=True,
-    )
 
 
 # --------------------------------------------------------------------------

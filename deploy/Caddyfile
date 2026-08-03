@@ -39,6 +39,12 @@
 # lock. The IP and short-name still route to the same site (basicauth
 # and reverse-proxy rules apply) but Caddy falls back to its internal
 # CA for them (short name / IP-based access shows a one-time warning).
+# Plain-http visits (Safari tries http:// first for a typed hostname it
+# has never seen) land on a redirect instead of a connection error.
+http://netsec-agent.tail37ac21.ts.net {
+    redir https://netsec-agent.tail37ac21.ts.net{uri} permanent
+}
+
 netsec-agent.tail37ac21.ts.net {
     tls /etc/netsec-tls/netsec-agent.tail37ac21.ts.net.crt /etc/netsec-tls/netsec-agent.tail37ac21.ts.net.key
 
@@ -52,6 +58,32 @@ netsec-agent.tail37ac21.ts.net {
         output stdout
         format console
     }
+
+    # The upstreams (python http.server, Dash) send everything
+    # uncompressed; report pages and sessions.json shrink 5-10x.
+    encode zstd gzip
+
+    header {
+        # Belt-and-braces for a private site: no MIME sniffing, no
+        # referrer leaking to the http-only LAN apps, no framing by
+        # other origins, and a year of HSTS (the ts.net cert is a real
+        # Let's Encrypt one, so https is always available).
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        X-Frame-Options SAMEORIGIN
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
+
+    # Brand assets get real cache lifetimes instead of a refetch per
+    # page view. Fonts and icons are effectively frozen (a month); the
+    # CSS can change on a redeploy, so it revalidates after an hour
+    # (the portal's http.server answers If-Modified-Since with 304).
+    # HTML stays uncached so edits show up on reload.
+    @fonts path /brand/fonts/* /brand/apple-touch-icon.png /brand/favicon.svg /brand/netsec-logo.svg
+    header @fonts Cache-Control "public, max-age=2592000"
+    @brandcss path /brand/*.css
+    header @brandcss Cache-Control "public, max-age=3600"
 
     # Upstreams: the apps bind to the Tailscale IP (100.68.246.54:xxxx)
     # so Caddy proxies straight to it. host.docker.internal would only

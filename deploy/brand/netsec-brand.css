@@ -9,9 +9,34 @@
  * instead.
  */
 
-/* Inter Tight (dashboard's primary sans) + Newsreader (secondary
-   serif for figure titles). CDN pulls, cached across pages. */
-@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap");
+/* Inter Tight, self-hosted from /brand/fonts/ (variable font, one file
+   covers 400-700). Was a Google Fonts @import; on a Tailscale-only
+   network that request stalls rendering when the client has no
+   internet, and it leaks visits to a third party. font-display: swap
+   paints system-font text immediately, the brand font swaps in when
+   the file lands. Newsreader was declared but never used by any of
+   these UIs, so it is not shipped; --font-serif falls to Georgia. */
+@font-face {
+    font-family: "Inter Tight";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/brand/fonts/inter-tight-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+        U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Inter Tight";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/brand/fonts/inter-tight-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
 
 :root {
     /* ---- Palette (aurora) - lifted from dashboard's INK/VIOLET/etc. ---- */
@@ -47,6 +72,11 @@
     --glass-border:        rgba(255, 255, 255, 0.08);
     --glass-border-strong: rgba(255, 255, 255, 0.14);
     --glass-blur:          blur(24px) saturate(140%);
+    /* Chrome bars (topbar / sidebar / composer). One token so light
+       mode can flip them; the literal rgba(15,10,30,...) the apps used
+       before stayed dark on a light page. */
+    --bar-bg:              rgba(15, 10, 30, 0.55);
+    --bar-bg-strong:       rgba(15, 10, 30, 0.6);
 
     /* ---- Type + spacing ---- */
     --font-sans:      "Inter Tight", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -71,13 +101,27 @@
     --glass-bg-strong:     rgba(20, 15, 40, 0.13);
     --glass-border:        rgba(20, 15, 40, 0.18);
     --glass-border-strong: rgba(20, 15, 40, 0.28);
-    /* Accents stay unchanged (violet/cyan/coral read fine on both bgs)
-       but the "-bright" hovers get slightly darker for contrast. */
+    /* Accents keep their hue but drop luminance so they stay readable
+       on the light ground - lime/amber text at full brightness was a
+       pale whisper on white (same fix the "-bright" hovers got). */
     --violet-bright:  #6d47d8;
     --cyan-bright:    #0ea5b7;
+    --lime:           #4d7c0f;
+    --amber:          #b45309;
+    --red-accent:     #dc2626;
+    --magenta:        #be185d;
+    --bar-bg:              rgba(244, 242, 250, 0.75);
+    --bar-bg-strong:       rgba(244, 242, 250, 0.85);
 }
 
 /* ---- Global reset for the Aurora background --------------------------- */
+html {
+    /* Tells the browser which theme the page is in so NATIVE widgets
+       (scrollbars, select popups, iOS form controls) match. Flipped to
+       "light dark" by the [data-theme="light"] rule below. */
+    color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 html, body {
     background: var(--bg-base);
     color: var(--ink);
@@ -85,6 +129,9 @@ html, body {
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* iOS Safari inflates text on rotate without this. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 /* Faint aurora wash behind everything - matches the dashboard's welcome
@@ -210,6 +257,28 @@ input:focus, textarea:focus, select:focus {
 }
 input::placeholder, textarea::placeholder { color: var(--ink-mute); }
 
+/* ---- Interaction polish (shared by every UI) -------------------------- */
+/* Keyboard users get a visible ring; mouse/touch clicks stay clean.
+   Uses the existing violet, no new colors. */
+:focus-visible {
+    outline: 2px solid var(--violet);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+/* Kill the gray tap flash on iOS; the hover/active styles carry the
+   feedback instead. */
+a, button, .btn, .card, .pill {
+    -webkit-tap-highlight-color: transparent;
+}
+/* Respect the OS "reduce motion" setting: hover lifts and drawer
+   slides become instant. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
 /* ---- Tables ----------------------------------------------------------- */
 table.netsec {
     width: 100%;
@@ -239,7 +308,7 @@ table.netsec tr:hover td { background: var(--glass-bg); }
     display: flex; align-items: center; gap: 12px;
     padding: 12px 20px;
     border-bottom: 1px solid var(--glass-border);
-    background: rgba(15, 10, 30, 0.55);
+    background: var(--bar-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
 }

@@ -13,19 +13,13 @@ The tunnel goes down cleanly on Ctrl+C or when the browser closes the tab.
 """
 import argparse
 import atexit
-import base64
-import io
 import json
 import os
 import pathlib
-import queue
-import shlex
-import shutil
 import signal
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.error
@@ -34,15 +28,15 @@ import uuid
 import webbrowser
 from datetime import datetime, timezone
 
-# Dash + bootstrap components. Both already installed by the NetSec
-# requirements - no fresh pip install if the dashboard runs on this box.
+# Dash only. dash-bootstrap-components is gone: the one dbc.Modal it
+# styled is now a plain glass panel, which drops the 200KB SLATE CSS
+# pull from a CDN - the app renders with zero internet access.
 try:
     import dash
     from dash import Dash, dcc, html, Input, Output, State, no_update
-    import dash_bootstrap_components as dbc
 except ImportError as e:
     print(f"[companion] missing UI dep: {e}\n"
-          "install with: pip install dash dash-bootstrap-components",
+          "install with: pip install dash",
           file=sys.stderr)
     sys.exit(2)
 
@@ -261,147 +255,6 @@ CREATE INDEX IF NOT EXISTS idx_chats_updated ON chats(updated_at DESC);
 
 
 # --------------------------------------------------------------------------
-# File extraction - drag a file into the chat and get its text into the
-# model context. Each format has its own extractor; dispatch on extension.
-# Called from a Dash callback, so all failures return (None, error_str)
-# instead of raising - the UI shows the error as a chip.
-# --------------------------------------------------------------------------
-# Cap the extracted text to keep context sane: a 3B model has a ~32k
-# token window (~120k chars); leave headroom for the actual question.
-MAX_ATTACH_CHARS = 60_000
-_TEXTY_EXTS = {".txt", ".md", ".log", ".json", ".csv", ".tsv",
-               ".py", ".yaml", ".yml", ".ini", ".conf", ".sh", ".ps1",
-               ".xml", ".html", ".css", ".js", ".ts", ".c", ".h",
-               ".cpp", ".rs", ".go", ".java", ".sql"}
-_PCAP_EXTS = {".pcap", ".pcapng", ".cap"}
-
-
-def _cap_text(text, limit=MAX_ATTACH_CHARS):
-    if not text:
-        return text
-    if len(text) <= limit:
-        return text
-    kept = limit - 200
-    return (text[:kept] + f"\n\n[...truncated {len(text) - kept:,} more chars]")
-
-
-def _pretty_bytes(n):
-    n = float(n or 0)
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024 or unit == "GB":
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-
-
-def extract_file(name, contents_b64):
-    """Return (text, meta) on success or (None, error) on failure.
-
-    contents_b64 is the Dash Upload "contents" property:
-    "data:application/octet-stream;base64,<payload>". name is the
-    original filename (the extension picks the extractor)."""
-    if not name or not contents_b64:
-        return None, "empty upload"
-    if "," in contents_b64:
-        contents_b64 = contents_b64.split(",", 1)[1]
-    try:
-        data = base64.b64decode(contents_b64)
-    except Exception as e:
-        return None, f"base64 decode failed: {e}"
-    size = len(data)
-    ext = os.path.splitext(name)[1].lower()
-    meta = {"name": name, "size": size, "kind": ext.lstrip(".")}
-
-    if ext in _TEXTY_EXTS:
-        try:
-            text = data.decode("utf-8", errors="replace")
-        except Exception as e:
-            return None, f"text decode: {e}"
-        meta["chars"] = len(text)
-        header = f"FILE: {name} ({size:,} bytes, text)\n\n"
-        return header + _cap_text(text), meta
-
-    if ext == ".pdf":
-        try:
-            from pypdf import PdfReader  # noqa: PLC0415
-        except ImportError:
-            try:
-                from PyPDF2 import PdfReader  # noqa: PLC0415
-            except ImportError:
-                return None, ("PDF support needs `pip install pypdf` "
-                              "in the companion venv")
-        try:
-            reader = PdfReader(io.BytesIO(data))
-            pages = [(p.extract_text() or "") for p in reader.pages]
-        except Exception as e:
-            return None, f"PDF parse failed: {type(e).__name__}: {e}"
-        text = "\n\n".join(pages).strip()
-        meta.update({"pages": len(pages), "chars": len(text)})
-        header = f"FILE: {name} ({size:,} bytes, PDF, {len(pages)} page(s))\n\n"
-        return header + _cap_text(text), meta
-
-    if ext == ".docx":
-        try:
-            from docx import Document  # noqa: PLC0415
-        except ImportError:
-            return None, ("DOCX support needs `pip install python-docx` "
-                          "in the companion venv")
-        try:
-            doc = Document(io.BytesIO(data))
-            paras = [p.text for p in doc.paragraphs if p.text]
-        except Exception as e:
-            return None, f"DOCX parse failed: {type(e).__name__}: {e}"
-        text = "\n".join(paras)
-        meta["chars"] = len(text)
-        header = (f"FILE: {name} ({size:,} bytes, DOCX, "
-                  f"{len(paras)} paragraph(s))\n\n")
-        return header + _cap_text(text), meta
-
-    if ext in _PCAP_EXTS:
-        tsh = shutil.which("tshark")
-        if not tsh:
-            return None, ("PCAP summary needs tshark on the machine "
-                          "running Companion. On the VM: "
-                          "`sudo apt install tshark`.")
-        # Write to a temp file so tshark can seek. cleanup is unconditional.
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
-            f.write(data)
-            path = f.name
-        try:
-            def _run(cmd, timeout=30):
-                try:
-                    r = subprocess.run(cmd, capture_output=True, text=True,
-                                       timeout=timeout, errors="replace")
-                    return r.stdout or (r.stderr or "").strip()
-                except Exception as e:
-                    return f"[{type(e).__name__}: {e}]"
-
-            caps = _run(["capinfos", "-c", "-d", "-t", "-i", "-u", path])
-            protos = _run([tsh, "-r", path, "-q", "-z", "io,phs"])
-            convo = _run([tsh, "-r", path, "-q", "-z", "conv,ip"])
-            head = _run([tsh, "-r", path, "-c", "40",
-                         "-T", "fields", "-e", "frame.time_relative",
-                         "-e", "ip.src", "-e", "ip.dst",
-                         "-e", "_ws.col.Protocol",
-                         "-e", "_ws.col.Info"])
-        finally:
-            try:
-                os.unlink(path)
-            except Exception:
-                pass
-        summary = (
-            f"FILE: {name} ({size:,} bytes, PCAP)\n\n"
-            f"== capinfos ==\n{caps}\n\n"
-            f"== protocol hierarchy ==\n{protos[:3000]}\n\n"
-            f"== IP conversations (top) ==\n{convo[:3000]}\n\n"
-            f"== first 40 packets ==\n{head[:3000]}")
-        meta["chars"] = len(summary)
-        return _cap_text(summary), meta
-
-    return None, (f"Unsupported file type: {ext or '(no extension)'}. "
-                  f"Supported: text/code, PDF, DOCX, PCAP.")
-
-
-# --------------------------------------------------------------------------
 class ChatStore:
     def __init__(self, db_path):
         db_path = pathlib.Path(db_path)
@@ -583,6 +436,19 @@ class StreamState:
         self._started_at = time.monotonic()
         self._tokens_out = 0
         self._tokens_in = 0
+        self._cancelled = False
+
+    def cancel(self):
+        """User pressed stop. The worker checks this between chunks;
+        breaking out of the read loop closes the connection, which is
+        how Ollama learns to stop generating."""
+        with self._lock:
+            self._cancelled = True
+
+    @property
+    def cancelled(self):
+        with self._lock:
+            return self._cancelled
 
     def append(self, chunk):
         if not chunk:
@@ -622,14 +488,25 @@ def _run_stream(client, store, chat_id, model, messages, options,
     try:
         info = {}
         for chunk in client.stream_chat(model, messages, options):
+            if state.cancelled:
+                break
             piece = ((chunk.get("message") or {}).get("content") or "")
             if piece:
                 state.append(piece)
             if chunk.get("done"):
                 info = chunk
                 break
-        # persist the completed assistant message
+        # persist the completed assistant message (or whatever had
+        # streamed in by the time the user pressed stop)
         content = state.snapshot()["content"]
+        if state.cancelled:
+            # a stop mid-code-fence leaves the fence open and the
+            # marker would render as code; close it first. The marker
+            # itself is emphasis, not [brackets] - markdown eats those.
+            if content.count("```") % 2 == 1:
+                content += "\n```"
+            marker = "*(stopped)*"
+            content = (content + "\n\n" + marker) if content else marker
         latency_ms = int(state.snapshot()["elapsed_s"] * 1000)
         store.append_message(chat_id, "assistant", content, model=model,
                              latency_ms=latency_ms,
@@ -704,11 +581,12 @@ body { overflow: hidden; margin: 0; height: 100%; }
 
 /* SIDEBAR */
 .sidebar { width: 260px;
-  background: rgba(15, 10, 30, 0.6);
+  background: var(--bar-bg-strong);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-right: 1px solid var(--glass-border);
-  padding: 12px 10px 14px; overflow-y: auto; flex-shrink: 0;
+  padding: 12px 10px calc(14px + env(safe-area-inset-bottom));
+  overflow-y: auto; overscroll-behavior: contain; flex-shrink: 0;
   display: flex; flex-direction: column; }
 .sidebar h2 { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute);
   text-transform: uppercase; margin: 14px 6px 6px; font-weight: 600;
@@ -753,9 +631,9 @@ body { overflow: hidden; margin: 0; height: 100%; }
 /* MAIN */
 .main { flex: 1; display: flex; flex-direction: column;
   min-width: 0; height: 100vh; height: 100dvh; }
-.topbar { padding: 12px 20px;
+.topbar { padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
   border-bottom: 1px solid var(--glass-border);
-  background: rgba(15, 10, 30, 0.55);
+  background: var(--bar-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
@@ -794,14 +672,49 @@ body { overflow: hidden; margin: 0; height: 100%; }
 /* Give the topbar its own stacking context so the dropdown menu can
    escape it without being clipped by sibling flex containers. */
 .topbar { position: relative; z-index: 100; overflow: visible !important; }
+/* Model picker sizing lives here (was an inline style, which media
+   queries cannot override): flexible on desktop, and on narrow phones
+   it gives ground so the theme + settings buttons stay on screen. */
+.model-select { min-width: 150px; max-width: 260px; flex: 1 1 200px; }
+@media (max-width: 480px) {
+  .model-select { min-width: 0; max-width: none; flex: 1 1 140px; }
+}
 
 /* CHAT AREA */
 .chat-area { flex: 1; overflow-y: auto; padding: 20px 16px 24px;
-  -webkit-overflow-scrolling: touch; }
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 @media (min-width: 700px) { .chat-area { padding: 24px 28px; } }
 .msg { max-width: 820px; margin: 12px auto; padding: 14px 18px;
   border-radius: 16px; line-height: 1.6; white-space: pre-wrap;
   word-wrap: break-word; font-size: 14.5px; }
+/* Assistant replies render as markdown; pre-wrap would double every
+   newline of the SOURCE text on top of the <p> margins. */
+.msg.assistant { white-space: normal; }
+.msg.assistant .msg-body > p:first-child { margin-top: 0; }
+.msg.assistant .msg-body > p:last-child { margin-bottom: 0; }
+.msg.assistant .msg-body p { margin: 8px 0; }
+.msg.assistant .msg-body ul, .msg.assistant .msg-body ol {
+  margin: 8px 0; padding-left: 22px; }
+/* Code blocks stay dark in BOTH themes (the hljs dark palette needs
+   a dark ground); hljs's own background is neutralized so the pre
+   rules here govern. */
+.msg.assistant .msg-body pre { background: #0c0818;
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 10px 12px; overflow-x: auto; font-size: 12.5px;
+  white-space: pre; }
+.msg.assistant .msg-body pre code, .msg.assistant .msg-body .hljs {
+  background: transparent; }
+.msg.assistant .msg-body code { font-size: 12.5px; }
+.msg.assistant .msg-body :not(pre) > code {
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
+  border-radius: 5px; padding: 1px 5px; }
+.msg.assistant .msg-body table { border-collapse: collapse; margin: 8px 0;
+  display: block; overflow-x: auto; }
+.msg.assistant .msg-body th, .msg.assistant .msg-body td {
+  border: 1px solid var(--glass-border); padding: 4px 10px; font-size: 13px; }
+.msg.assistant .msg-body blockquote { margin: 8px 0;
+  padding: 2px 12px; border-left: 3px solid var(--violet);
+  color: var(--ink-dim); }
 .msg.user { background: linear-gradient(135deg,
     rgba(139, 92, 246, 0.18), rgba(139, 92, 246, 0.06));
   border: 1px solid rgba(139, 92, 246, 0.28); color: var(--ink); }
@@ -839,19 +752,25 @@ body { overflow: hidden; margin: 0; height: 100%; }
   border-color: var(--violet); }
 
 /* COMPOSER */
-.composer { padding: 12px 14px 16px;
+.composer { padding: 12px 14px calc(16px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--glass-border);
-  background: rgba(15, 10, 30, 0.55);
+  background: var(--bar-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   flex-shrink: 0; }
-@media (min-width: 700px) { .composer { padding: 14px 28px 18px; } }
+@media (min-width: 700px) {
+  .composer { padding: 14px 28px calc(18px + env(safe-area-inset-bottom)); }
+}
 .composer-inner { max-width: 820px; margin: 0 auto; position: relative; }
 .composer textarea { width: 100%; background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); color: var(--ink);
-  border-radius: 14px; padding: 12px 52px 12px 52px;
+  border-radius: 14px; padding: 12px 52px 12px 14px;
   font-size: 15px; resize: none; font-family: var(--font-sans); outline: none;
   -webkit-appearance: none; }
+/* 16px on touch screens: below that iOS Safari force-zooms the page
+   on focus (the old workaround was user-scalable=no, which also broke
+   pinch-zoom for people who need it). */
+@media (pointer: coarse) { .composer textarea { font-size: 16px; } }
 .composer textarea:focus { border-color: var(--violet); }
 .composer .send-btn { position: absolute; right: 8px; bottom: 8px;
   width: 36px; height: 36px; border-radius: 50%;
@@ -859,34 +778,10 @@ body { overflow: hidden; margin: 0; height: 100%; }
   color: #fff; border: none; cursor: pointer; font-size: 16px;
   box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35); }
 .composer .send-btn:hover { filter: brightness(1.1); }
-.composer .attach-btn { position: absolute; left: 8px; bottom: 8px;
-  width: 36px; height: 36px; border-radius: 50%;
-  background: transparent; color: var(--ink-mute);
-  border: 1px solid var(--glass-border); cursor: pointer; font-size: 16px; }
-.composer .attach-btn:hover { color: var(--violet-bright);
-  border-color: var(--violet); }
-/* Attachment chip: sits ABOVE the composer showing the current file. */
-.attach-chip { max-width: 820px; margin: 0 auto 8px;
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 4px; min-height: 0; }
-.attach-chip.has-file { padding: 8px 12px; background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border); border-radius: 10px;
-  font-size: 12.5px; color: var(--ink);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur); }
-.attach-chip .kind { font-family: "SF Mono", monospace;
-  color: var(--violet-bright);
-  background: rgba(139, 92, 246, 0.15); padding: 2px 8px; border-radius: 6px;
-  font-size: 11px; letter-spacing: 0.06em; }
-.attach-chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; }
-.attach-chip .size { color: var(--ink-mute); font-size: 11px;
-  font-family: "SF Mono", monospace; }
-.attach-chip .rm { background: none; border: none; color: var(--ink-mute);
-  cursor: pointer; font-size: 15px; padding: 0 6px; }
-.attach-chip .rm:hover { color: var(--red-accent); }
-.attach-chip.error { background: rgba(248, 113, 113, 0.15);
-  color: var(--red-accent); border-color: rgba(248, 113, 113, 0.4); }
+/* While a reply streams the same button reads as STOP. */
+.composer .send-btn.stop {
+  background: linear-gradient(135deg, var(--red-accent), var(--magenta));
+  box-shadow: 0 4px 16px rgba(248, 113, 113, 0.35); }
 .footer { text-align: center; color: var(--ink-mute); font-size: 10.5px;
   padding: 8px 8px 0; font-family: "SF Mono", monospace; }
 .badge { display: inline-flex; align-items: center; padding: 3px 10px;
@@ -897,17 +792,45 @@ body { overflow: hidden; margin: 0; height: 100%; }
 .badge.warn { background: rgba(251, 191, 36, 0.15); color: var(--amber);
   border-color: rgba(251, 191, 36, 0.4); }
 
+/* SETTINGS MODAL (plain glass panel; used to be a Bootstrap dbc.Modal) */
+.modal-wrap { display: none; position: fixed; inset: 0; z-index: 300; }
+.modal-wrap.show { display: block; }
+.modal-wrap .modal-backdrop { position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.5); }
+.modal-wrap .modal-panel { position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(560px, calc(100dvh - 48px)); overflow-y: auto;
+  background: var(--bg-panel); border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-card); padding: 18px 20px;
+  box-shadow: var(--shadow-lift); }
+.modal-panel h3 { margin: 0 0 14px; }
+.modal-panel label { display: block; font-size: 11.5px;
+  color: var(--ink-dim); margin: 12px 0 6px; letter-spacing: 0.06em;
+  text-transform: uppercase; font-family: "SF Mono", monospace; }
+.modal-panel textarea { width: 100%; }
+.modal-panel .modal-actions { display: flex; justify-content: flex-end;
+  gap: 10px; margin-top: 16px; }
+
 /* MOBILE */
 @media (max-width: 699px) {
+  /* Above the topbar (z 100): the drawer used to slide UNDER it,
+     hiding the New-chat button behind the bar. */
   .sidebar { position: fixed; left: 0; top: 0; bottom: 0;
-    width: 82vw; max-width: 320px; z-index: 50;
+    width: 82vw; max-width: 320px; z-index: 150;
     transform: translateX(-100%); transition: transform 0.2s ease; }
+  .backdrop { z-index: 140; }
   .sidebar.open { transform: translateX(0); }
   .backdrop.show { display: block; }
   .topbar .hamburger { display: block; }
   .topbar .brand-vm-badge { display: none; }
   .main { width: 100%; }
-  .topbar { padding: 10px 14px; }
+  .topbar { padding: calc(10px + env(safe-area-inset-top)) 14px 10px; }
+}
+/* Very narrow phones: the logo alone identifies the app; the wordmark
+   made the model dropdown unusably cramped. */
+@media (max-width: 480px) {
+  .topbar .brand, .topbar .sep { display: none; }
 }
 </style>
 """
@@ -957,6 +880,17 @@ def _render_messages(msgs, live_stream=None):
     in-flight assistant message with its running content."""
     if not msgs and not live_stream:
         return _welcome_screen()
+    def _body(role, content):
+        # Assistant text is markdown (models emit headers, lists, code
+        # fences); rendering it beats showing raw ``` noise. User and
+        # system text stays literal - pasted content must never be
+        # reinterpreted as markup.
+        if role == "assistant":
+            return dcc.Markdown(content, className="msg-body",
+                                link_target="_blank",
+                                highlight_config={"theme": "dark"})
+        return html.Div(content, className="msg-body")
+
     out = []
     for m in msgs:
         role = m["role"]
@@ -974,7 +908,7 @@ def _render_messages(msgs, live_stream=None):
         meta = " · ".join(meta_bits)
         out.append(html.Div([
             html.Div(role.upper(), className="role-label"),
-            html.Div(m["content"], className="msg-body"),
+            _body(role, m["content"]),
             html.Div(meta, className="meta") if meta else None,
         ], className=classes))
     if live_stream is not None:
@@ -991,7 +925,7 @@ def _render_messages(msgs, live_stream=None):
                     + (" · streaming…" if not s["done"] else ""))
             out.append(html.Div([
                 html.Div("ASSISTANT", className="role-label"),
-                html.Div(content, className="msg-body"),
+                _body("assistant", content),
                 html.Div(meta, className="meta"),
             ], className="msg assistant"))
     return out
@@ -1026,8 +960,7 @@ def build_app(tunnel, client, store, port, url_base=None):
     callback and route so the whole app is reachable at that subpath.
     Needed when the app sits behind a Caddy reverse proxy that uses path
     routing. Must start AND end with "/" per Dash's rules."""
-    dash_kwargs = dict(external_stylesheets=[dbc.themes.SLATE],
-                       title="AI Companion",
+    dash_kwargs = dict(title="AI Companion",
                        update_title=None,
                        suppress_callback_exceptions=True)
     if url_base:
@@ -1036,24 +969,77 @@ def build_app(tunnel, client, store, port, url_base=None):
                              f"got {url_base!r}")
         dash_kwargs["url_base_pathname"] = url_base
     app = Dash(__name__, **dash_kwargs)
-    # viewport-fit=cover + user-scalable=no so iOS Safari respects the
-    # notch and does not zoom on textarea focus. Theme-color makes the
-    # top status bar blend with the app in dark mode.
+    # viewport-fit=cover so iOS Safari respects the notch. Zoom stays
+    # enabled (a11y); the 16px composer font is what stops the iOS
+    # focus-zoom now. Theme-color matches the Aurora background and is
+    # re-synced by the theme toggle. Icons come from the portal's
+    # /brand/ path; standalone runs 404 them harmlessly.
     _META = ('<meta name="viewport" content="width=device-width,'
-             'initial-scale=1,viewport-fit=cover,user-scalable=no">'
-             '<meta name="theme-color" content="#0f0f11" '
-             'media="(prefers-color-scheme: dark)">'
-             '<meta name="theme-color" content="#ffffff" '
-             'media="(prefers-color-scheme: light)">'
+             'initial-scale=1,viewport-fit=cover">'
+             '<meta name="theme-color" content="#07050f">'
              '<meta name="apple-mobile-web-app-capable" content="yes">'
              '<meta name="apple-mobile-web-app-status-bar-style" '
-             'content="black-translucent">')
+             'content="black-translucent">'
+             '<link rel="icon" href="/brand/favicon.svg" '
+             'type="image/svg+xml">'
+             '<link rel="apple-touch-icon" '
+             'href="/brand/apple-touch-icon.png">')
+    # Behaviors React re-renders would otherwise tear down live on
+    # document-level listeners: Enter-to-send on pointer-fine devices,
+    # keep-scrolled-to-bottom while a reply streams, and the ?prompt=
+    # handoff from the portal's latest-session card.
+    _BOOT_JS = """<script>
+(function () {
+  // Enter sends on keyboards; phones keep Enter = newline.
+  document.addEventListener("keydown", function (e) {
+    if (e.target && e.target.id === "composer-text"
+        && e.key === "Enter" && !e.shiftKey && !e.isComposing
+        && window.matchMedia("(pointer: fine)").matches) {
+      e.preventDefault();
+      var btn = document.getElementById("send-btn");
+      if (btn) btn.click();
+    }
+  });
+
+  // Follow the stream: while the user is near the bottom, new tokens
+  // keep the view pinned there; scrolling up to read pauses it.
+  var follow = true;
+  document.addEventListener("scroll", function (e) {
+    var a = e.target;
+    if (!a || a.id !== "chat-area") return;
+    follow = (a.scrollHeight - a.scrollTop - a.clientHeight) < 220;
+  }, true);
+  new MutationObserver(function () {
+    var a = document.getElementById("chat-area");
+    if (a && follow) a.scrollTop = a.scrollHeight;
+  }).observe(document.body, {childList: true, subtree: true});
+
+  // ?prompt=... pre-fills the composer (used by the portal). The
+  // param is stripped from the URL so a refresh does not refill.
+  var q = new URLSearchParams(location.search).get("prompt");
+  if (q) {
+    history.replaceState(null, "", location.pathname);
+    var t = setInterval(function () {
+      var el = document.getElementById("composer-text");
+      if (!el) return;
+      clearInterval(t);
+      var setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, "value").set;
+      setter.call(el, q);
+      el.dispatchEvent(new Event("input", {bubbles: true}));
+      el.focus();
+    }, 100);
+  }
+})();
+</script>"""
     app.index_string = ("<!DOCTYPE html><html><head>{%metas%}"
                         + _META
                         + "<title>{%title%}</title>{%favicon%}{%css%}"
                         + _APP_CSS
                         + "</head><body>{%app_entry%}<footer>{%config%}"
-                        "{%scripts%}{%renderer%}</footer></body></html>")
+                        "{%scripts%}{%renderer%}</footer>"
+                        + _BOOT_JS
+                        + "</body></html>")
 
     try:
         available_models = client.list_models()
@@ -1116,10 +1102,7 @@ def build_app(tunnel, client, store, port, url_base=None):
                                  options=[{"label": m, "value": m}
                                           for m in available_models],
                                  value=default_model, clearable=False,
-                                 className="model-select",
-                                 style={"minWidth": "160px",
-                                        "maxWidth": "260px",
-                                        "flex": "1 1 200px"}),
+                                 className="model-select"),
                     html.Div(className="grow"),
                     html.Button("🌗", id="theme-toggle-btn", n_clicks=0,
                                 className="theme-btn",
@@ -1133,8 +1116,8 @@ def build_app(tunnel, client, store, port, url_base=None):
                     html.Div([
                         dcc.Textarea(id="composer-text",
                                      placeholder=("Type a message "
-                                                  "(Shift+Enter for a new "
-                                                  "line, / for commands)"),
+                                                  "(Enter sends, / for "
+                                                  "commands)"),
                                      rows=3),
                         html.Button("➤", id="send-btn", n_clicks=0,
                                     className="send-btn"),
@@ -1144,32 +1127,29 @@ def build_app(tunnel, client, store, port, url_base=None):
                              " ~/ai-companion/chats.db.",
                              className="footer"),
                 ], className="composer"),
-                # Settings modal
-                dbc.Modal([
-                    dbc.ModalHeader("Chat settings"),
-                    dbc.ModalBody([
+                # Settings modal: a plain glass panel. Colors all come
+                # from the brand tokens, so it follows light mode too
+                # (the old Bootstrap modal was hardcoded dark).
+                html.Div([
+                    html.Div(id="settings-backdrop",
+                             className="modal-backdrop", n_clicks=0),
+                    html.Div([
+                        html.H3("Chat settings"),
                         html.Label("System prompt",
-                                   style={"fontSize": "11.5px",
-                                          "color": "#7a7a82"}),
-                        dcc.Textarea(id="system-prompt-input", rows=4,
-                                     style={"width": "100%",
-                                            "background": "#0f0f11",
-                                            "color": "#e5e7eb",
-                                            "border": "1px solid #2a2a2f",
-                                            "borderRadius": "6px",
-                                            "padding": "8px"}),
+                                   htmlFor="system-prompt-input"),
+                        dcc.Textarea(id="system-prompt-input", rows=4),
                         html.Label("Temperature",
-                                   style={"fontSize": "11.5px",
-                                          "color": "#7a7a82",
-                                          "marginTop": "10px"}),
+                                   htmlFor="temperature-slider"),
                         dcc.Slider(id="temperature-slider", min=0, max=2,
                                    step=0.1, value=0.7,
                                    marks={0: "0", 0.7: "0.7", 1: "1",
                                           2: "2"}),
-                    ]),
-                    dbc.ModalFooter(dbc.Button("Save", id="save-settings-btn",
-                                                color="primary")),
-                ], id="settings-modal", is_open=False),
+                        html.Div(html.Button("Save", id="save-settings-btn",
+                                             n_clicks=0,
+                                             className="primary"),
+                                 className="modal-actions"),
+                    ], className="modal-panel"),
+                ], id="settings-modal", className="modal-wrap"),
             ], className="main"),
         ], className="companion-app"),
     ])
@@ -1267,6 +1247,8 @@ def build_app(tunnel, client, store, port, url_base=None):
 
     @app.callback(
         Output("chat-area", "children"),
+        Output("send-btn", "children"),
+        Output("send-btn", "className"),
         Input("active-chat-id", "data"),
         Input("stream-poll", "n_intervals"),
         Input("stream-token", "data"),   # ALSO paint on send/stop,
@@ -1277,11 +1259,15 @@ def build_app(tunnel, client, store, port, url_base=None):
     )
     def paint_chat(chat_id, _tick, _token):
         if not chat_id:
-            return _welcome_screen()
+            return _welcome_screen(), "➤", "send-btn"
         msgs = store.list_messages(chat_id)
         with _STREAMS_LOCK:
             stream = _STREAMS.get(chat_id)
-        return _render_messages(msgs, live_stream=stream)
+        streaming = stream is not None and not stream.snapshot()["done"]
+        # While streaming the send button turns into stop (■).
+        return (_render_messages(msgs, live_stream=stream),
+                "■" if streaming else "➤",
+                "send-btn stop" if streaming else "send-btn")
 
     @app.callback(
         Output("stream-poll", "interval"),      # 300 while streaming, else 2000
@@ -1324,7 +1310,15 @@ def build_app(tunnel, client, store, port, url_base=None):
             token_out = time.time() if had_finished else no_update
             new_interval = 300 if any_active else 2000
             return new_interval, no_update, token_out, no_update
-        # 2. actual send
+        # 2a. streaming already? then this click means STOP. The typed
+        # text (if any) stays in the composer for the next send.
+        if chat_id:
+            with _STREAMS_LOCK:
+                live = _STREAMS.get(chat_id)
+            if live is not None and not live.snapshot()["done"]:
+                live.cancel()
+                return no_update, no_update, time.time(), no_update
+        # 2b. actual send
         if not composer_text or not composer_text.strip():
             return no_update, no_update, no_update, no_update
         chat_id_out = no_update
@@ -1423,32 +1417,33 @@ def build_app(tunnel, client, store, port, url_base=None):
         return 300, "", (send_clicks or 0), chat_id_out
 
     @app.callback(
-        Output("settings-modal", "is_open"),
+        Output("settings-modal", "className"),
         Output("system-prompt-input", "value"),
         Output("temperature-slider", "value"),
         Input("open-settings-btn", "n_clicks"),
         Input("save-settings-btn", "n_clicks"),
-        State("settings-modal", "is_open"),
+        Input("settings-backdrop", "n_clicks"),
         State("system-prompt-input", "value"),
         State("temperature-slider", "value"),
         State("active-chat-id", "data"),
         prevent_initial_call=True,
     )
-    def toggle_settings(open_clicks, save_clicks, is_open, sys_prompt,
-                        temp, chat_id):
+    def toggle_settings(open_clicks, save_clicks, backdrop_clicks,
+                        sys_prompt, temp, chat_id):
         trig = dash.ctx.triggered_id
         if trig == "open-settings-btn":
             if chat_id:
                 c = store.get_chat(chat_id) or {}
-                return True, c.get("system_prompt") or "", \
+                return "modal-wrap show", c.get("system_prompt") or "", \
                     c.get("temperature") or 0.7
-            return True, "", 0.7
+            return "modal-wrap show", "", 0.7
         if trig == "save-settings-btn":
             if chat_id:
                 store.set_chat_system(chat_id, sys_prompt or "")
                 store.set_chat_temperature(chat_id, float(temp or 0.7))
-            return False, no_update, no_update
-        return is_open, no_update, no_update
+            return "modal-wrap", no_update, no_update
+        # backdrop tap closes without saving
+        return "modal-wrap", no_update, no_update
 
     # Static badge - refreshed only on page load / model change, NOT on
     # the stream-poll tick. A 200 ms poll would probe Ollama 5 times a
@@ -1499,26 +1494,37 @@ def build_app(tunnel, client, store, port, url_base=None):
         prevent_initial_call=True,
     )
 
-    # Theme toggle: dark <-> light, persisted in localStorage so the
-    # choice sticks across reloads.
+    # Theme toggle: dark <-> light, persisted in localStorage. The key
+    # is shared with the portal and RAG ("netsec-theme"), so flipping
+    # the theme anywhere flips it everywhere on this origin; the old
+    # per-app key is still read once as a fallback. The meta
+    # theme-color follows so the iOS status bar matches.
     app.clientside_callback(
         """
         function(n) {
-            if (!n) {
-                const saved = localStorage.getItem("companion-theme");
-                if (saved === "light") {
+            const apply = (theme) => {
+                if (theme === "light") {
                     document.documentElement.setAttribute("data-theme", "light");
+                } else {
+                    document.documentElement.removeAttribute("data-theme");
                 }
+                const meta = document.querySelector('meta[name="theme-color"]');
+                if (meta) meta.content =
+                    theme === "light" ? "#f4f2fa" : "#07050f";
+            };
+            if (!n) {
+                let saved = null;
+                try {
+                    saved = localStorage.getItem("netsec-theme")
+                        || localStorage.getItem("companion-theme");
+                } catch (e) {}
+                if (saved === "light") apply("light");
                 return window.dash_clientside.no_update;
             }
             const cur = document.documentElement.getAttribute("data-theme");
             const next = cur === "light" ? "dark" : "light";
-            if (next === "light") {
-                document.documentElement.setAttribute("data-theme", "light");
-            } else {
-                document.documentElement.removeAttribute("data-theme");
-            }
-            localStorage.setItem("companion-theme", next);
+            apply(next);
+            try { localStorage.setItem("netsec-theme", next); } catch (e) {}
             return next;
         }
         """,

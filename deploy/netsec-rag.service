@@ -20,9 +20,9 @@ Environment="NETSEC_OLLAMA_URL=http://127.0.0.1:11434"
 # /etc/default/netsec-rag for a different chat model.
 EnvironmentFile=-/etc/default/netsec-rag
 Environment="NETSEC_RAG_HISTORY_DB=/srv/netsec/rag/queries.db"
-# The Dash frontend needs dash + dash_bootstrap_components; reuse the
-# companion venv (same deps, one install to maintain). netsec_rag.py's
-# only non-stdlib dep is numpy, which was apt-installed by install-rag.sh.
+# The Dash frontend needs dash; reuse the companion venv (same deps,
+# one install to maintain). netsec_rag.py's only non-stdlib dep is
+# numpy, which was apt-installed by install-rag.sh.
 ExecStart=/opt/netsec-companion/venv/bin/python /home/ubuntu/netsec/tools/netsec_rag_web.py \
     --db /srv/netsec/rag/store.db \
     --history-db /srv/netsec/rag/queries.db \

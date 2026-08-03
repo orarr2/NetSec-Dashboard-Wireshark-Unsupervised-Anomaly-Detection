@@ -24,9 +24,9 @@ DEPLOY_DIR="${NETSEC_DIR}/deploy"
 
 echo "[rag] installing host Python deps..."
 # The engine (netsec_rag.py) needs numpy. The web frontend
-# (netsec_rag_web.py) needs dash + dash_bootstrap_components and reuses
-# the companion venv (same deps, one install to maintain), so we just
-# ensure that venv has numpy too.
+# (netsec_rag_web.py) needs dash and reuses the companion venv (same
+# deps, one install to maintain), so we just ensure that venv has
+# numpy too.
 sudo apt-get install -y python3-numpy python3-venv
 COMPANION_VENV=/opt/netsec-companion/venv
 if [ -x "${COMPANION_VENV}/bin/pip" ]; then

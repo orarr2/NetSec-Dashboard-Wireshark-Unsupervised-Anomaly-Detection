@@ -7,38 +7,28 @@ in SSH-tunnel mode (the original design) if you prefer.
 
 ## What it does
 
-- Sidebar with saved chats grouped by date (Today / Yesterday / …)
-- Streaming responses (token-by-token as the model generates)
-- Dark + light theme, mobile-friendly hamburger drawer, per-chat
-  system prompt and temperature settings, slash commands
-- **File drop** in the composer: attach a file and the Companion
-  extracts its text and sends it to the model with your next message
+- Sidebar with saved chats grouped by date (Today / Yesterday / …),
+  rename + delete per row
+- Streaming responses (token-by-token as the model generates), with
+  the send button doubling as a stop button mid-stream
+- Assistant replies render as markdown (code blocks, lists, tables);
+  your own messages stay literal text
+- Enter sends on a keyboard (Shift+Enter for a newline); on phones
+  Enter stays a newline and the round button sends
+- Dark + light theme (shared with the portal and RAG - flip it once,
+  it applies across the whole site), mobile hamburger drawer,
+  per-chat system prompt and temperature settings, slash commands
 - No cloud, no API keys, no data leaves your machine
 
-## File drop
-
-Click the 📎 icon on the LEFT of the composer, or drag any of these
-formats into it:
-
-| Extension | Extractor | Notes |
-|---|---|---|
-| `.txt`, `.md`, `.log`, `.json`, `.csv`, `.py`, `.yaml`, `.sh`, code | direct decode | truncated at 60,000 chars |
-| `.pdf` | `pypdf` | page-by-page text extraction |
-| `.docx` | `python-docx` | paragraph-by-paragraph |
-| `.pcap`, `.pcapng`, `.cap` | `tshark` | capinfos + protocol hierarchy + top IP conversations + first 40 packets |
-
-After a file is attached a chip appears above the composer. Send your
-question - the extracted text prepends the message, so the model sees
-"here is the file, here is what to do with it". The attachment is
-cleared after send.
+(The old paperclip file-drop was removed in the UI audit - one job,
+chat. Use the RAG at `/rag/` for questions over the indexed reports.)
 
 ## Run modes
 
 ### On the VM (production - reachable from iPhone via Tailscale)
 
 Handled by `deploy/install-companion.sh`. Creates a dedicated venv
-at `/opt/netsec-companion/venv` with dash + dash_bootstrap_components
-+ pypdf + python-docx, installs `tshark`, drops the systemd unit
+at `/opt/netsec-companion/venv` with dash, drops the systemd unit
 `netsec-companion.service`. Direct-mode - no SSH tunnel; talks to
 Ollama at `127.0.0.1:11434`.
 
@@ -106,8 +96,6 @@ limits:
 
 ## What it does NOT do
 
-- Not connected to NetSec, does not touch its DB or code (files you
-  drop are read once, held in memory, then let go after the
-  message).
+- Not connected to NetSec, does not touch its DB or code.
 - Does not install models. Pull new ones on the VM: `docker exec
   deploy-ollama-1 ollama pull <name>`.

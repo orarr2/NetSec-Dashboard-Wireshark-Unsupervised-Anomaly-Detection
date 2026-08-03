@@ -5,10 +5,9 @@
 # Prerequisites (same shape as install-rag.sh):
 #   - repo at /home/ubuntu/netsec
 #   - compose stack up; ollama exposed on 127.0.0.1:11434
-#   - dash + dash_bootstrap_components installed in system python3
 #
 # What it does:
-#   1. apt install python3-dash python3-flask (companion deps)
+#   1. venv at /opt/netsec-companion with dash
 #   2. mkdir /srv/netsec/companion for the chats DB
 #   3. Install /etc/default/netsec-companion for overrides
 #   4. Install the systemd unit
@@ -24,15 +23,17 @@ echo "[companion] setting up a dedicated venv (no system Python pollution)..."
 # flask) that conflict with the apt-provided ones on Ubuntu 24.04.
 # Isolate in /opt/netsec-companion/venv so the system python stays clean
 # and the systemd unit points at THIS interpreter.
-# tshark is needed so the file-drop feature can summarize .pcap uploads.
-# pypdf + python-docx are the file-drop extractors for PDF and DOCX.
-sudo apt-get install -y python3-venv tshark 2>&1 | tail -1
+# dash is the only dep now: bootstrap-components left with the modal it
+# styled, and the file-drop extractors (pypdf, python-docx, tshark)
+# left with the paperclip. Old venvs keep the extra packages installed;
+# harmless.
+sudo apt-get install -y python3-venv 2>&1 | tail -1
 VENV=/opt/netsec-companion/venv
 if [ ! -x "${VENV}/bin/python" ]; then
   sudo python3 -m venv "${VENV}"
 fi
 sudo "${VENV}/bin/pip" install --quiet --upgrade pip
-sudo "${VENV}/bin/pip" install --quiet dash dash_bootstrap_components pypdf python-docx
+sudo "${VENV}/bin/pip" install --quiet dash
 
 echo "[companion] creating ${DB_DIR}..."
 sudo mkdir -p "${DB_DIR}"
