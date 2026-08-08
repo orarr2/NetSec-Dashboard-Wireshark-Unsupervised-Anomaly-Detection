@@ -129,10 +129,14 @@ function render() {
             return t;
         };
         tr.appendChild(td(String(s.sid), "n"));
-        tr.appendChild(td(
-            `<span style="color:var(--ink)">${s.file || "(no filename)"}</span>`,
-            "file"));
-        tr.appendChild(td(s.sensor || "-"));
+        // filename and sensor are user-supplied at upload time - build
+        // them as text nodes, never innerHTML, so a crafted name cannot
+        // inject markup into the portal.
+        const fileSpan = document.createElement("span");
+        fileSpan.style.color = "var(--ink)";
+        fileSpan.textContent = s.file || "(no filename)";
+        tr.appendChild(td(fileSpan, "file"));
+        tr.appendChild(td(document.createTextNode(s.sensor || "-")));
         tr.appendChild(td(s.finished_at || "-", "n"));
         tr.appendChild(td(s.n_pkts ? s.n_pkts.toLocaleString() : "-", "n"));
         const cell = document.createElement("td");

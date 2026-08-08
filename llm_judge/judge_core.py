@@ -1075,7 +1075,8 @@ def analyst_commentary(client, context, verdicts, session_label="S1",
                     "priority": r["priority"],
                     "guardrail_applied": bool(r.get("guardrail")),
                     "needs_human_review": bool(
-                        (r.get("committee") or {}).get("needs_human_review")),
+                        ((r.get("committee") or r.get("panel") or {})
+                         .get("needs_human_review"))),
                     "reasoning": r["verdict"]["reasoning"],
                 }
                 for r in verdicts.get("results", [])

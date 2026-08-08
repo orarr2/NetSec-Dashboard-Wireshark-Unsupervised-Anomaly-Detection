@@ -118,9 +118,16 @@ def _webhook_payload(session, out, report_paths, recipient=None,
     if isinstance(out, dict):
         stats = out.get("stats") or {}
         results = out.get("results") or []
-        if results:
-            worst = ((results[0].get("verdict") or {})
-                     .get("verdict"))
+        # results are priority-sorted, and "worst" must be severity-
+        # ranked - a high-priority suspicious first row must not mask a
+        # malicious further down (same rule as the report banner in
+        # server/worker.py).
+        _sev = {"malicious": 0, "suspicious": 1, "benign": 2}
+        verdicts = [((r.get("verdict") or {}).get("verdict"))
+                    for r in results]
+        verdicts = [v for v in verdicts if v in _sev]
+        if verdicts:
+            worst = min(verdicts, key=_sev.get)
     return {
         "session_id": (session or {}).get("id"),
         "label": (session or {}).get("label"),

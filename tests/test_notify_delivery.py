@@ -188,6 +188,31 @@ def test_deliver_falls_back_to_n8n_when_smtp_fails(tmp_path):
     assert "SMTP authentication failed" in payload["smtp_error"]
 
 
+def test_webhook_worst_verdict_is_severity_ranked(tmp_path):
+    """results arrive priority-sorted, so the first row can be a high-
+    priority suspicious while a malicious sits further down - the
+    payload must still report the malicious (same severity ranking as
+    the report banner in server/worker.py)."""
+    seen = {}
+
+    def fake_n8n(url, payload):
+        seen.update(payload)
+        return True, "n8n accepted (200)"
+
+    log = notify.deliver(
+        {"id": 9, "label": "mixed.pcap"},
+        out={"results": [
+            {"verdict": {"verdict": "suspicious"}},
+            {"verdict": {"verdict": "malicious"}},
+            {"verdict": {"verdict": "benign"}},
+        ], "stats": {}},
+        report_paths=_paths(tmp_path),
+        env={"N8N_WEBHOOK_URL": "https://n8n.example/hook"},
+        n8n_fn=fake_n8n)
+    assert [entry[0] for entry in log] == ["n8n_only"]
+    assert seen["worst_verdict"] == "malicious"
+
+
 def test_deliver_smtp_failed_and_no_n8n_configured(tmp_path):
     def fake_send(*a, **kw):
         return False, "connection refused"

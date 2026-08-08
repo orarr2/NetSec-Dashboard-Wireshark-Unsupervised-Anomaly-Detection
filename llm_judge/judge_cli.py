@@ -935,7 +935,10 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
     # A stringified id ("fast_cloud_3") without a colon is treated as
     # a preset name; a spec ("groq:..." / "ollama:...") wins as-is.
     # Bad id / bad spec silently falls back to .env - never lose a run.
-    from . import panel_presets as _pp
+    # Absolute import: this file also runs as a plain script
+    # (`python llm_judge/judge_cli.py ...`), where __package__ is unset
+    # and a relative import raises ImportError before any work happens.
+    from llm_judge import panel_presets as _pp
     resolved_override = panel_spec_override
     if isinstance(resolved_override, str) and resolved_override and ":" not in resolved_override:
         preset = _pp.preset_by_id(resolved_override.strip())
@@ -1039,6 +1042,12 @@ def analyze_and_judge(pcap_path, label="S1", verbose=True,
             print(f"[cli] model={client.model_id} - judging...", flush=True)
         out = judge_core.judge_candidates(assembled["candidates"],
                                           client=client, verbose=verbose)
+    # stats.provider feeds the n8n webhook payload (server/notify.py);
+    # only the CLI's top-level JSON used to carry the provider, so the
+    # worker path always sent null. On a panel run the first constructed
+    # judge's provider is the honest answer, same as the commentary.
+    out["stats"]["provider"] = (commentary_provider
+                                or judge_config.LLM_JUDGE_PROVIDER)
     if verbose:
         print("[cli] generating analyst commentary...", flush=True)
     out["analyst_commentary"] = judge_core.analyst_commentary(

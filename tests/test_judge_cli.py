@@ -716,6 +716,36 @@ def test_analyst_commentary_returns_prose(monkeypatch):
     assert len(text) <= 2000
 
 
+def test_analyst_commentary_payload_carries_panel_review_flag(monkeypatch):
+    """The commentary payload's needs_human_review must read the panel
+    block too - it used to check only the committee key, so panel
+    disputes were invisible to the commentary model."""
+    from llm_judge import judge_core
+
+    captured = {}
+
+    class CapturingClient:
+        model_id = "fake-prose"
+
+        def judge(self, sp, uc):
+            captured["payload"] = json.loads(uc)
+            return "Panel dispute noted."
+
+    monkeypatch.setattr("llm_judge.llm_clients.make_client",
+                        lambda **_k: CapturingClient())
+    verdicts = {"results": [{
+        "candidate_id": "10.0.0.9", "kind": "ip", "priority": 0.5,
+        "panel": {"needs_human_review": True, "agreement": False},
+        "verdict": {"verdict": "suspicious", "category": "port_scan",
+                    "confidence": 0.55, "evidence_features": [],
+                    "reasoning": "split panel.",
+                    "recommended_action": "investigate"},
+    }]}
+    judge_core.analyst_commentary(None, {"n_packets": 1}, verdicts)
+    row = captured["payload"]["verdicts"][0]
+    assert row["needs_human_review"] is True
+
+
 def test_analyst_commentary_swallows_errors(monkeypatch):
     """A dead provider must not crash the batch."""
     from llm_judge import judge_core
