@@ -1031,7 +1031,11 @@ def run_security_scans(S):
                 n_pkt = int(row["count"])
                 n_dst = int(row["unique_dsts"])
                 ratio = n / max(n_pkt, 1)
-                if n_dst > 20 or ratio > 0.7:
+                # A horizontal spread (>20 dsts) is only a scan when the
+                # flag ratio is real too: a normal client hits many hosts
+                # but completes handshakes (ratio ~0.02), a scanner does
+                # not. Vertical scans still fire on the ratio branch.
+                if (n_dst > 20 and ratio > 0.25) or ratio > 0.7:
                     findings["scan_alerts"].append({
                         "src": src, "type": name, "count": int(n),
                         "unique_dsts": n_dst, "ratio": round(ratio, 2),
