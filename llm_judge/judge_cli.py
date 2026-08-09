@@ -183,7 +183,11 @@ def _first_sentence(text, max_chars=160):
     a period was found, ' ...' if the cap truncated a longer sentence.
     Empty input -> empty string. Used to compact LLM prose (reasoning,
     debate rebuttals, analyst commentary) for the email report - the
-    full text stays in verdicts.json."""
+    full text stays in verdicts.json.
+
+    Item 8: truncation happens on a WORD boundary, not mid-word - so a
+    long sentence reads "the scan rule fired with 837 SYN ..." and not
+    "the scan rule fired with 837 SY ..."."""
     if not isinstance(text, str):
         return ""
     s = text.strip()
@@ -197,10 +201,78 @@ def _first_sentence(text, max_chars=160):
     if m:
         s = s[:m.end()].rstrip()
     if len(s) > max_chars:
-        s = s[:max_chars - 4].rstrip() + " ..."
+        cut = s[:max_chars - 4]
+        # Word-boundary rewind: back up to the last space so we do not
+        # split a word. If there is no space in the window (very long
+        # single token), keep the hard cut.
+        sp = cut.rfind(" ")
+        if sp > max_chars // 2:
+            cut = cut[:sp]
+        s = cut.rstrip() + " ..."
     elif not s.endswith((".", "!", "?", "...")):
         s += "."
     return s
+
+
+def _fmt_duration(seconds):
+    """Item 8: sub-minute durations render as 'Ns' instead of '~0 min'."""
+    if not isinstance(seconds, (int, float)) or seconds < 0:
+        return "?"
+    s = float(seconds)
+    if s < 60:
+        return f"{s:.0f}s" if s >= 10 else f"{s:.1f}s"
+    return f"~{round(s / 60)} min"
+
+
+def _plural(n, singular, plural=None):
+    """Item 8: '1 dst' vs '2 dsts'. Default plural = singular + 's'."""
+    return singular if n == 1 else (plural or singular + "s")
+
+
+# Item 13: friendly labels for the schema-code categories in the
+# analyst-facing exec summary. Verdicts.json still carries the code.
+_CATEGORY_LABEL = {
+    "benign_anomaly": "statistical anomaly (no attack shape)",
+    "port_scan": "port scan",
+    "syn_flood": "SYN flood",
+    "arp_mitm": "ARP MITM",
+    "dns_amp": "DNS amplification",
+    "beaconing_c2": "C2 beaconing",
+    "dns_tunnel": "DNS tunnel",
+}
+
+
+def _friendly_category(cat):
+    return _CATEGORY_LABEL.get(cat, cat)
+
+
+# Item 13: timestamps rendered in Israel time for reader clarity. UTC
+# stays in verdicts.json for machine parsing.
+_TZ_ISRAEL = None
+
+
+def _israel_tz():
+    global _TZ_ISRAEL
+    if _TZ_ISRAEL is None:
+        try:
+            from zoneinfo import ZoneInfo
+            _TZ_ISRAEL = ZoneInfo("Asia/Jerusalem")
+        except Exception:  # pragma: no cover - stdlib missing on 3.8-
+            from datetime import timezone as _tz, timedelta
+            _TZ_ISRAEL = _tz(timedelta(hours=3))
+    return _TZ_ISRAEL
+
+
+def _fmt_when_local(dt):
+    """A datetime in Israel time, formatted for the analyst. Naive input
+    is assumed UTC (the pipeline stamps UTC everywhere)."""
+    from datetime import timezone as _tz
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_tz.utc)
+    try:
+        return dt.astimezone(_israel_tz()).strftime("%a %d %b %Y, %H:%M %Z")
+    except Exception:
+        return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
 _TRIGGER_NAMES = {"isolation_forest": "IsolationForest",
@@ -240,7 +312,8 @@ def _evidence_short(r):
     if ev.get("packets") is not None:
         s = f"{ev['packets']:,} pkts"
         if ev.get("unique_dsts"):
-            s += f" to {ev['unique_dsts']} dsts"
+            n = ev["unique_dsts"]
+            s += f" to {n} {_plural(n, 'dst')}"
         bits.append(s)
     ports = ev.get("top_dst_ports") or []
     if ports:
@@ -284,7 +357,8 @@ def _evidence_block(r):
     if ev.get("packets") is not None:
         tr_bits.append(f"{ev['packets']:,} packets")
     if ev.get("unique_dsts") is not None:
-        tr_bits.append(f"{ev['unique_dsts']} unique destinations")
+        n = ev["unique_dsts"]
+        tr_bits.append(f"{n} unique {_plural(n, 'destination')}")
     if ev.get("syn_count"):
         tr_bits.append(f"{ev['syn_count']:,} SYN")
     ports = ev.get("top_dst_ports") or []
@@ -462,15 +536,24 @@ def _votes_cell(r):
 
 
 def _panel_health_rows(stats):
-    """[(model, assigned, valid, mean_latency_str, cause_str, degraded)]"""
+    """[(model, assigned, valid, mean_latency_str, cause_str, degraded)]
+
+    Item 8: a judge that served every candidate from cache has
+    mean_latency_ms = 0, which the old renderer showed as "0 ms" - a
+    reader could not tell "cache" apart from "instantly answered". Tag
+    it explicitly."""
     pr = stats.get("panel_report") or {}
     rows = []
     for m in stats.get("models") or []:
         row = pr.get(m) or {}
         assigned = int(row.get("assigned") or 0)
         valid = int(row.get("valid_verdicts") or 0)
+        cache_hits = int(row.get("cache_hits") or 0)
         ml = row.get("mean_latency_ms")
-        ml_s = f"{ml} ms" if ml is not None else "-"
+        if ml is None or (ml == 0 and cache_hits >= max(1, valid)):
+            ml_s = "cache" if cache_hits else "-"
+        else:
+            ml_s = f"{ml} ms"
         causes = _failure_causes(row.get("failure_examples") or [])
         degraded = assigned > 0 and valid < assigned / 2
         rows.append((m, assigned, valid, ml_s,
@@ -522,7 +605,8 @@ def exec_summary_lines(pcap_name, out, ctx=None, for_email=False):
                 reason = _first_sentence(v["reasoning"], max_chars=180)
                 lines.append(
                     f"- `{r['candidate_id']}` - **{v['verdict'].upper()}**"
-                    f" ({v['category']}, confidence {v['confidence']:.2f},"
+                    f" ({_friendly_category(v['category'])}, confidence"
+                    f" {v['confidence']:.2f},"
                     f" {_votes_cell(r)}) - {reason}"
                     f" **Action: {v['recommended_action']}.**")
                 ev_line = _evidence_short(r)
@@ -533,32 +617,47 @@ def exec_summary_lines(pcap_name, out, ctx=None, for_email=False):
                              f"candidate table.")
             lines.append("")
 
+    # Item 9: cap transparency. The email body used to hide the fact that
+    # only the top N candidates were judged; a reader who only sees the
+    # PDF's Appendix misses it. Surface it here so the manager knows
+    # there is a tail.
+    n_capped = len(ctx.get("capped_ips") or []) if ctx else 0
+    if n_capped:
+        lines.append(
+            f"*{n_capped} additional candidate"
+            f"{'' if n_capped == 1 else 's'} not judged this run "
+            f"(batch cap - full list in the report Appendix / verdicts.json).*"
+        )
+        lines.append("")
+
     if ctx:
         protos = ", ".join(f"{k}" for k in list(ctx.get(
             "top_protocols") or {})[:3])
-        mins = round((ctx.get("duration_s") or 0) / 60)
+        # Item 8: sub-minute durations print as "45s", not "~0 min".
+        dur_str = _fmt_duration(ctx.get("duration_s") or 0)
         # Time metadata: WHEN the capture was recorded matters as much
         # as WHAT it saw. A scan at 03:17 Sunday reads differently
         # from one at 14:00 Wednesday. ctx["time_range"] is
-        # [start, end] ISO strings from build_context().
+        # [start, end] ISO strings from build_context() (UTC).
+        # Item 13: render in Israel time for the analyst.
         tr = ctx.get("time_range") or []
         when_bits = []
         if tr and tr[0]:
             try:
                 from datetime import datetime as _dt
                 start = _dt.fromisoformat(tr[0].replace(" ", "T"))
-                when_bits.append(
-                    f"recorded {start.strftime('%a %d %b %Y, %H:%M')}")
+                when_bits.append(f"recorded {_fmt_when_local(start)}")
             except Exception:
                 when_bits.append(f"recorded {tr[0]}")
         n_macs = ctx.get("total_macs") or 0
         n_local = (ctx.get("local_ips_count")
                    if ctx.get("local_ips_count") is not None else None)
+        n_ips = ctx.get("total_ips", 0)
         lines += [
             f"**Capture**: {ctx.get('n_packets', 0):,} packets over "
-            f"~{mins} min · {ctx.get('total_ips', 0)} IPs"
+            f"{dur_str} · {n_ips} {_plural(n_ips, 'IP')}"
             + (f" ({n_local} local)" if n_local is not None else "")
-            + (f" · {n_macs} MACs" if n_macs else "")
+            + (f" · {n_macs} {_plural(n_macs, 'MAC')}" if n_macs else "")
             + f" · top protocols: {protos}.",
         ]
         if when_bits:

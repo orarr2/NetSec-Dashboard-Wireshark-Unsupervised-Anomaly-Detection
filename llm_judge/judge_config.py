@@ -168,7 +168,7 @@ QUOTA_DB = os.environ.get("LLM_JUDGE_QUOTA_DB",
 # the calibration section of the notebook, and record the kappa delta in
 # PROMPT_CHANGELOG.md. The version is part of the cache fingerprint, so a
 # bump automatically invalidates cached verdicts.
-PROMPT_VERSION = "v0.5.0"  # L4+L5: TLS versions block + baseline_history block
+PROMPT_VERSION = "v0.6.0"  # Panel-role sections, safety rails, injection defence, confidence rubric, local variant
 
 # Ensemble weights (spec section 9).
 W_ANOM = 0.20        # baseline detector floor

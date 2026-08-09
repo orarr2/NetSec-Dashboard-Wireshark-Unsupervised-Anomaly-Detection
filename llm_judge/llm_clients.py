@@ -156,6 +156,12 @@ class OllamaClient:
     # Cloud clients (Groq/Gemini via OpenAICompatClient) still batch.
     MAX_BATCH = 1
 
+    # v0.6.0 marker: caller (_verdict_from_client) routes SYSTEM_PROMPT_LOCAL
+    # instead of the full SYSTEM_PROMPT to any client with this attribute.
+    # Same rules, ~800 tokens instead of ~2500 - a 60% prefill saving on
+    # CPU Ollama.
+    wants_local_prompt = True
+
     def __init__(self, model=None, host=None, timeout_s=None,
                  verdict_schema=None):
         self.model_id = model or judge_config.OLLAMA_MODEL
@@ -173,11 +179,33 @@ class OllamaClient:
                 {"role": "user", "content": user_content},
             ],
             "stream": False,
-            # keep the model resident between candidates - a batch is many
-            # sequential calls and reloading from disk dominates latency
-            "keep_alive": "30m",
-            "options": {"temperature": 0.0},
+            # keep the model resident across candidates so we never pay a
+            # from-disk reload penalty mid-run (item 17); MAX_LOADED_MODELS
+            # is set to 7 on the VM to hold 5 judges + 2 embeds together.
+            "keep_alive": "24h",
+            "options": {
+                # item 21: deterministic pick over Ollama's 0.8 default
+                "temperature": 0.1,
+                # item 15: 8192 context - the default 2048 silently
+                # truncates a candidate blob, which was flagged as the
+                # prime suspect for the local-panel FPs (2026-08-09).
+                "num_ctx": 8192,
+                # item 20: hard cap on generated tokens - JSON verdicts
+                # never need >1024, and small local models sometimes
+                # ramble into 4K stream-of-consciousness that never lands
+                # in schema.
+                "num_predict": 1024,
+                # item 22: safety net stop token; largely moot when
+                # format=json is honoured (item 23), but a belt for a
+                # provider that ignores JSON mode. Only real chars, no
+                # explanation.
+                "stop": ["\n}\n", "\n}\r\n"],
+            },
         }
+        # item 23: Ollama-native JSON mode. When active is a schema, ask
+        # Ollama to enforce it end-to-end; when there is no schema (the
+        # analyst-commentary path), fall through to a plain text response
+        # so the prose is not JSON-coerced.
         if active is not None:
             payload["format"] = active
         req = urllib.request.Request(

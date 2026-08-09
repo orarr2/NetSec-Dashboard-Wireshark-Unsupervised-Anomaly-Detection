@@ -5,6 +5,11 @@ The main dashboard (`app/Network_Security_Dashboard.ipynb`) runs exactly as
 before and knows nothing about this folder; if you never open this notebook,
 nothing here ever executes.
 
+**Read first if you are new here:**
+[`docs/LLM_PANEL_ROLE.md`](../docs/LLM_PANEL_ROLE.md) explains WHY the
+panel exists, what specific gaps it fills that deterministic rules and
+ML cannot, and what safety rails constrain what it does.
+
 What it does (design: [`docs/LLM_JUDGE_SPEC.md`](../docs/LLM_JUDGE_SPEC.md)):
 the detection pipeline already produces per-IP ML scores (IsolationForest,
 DBSCAN), deterministic rule alerts (scans, floods, DNS amplification, ARP

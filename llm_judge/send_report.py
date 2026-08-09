@@ -283,10 +283,26 @@ def markdown_to_html(md, banner=None):
     # to its locale default (windows-1252 on a Western Windows) and the
     # report's non-ASCII characters (the scales glyph on a split panel,
     # the ellipsis, any Unicode in a hostname) render as mojibake.
+    # Item 10 (v0.6.0): print CSS for the PDF path. weasyprint honours
+    # @page + page-break-* rules; email clients ignore them. Rules:
+    # - h2 (section headers) starts a new page.
+    # - tables never split a row across pages (page-break-inside:
+    #   avoid on tr).
+    # - tables repeat their <thead> on each page (native HTML behaviour
+    #   as long as thead exists, which markdown_to_html emits).
+    print_css = (
+        "@page { size: A4; margin: 14mm 12mm 16mm 12mm; }"
+        " h2 { page-break-before: always; }"
+        " h2:first-of-type { page-break-before: avoid; }"
+        " tr, li, blockquote { page-break-inside: avoid; }"
+        " table { page-break-inside: auto; }"
+        " thead { display: table-header-group; }"
+    )
     return (
         "<html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width,"
-        "initial-scale=1\"></head>"
+        "initial-scale=1\">"
+        f"<style>{print_css}</style></head>"
         "<body style=\"font-family:-apple-system,Segoe UI,Helvetica,"
         "Arial,sans-serif;color:#1f2328;line-height:1.5;max-width:820px\">"
         f"{banner_html}{body}"
