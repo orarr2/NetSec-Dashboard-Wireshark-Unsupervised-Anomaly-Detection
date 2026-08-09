@@ -145,8 +145,8 @@ tcp.srcport, tcp.dstport, tcp.flags,
 udp.srcport, udp.dstport,
 dns.qry.name, dns.flags.rcode, dns.flags.response,
 arp.src.proto_ipv4, arp.src.hw_mac,
-wlan.fc.type, wlan.fc.subtype, wlan.sa, wlan.da,
-wlan.fc.retry, wlan.duration
+wlan.fc.type, wlan.fc.subtype, wlan.sa, wlan.fc.retry,
+radiotap.dbm_antsignal, wlan_radio.signal_dbm
 ```
 
 The full tshark output is captured into memory
@@ -279,7 +279,9 @@ scans and returns a dict with the exact keys shown:
 
 - `scan_alerts` - per-flag horizontal scan detection (SYN / FIN / NULL /
   Xmas). A source qualifies when `count > 50` AND
-  (`unique_dsts > 20` OR the flag-to-packets ratio exceeds 0.7).
+  ((`unique_dsts > 20` AND the flag ratio > 0.25) OR the flag-to-packets
+  ratio exceeds 0.7). The ratio gate on the many-destinations branch keeps
+  a normal client reaching 20+ hosts at a low SYN ratio from tripping it.
 - `dns_amp` - reflectors (built from `dns_amp_per_src`): DNS response
   senders with `count >= 50` AND `mean_size >= 200` bytes.
 - `flood` - aggregate SYN flood: `total_syn >= 1000` AND
@@ -624,14 +626,14 @@ ADV_DGA_LOGPROB_FLAG   = None   # -> adaptive: mean(logprobs) - std
 ADV_FUSION_WINDOW_MIN  = 15
 ```
 
-`_adv_load_pk(path)` is a **second** tshark parse with 26 fields
+`_adv_load_pk(path)` is a **second** tshark parse with 28 fields
 (`_ADV_TSHARK_FIELDS`) - adds `dns.qry.type`, `arp.opcode`,
 `arp.dst.proto_ipv4`, `tls.handshake.extensions_server_name`,
-`tls.handshake.ja3`, `tls.handshake.ja4`,
-`dhcp.option.dhcp_server_id`. This is a separate pass from cell 8's
-loader because the fast path was tuned for the base features and adding
-seven extra fields to every packet in a large capture is measurably
-slower.
+`tls.handshake.ja3`, `tls.handshake.ja4`, `tls.record.version`,
+`tls.handshake.ciphersuite`, `dhcp.option.dhcp_server_id`. This is a
+separate pass from cell 8's loader because the fast path was tuned for
+the base features and adding nine extra fields to every packet in a
+large capture is measurably slower.
 
 The five engines produce a common `_adv_sig` row shape (`device`,
 `peer`, `signal`, `tactic`, `technique`, `score`, `severity`, `count`,
@@ -640,10 +642,10 @@ The five engines produce a common `_adv_sig` row shape (`device`,
 | Engine | Detection logic | MITRE technique |
 |---|---|---|
 | `_adv_detect_arp_dhcp` | IP → >1 MAC; MAC → ≥4 IPs; gratuitous ARP flood; >1 DHCP server id | T1557 / T1557.002 |
-| `_adv_detect_dns_tunnel` | per registrable domain: unique ≥ 20 AND ratio ≥ 0.90 AND (mean entropy ≥ 3.8 OR mean qlen ≥ 40); NXDOMAIN storms ≥ 30 per `ip_dst` | T1071.004 / T1568.002 |
-| `_adv_detect_dga` | char-bigram model (Laplace, `^…$`) trained on *resolved* domains in this capture; when <30 distinct bases, augments with the 49 hardcoded common domains. Flags labels whose log-probability is < `mean - std` AND (entropy ≥ 3.2 OR vowel_ratio < 0.25) | T1568.002 |
+| `_adv_detect_dns_tunnel` | per registrable domain: unique ≥ 20 AND ratio ≥ 0.90 AND (max entropy ≥ 3.8 OR mean qlen ≥ 40); NXDOMAIN storms ≥ 30 per `ip_dst` | T1071.004 / T1568.002 |
+| `_adv_detect_dga` | char-bigram model (Laplace, `^…$`) trained on *resolved* domains in this capture; when <30 distinct bases, augments with the 50 hardcoded common domains. Flags labels whose log-probability is < `mean - std` AND entropy ≥ 3.6 AND vowel_ratio < 0.25 | T1568.002 |
 | `_adv_detect_beaconing` | (src, dst) pairs, TCP-SYN-only or UDP, ≥16 events, private→public only, NTP/123 excluded, median interval ≥ 1 s. Regularity is the mean of three sub-scores: IQR-skew, MAD/median dispersion, packet-size MAD. Flags at ≥ 0.80, "high" at ≥ 0.90 | T1071 |
-| `_adv_detect_tls` | rare JA3 (single device with ≤3 occurrences → 0.5/low); TLS to external IP without SNI (0.45/low); SNI-provider ≠ dst-IP-provider via `_AdvCloudDB` (0.6/medium, domain fronting) | T1071.001 / T1090 |
+| `_adv_detect_tls` | rare JA3 (a single device, exactly one occurrence, to an external peer → 0.5/low); TLS to external IP without SNI (0.45/low); SNI-provider ≠ dst-IP-provider via `_AdvCloudDB` (0.6/medium, domain fronting) | T1071.001 / T1090 |
 
 `_adv_fuse(all_signals)` is the fusion / kill-chain scorer: per device,
 `base = max(signal_score)`, `best = max distinct techniques inside the
@@ -655,10 +657,8 @@ The five engines produce a common `_adv_sig` row shape (`device`,
 It **never raises** - on any failure returns
 `{"available": False, "reason": ...}`.
 
-Note: today the advanced signals live only on the dashboard side. The
-LLM-judge candidate context (`llm_judge/judge_core.assemble_candidates`)
-records them as `None`; feeding them into the judge is a planned
-enhancement.
+Note: the advanced signals are forwarded to the LLM judge - `judge_cli`
+passes them into `assemble_candidates` via `threats_to_advanced_signals`.
 
 ---
 

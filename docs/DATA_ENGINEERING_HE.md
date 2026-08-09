@@ -28,14 +28,17 @@ Recording". לחיצה עליו מפעילה instance של `LiveCaptureWorker`
 (מאותחל בתאי הנוטבוק) שמריץ:
 
 ```
-tshark -i <interface> -b duration:<seconds> -w <path/session.pcapng>
+tshark -i <interface> -w <label>_chunk_<ts>_<n>.pcap -l \
+    -T fields -E header=n -E separator=| -E occurrence=f -E quote=n \
+    -e <fields...>
 ```
 
 הפרמטרים:
 - `-i <interface>` - הכרטיס לסניפור (למשל `Wi-Fi` או `Ethernet`)
-- `-b duration:N` - ring buffer: כל N שניות נחתם קובץ pcapng חדש
-  (למשל 60 שניות → קובץ סשן קטן, קל להעלאה)
-- `-w` - נתיב היעד
+- `-w` - כותב chunk של pcap לדיסק; כל Pause/Resume פותח chunk חדש,
+  וב-Stop & Save כל ה-chunks מתמזגים לקובץ אחד עם `mergecap`
+- `-l -T fields -E separator=|` - במקביל לכתיבה, tshark פולט שדות
+  חיים ל-stdout עבור המונים החיים בדשבורד
 
 הקבצים נופלים לתיקייה `netsec_sessions/` שהיא **מקומית ולא נכנסת
 לגיט** (מסודר ב-`.gitignore`).
@@ -65,7 +68,7 @@ tshark -i <interface> -b duration:<seconds> -w <path/session.pcapng>
 
 זו לא חתימה קריפטוגרפית של אמת (זה HMAC משותף עם הצד השני), אבל היא
 מונעת שמישהו לא-מורשה ב-tailnet יעלה קבצים. ה-secret נוצר פעם אחת
-בזמן `create_sensor.py`.
+בזמן `deploy/create_sensor.py`.
 
 
 ## חלק 2: טרנספורמציה - מ-pcapng לטבלה של פיצ'רים
@@ -80,7 +83,7 @@ CLI נקייה של אותו קוד).
 
 ```
 tshark -r <file.pcapng> -n -T fields \
-    -E header=n -E separator=\t -E occurrence=f \
+    -E header=n -E separator=| -E occurrence=f \
     -e frame.time_epoch -e frame.len \
     -e eth.src -e eth.dst \
     -e ip.src -e ip.dst -e ipv6.src -e ipv6.dst \
@@ -92,19 +95,23 @@ tshark -r <file.pcapng> -n -T fields \
     -e http.host -e tls.handshake.extensions_server_name
 ```
 
-הפלט: קובץ TSV עם שורה לכל חבילה, עמודה לכל שדה שביקשנו. שדות שלא
-קיימים בחבילה נשארים ריקים.
+הפלט: טקסט מופרד ב-`|` עם שורה לכל חבילה, עמודה לכל שדה שביקשנו. שדות
+שלא קיימים בחבילה נשארים ריקים.
 
-**למה תשעה-עשרה שדות ולא הכל?** כי pcapng הוא בינארי כבד. ה-fields
+**למה 22 שדות ולא הכל?** כי pcapng הוא בינארי כבד. ה-fields
 שאנחנו רוצים תופסים ~2% מנפח ה-pcap המקורי (מדדנו את זה עם
-`tools/measure_pipeline_ratios.py`). כל ניתוח הבא רץ על ה-TSV, לא על
-ה-binary.
+`tools/measure_pipeline_ratios.py`). כל ניתוח הבא רץ על השדות
+המחולצים, לא על ה-binary.
 
-ב-`run_pipeline.py` הפלט של tshark נטען ישירות ל-pandas DataFrame:
+ב-`run_pipeline.py` הפלט של tshark מוזרם ישירות מ-stdout ל-pandas,
+ב-chunks במקום הכל בבת אחת:
 
 ```python
-df = pd.read_csv(io.StringIO(raw), sep="\t", header=None,
-                 names=COLS, dtype=str, na_filter=False)
+proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, ...)
+reader = pd.read_csv(proc.stdout, sep="|", header=None, names=COLS,
+                     dtype=str, na_filter=False, chunksize=CHUNK_ROWS)
+for df in reader:
+    ...
 ```
 
 עמודות כמו `ts` ו-`len` מקבלות המרה מספרית; עמודות שיש בהן גם IPv4
@@ -164,8 +171,8 @@ home`, `router`, `nas`, `unknown`).
   מ-20 שניות מדלגים**
 
 **שכבת כללים דטרמיניסטיים** (הזיהוי החזק ביותר בפועל)
-- Port scan: SYN לחוד/FIN לחוד/NULL/Xmas > 50 חבילות עם > 20 יעדים
-  שונים או ratio > 0.7
+- Port scan: SYN לחוד/FIN לחוד/NULL/Xmas > 50 חבילות עם (> 20 יעדים
+  שונים וגם ratio > 0.25) או ratio > 0.7
 - SYN flood: הרבה SYN במקביל מכתובות רבות (spoofed sources)
 - DNS amplification: הרבה תשובות מ-UDP/53 עם גודל ממוצע גדול
 - ARP spoofing: IP שלה יותר מ-MAC אחד
@@ -309,14 +316,14 @@ python3 tools/netsec_rag.py ingest-netsec /srv/netsec/reports
 2. לכל result בונה טקסט קריא: "Session 24, IP 172.10.146.42 was
    judged malicious, category port_scan, device Intel pc-lab,
    confidence 0.93, reasoning ..."
-3. שולח את הטקסט ל-Ollama עם המודל `mxbai-embed-large` → מקבל וקטור
-   1024-מימדי
+3. שולח את הטקסט ל-Ollama עם המודל `nomic-embed-text` → מקבל וקטור
+   768-מימדי
 4. שומר את (טקסט + וקטור + מטאדאטה) ב-`store.db` (SQLite עם ה-vector
    כ-BLOB float32)
 5. deduplication לפי `content_hash` - אותו טקסט לא נכנס פעמיים
 
 כשמישהו שואל שאלה ב-RAG:
-1. השאלה נכנסת גם ל-`mxbai-embed-large` → וקטור
+1. השאלה נכנסת גם ל-`nomic-embed-text` → וקטור
 2. cosine top-K מול המטריצה (brute force ב-numpy - מהיר על 302
    chunks)
 3. K הקטעים העליונים נשלחים כקונטקסט למודל צ'אט (`qwen2.5:3b`) שמנסח

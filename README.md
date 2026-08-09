@@ -3,8 +3,9 @@
 A Wireshark PCAPNG forensic dashboard built on Dash + scikit-learn + PyTorch.
 Loads up to two capture sessions (S1 / S2), runs IsolationForest, DBSCAN, an
 LSTM, and two deterministic rule layers in parallel, then renders dozens of
-figures across 9 navigation sections (analysis, device profile, browsing
-analysis, security, comparison, inventory, external traffic, coverage).
+figures across 9 navigation sections (live recording, analysis, device
+profile, browsing analysis, security, comparison, inventory, external
+traffic, coverage).
 
 ## What it does
 

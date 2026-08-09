@@ -206,8 +206,10 @@ and never reaches the model.
   classifier + inventory). The worker path falls back to a lightweight
   derivation that uses only `S["ip_to_mac"]` (for `oui_vendor` via the
   `manuf` package) and `S["dns_per_ip"]` (for `hostname` via .local
-  mDNS names). `category` remains "unknown" on the worker path unless
-  the dashboard-produced inventory is attached at `S["_local_inv"]`.
+  mDNS names). On the worker path `_lightweight_device_context` now
+  derives a `category` from OUI / ports / DNS names as a fallback; a
+  dashboard-produced inventory attached at `S["_local_inv"]` still
+  takes precedence.
 - **`websites`** - `top_http_hosts` / `top_tls_sni` / `top_dns_queries`,
   each an ordered list (up to 5, by count) of `{host, count}` items or
   `null` when the pipeline observed no traffic of that kind for this IP.
@@ -323,7 +325,9 @@ splits use fail-safe severity and set `needs_human_review=True`).
 ## 6. Panel wall-clock and where time goes
 
 Measured on the production VM (Oracle ARM 4 vCPU / 24 GB) with the
-**current 4-judge panel** (activated 2026-08-01):
+**balanced_4 4-judge panel** (activated 2026-08-01; the default preset
+is now `reliable_hybrid_4`: groq:llama-3.1-8b-instant,
+groq:openai/gpt-oss-120b, ollama:qwen2.5:3b, ollama:granite3.3:2b):
 
 | Judge | Round 1 latency | Notes |
 |---|---|---|
@@ -359,7 +363,7 @@ local model would push wall-clock past 2 minutes per candidate. The
 
 ## 7. What was added in I2 (2026-08-01) and what remains open
 
-Delivered in prompt version **v0.4.0**:
+Delivered in prompt version **v0.4.0** (current: **v0.5.0**):
 
 - `session_context.hour_of_day` / `.day_of_week` / `.iso_timestamp`
 - `device_context.oui_vendor` + `.hostname` (lightweight, worker path;
@@ -376,17 +380,18 @@ Pipeline changes (`attack_tests/run_pipeline.py`):
   `tls_sni_per_ip`, `dst_ports_per_ip` as per-IP Counter maps that
   `assemble_candidates` consumes.
 
-Still open (not yet in the blob):
+Delivered in **v0.5.0** (previously open):
 
-| Field | Where the pipeline has it | Cost to expose |
-|---|---|---|
-| `device_context.category` on worker path | Full classifier lives in `app/dashboard_module.py` (`_SORTED_RULES`, `_match_dns_fingerprint`, `classify_local_device`); the module runs `pip install` + `app.run()` on import, so it can't be imported into the worker directly | Medium - extract a `app/device_inventory.py` (~380 LOC) shared by both paths |
-| TLS versions + cipher suites | `tls_anomaly` engine returns only score | Medium - extend engine output |
-| Baseline history (has this IP been seen before?) | `baseline` module keeps 30-day history | Medium - lookup at assemble time |
+- `device_context.category` on the worker path - now derived by
+  `judge_core._lightweight_device_category` from OUI / ports / DNS names.
+- TLS versions + cipher suites - now exposed as the `tls` block via
+  `judge_core._tls_for`.
+- Baseline history (has this IP been seen before?) - now exposed as the
+  `baseline_history` block via `judge_core._history_for`.
 
 Every enrichment is additive; the prompt already teaches the model that
 `null` = unknown, so new fields never falsely imply "observed zero".
-Bumping `PROMPT_VERSION` (done: `v0.3.0` -> `v0.4.0`) invalidates every
+Bumping `PROMPT_VERSION` (done: `v0.3.0` -> `v0.4.0` -> `v0.5.0`) invalidates every
 cached verdict so the model re-judges with the richer input on next run.
 
 ---

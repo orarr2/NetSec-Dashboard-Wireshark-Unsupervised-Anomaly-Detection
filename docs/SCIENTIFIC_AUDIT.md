@@ -124,8 +124,11 @@ should stay unless we build a specific escape hatch (see §3).
 ## 3. Proposals
 
 Each proposal below is scoped, has an expected impact, and states how
-to measure whether it worked. **Nothing is implemented yet** - this
-document is the case for changing each item, not the change itself.
+to measure whether it worked. Since this audit was written, §3.1 (the
+guardrail escape hatch), §3.2 (panel majority quorum, now the default)
+and §3.7 (the evidence-faithfulness check) have been implemented;
+§3.3-§3.6 remain proposals - the case for changing each item, not the
+change itself.
 
 ### 3.1 Rule-guardrail escape hatch for rule-false-positives (P1)
 

@@ -73,8 +73,9 @@ Five fixes were folded back into the notebook from these runs:
    detected and replaced with the mean k-distance; DBSCAN is skipped
    when `|IPs| > 5 000` so spoofed floods don't blow memory.
 4. **Cell 16** - horizontal-scan rule extended from SYN-only to also
-   trigger on FIN-only, NULL, Xmas with the same > 50-pkt + >20-dst
-   or > 0.7-ratio thresholds. Output now includes `scan_alerts`.
+   trigger on FIN-only, NULL, Xmas with the same > 50-pkt +
+   ((>20-dst AND ratio>0.25) OR ratio>0.7) thresholds. Output now
+   includes `scan_alerts`.
 5. **Cell 16** - DNS-response-side amplification rule: for each src IP
    that sent ≥ 50 DNS answers out of UDP/53 with mean response size
    ≥ 200 bytes, emit a reflector finding. Output adds `dns_amp`.

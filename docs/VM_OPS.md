@@ -7,7 +7,7 @@ paste-ready - substitute `<vm>` (your VM's Tailscale IP or hostname),
 `<sensor>` (the name you used with `create_sensor.py`).
 
 Nothing on the VM listens on the public interface except port 22 (see
-[`docs/VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md#firewall) for the iptables
+[`docs/VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md#2-let-tailscale-traffic-past-the-local-firewall) for the iptables
 rules). Every command below assumes you connect over Tailscale or SSH.
 
 ---
@@ -81,7 +81,7 @@ Key markers to look for:
 - `[cli] analyzing /srv/netsec/data/pcap/...` - worker claimed a queued job.
 - `[<label>] advanced engines: N signal(s) across M device(s)` - the six
   MITRE-mapped detectors ran.
-- `[cli] provider=... guardrail=on prompt=v0.3.0` - LLM judge starting.
+- `[cli] provider=... guardrail=on prompt=v0.5.0` - LLM judge starting.
 - `[worker] session <id> done (<K> verdicts)` - success.
 - `[worker] session <id> FAILED: <reason>` - error was recorded to the
   session row; the pipeline moves on and the queue keeps flowing.

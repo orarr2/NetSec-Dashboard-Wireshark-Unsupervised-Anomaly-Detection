@@ -24,7 +24,7 @@ Adding a device requires either your Tailscale password + email + 2FA, or an adm
 | RAG | `/rag/` on 443 | Caddy basicauth (bcrypt) | 401 |
 | Companion | `/chat/` on 443 | Caddy basicauth (bcrypt) | 401 |
 | n8n | 5678 | n8n's own login (email+password) | 401 |
-| Ingest API upload | 8766 | HMAC-SHA256 per request | 403 |
+| Ingest API upload | 8766 | HMAC-SHA256 per request | 401 |
 | Ingest API health | 8766 `/healthz` | none | 200 |
 | Ollama | 11434 (loopback) | none | not reachable from outside the VM host |
 | SSH | 22 | pubkey only, no passwords | connection dropped |
@@ -37,7 +37,7 @@ Adding a device requires either your Tailscale password + email + 2FA, or an adm
 
 **n8n:** n8n has its own rate-limiter and account lockout.
 
-**Ingest API HMAC:** every request must carry a `signature: HMAC-SHA256(payload, secret)` header where `secret` is the per-sensor secret in the DB. A wrong signature gives 403 without leaking the correct one; there is no "wrong password" quota because there is no password.
+**Ingest API HMAC:** every request must carry an `X-Signature` header: HMAC-SHA256 over the message `"<sha256>:<sensor>:<timestamp>"`, keyed with the per-sensor secret in the DB. A wrong signature gives 401 without leaking the correct one; there is no "wrong password" quota because there is no password.
 
 ## Cert model
 

@@ -2,8 +2,9 @@
 
 The parent `attack_tests/` folder covers the DETECTORS in the pipeline
 (IsolationForest, DBSCAN, and the scan / flood / amp / ARP rules). This
-sub-folder covers the six **advanced-threat engines** in
-`app/advanced_engines.py`: ARP/DHCP, DNS tunneling, DGA, beaconing, TLS.
+sub-folder covers the five **detection engines** plus the fusion layer
+in `app/advanced_engines.py`: ARP/DHCP, DNS tunneling, DGA, beaconing,
+TLS.
 Their thresholds were originally set by reasoning; this suite proves
 they fire on real captures that exhibit the target behaviour, and stay
 quiet on `benign_home.pcapng` (the false-positive guard).

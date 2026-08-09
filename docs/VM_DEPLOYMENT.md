@@ -433,11 +433,9 @@ A genuine live run reports `"cache_hits": 0`. This also applies to any
 future benchmark of latency, token cost or judge quality - with the
 cache in place you are measuring SQLite.
 
-The `analyze-pcap.yml` GitHub Actions workflow gets this right for
-free: every run starts on a fresh runner with no cache, so its
-verdicts (in the auto-opened Issue) are always genuinely live. The
-current run of that workflow was verified to record
-`cache_hits: 0` for both judges in a two-model Ollama panel.
+The retired `analyze-pcap.yml` GitHub Actions workflow got this right
+for free (every run started on a fresh runner with no cache); it has
+since been retired in favor of the VM pipeline as the autonomous path.
 
 ---
 

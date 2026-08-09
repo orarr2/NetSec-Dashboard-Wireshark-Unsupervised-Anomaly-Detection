@@ -101,7 +101,7 @@ or to `127.0.0.1` (loopback) - not routable from the internet.
 
 | Path | Contents |
 |---|---|
-| `/srv/netsec/db/netsec.db` | Server DB: sensors, pcaps, sessions, verdicts, panel_audit, compare_jobs |
+| `/srv/netsec/db/netsec.db` | Server DB: sensors, pcap_files, sessions, verdicts, panel_audit, compare_jobs |
 | `/srv/netsec/data/pcap/**` | Uploaded PCAPs |
 | `/srv/netsec/reports/<sid>/` | Per-session reports |
 | `/srv/netsec/reports/compare/<jid>/` | Pair-compare reports |

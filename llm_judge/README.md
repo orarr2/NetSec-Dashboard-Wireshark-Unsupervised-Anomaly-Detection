@@ -146,14 +146,14 @@ toggling the guardrail never needs a cache reset.
 | File | Role |
 |---|---|
 | `LLM_Judge_Notebook.ipynb` | Interactive entry point (Jupyter) |
-| `judge_cli.py` | **Headless CLI** - same pipeline, no Jupyter, used by the GitHub Actions workflow (also handy locally) |
+| `judge_cli.py` | **Headless CLI** - same pipeline, no Jupyter, used by the VM worker (also handy locally) |
 | `judge_config.py` | Provider/model, guardrail, weights, thresholds, prompt version |
 | `judge_core.py` | Candidate assembly, system prompt, verdict validation, rule guardrail, SQLite cache, ensemble ranking |
 | `llm_clients.py` | `ClaudeClient` + `OllamaClient` + `OpenAICompatClient` |
 | `benchmark.py` | Model qualification: judge the labeled fixtures, score accuracy/latency |
 | `benchmark_fixtures.json` | 11 labeled candidates extracted from the attack PCAPs (committed) |
 | `calibration.py` | Cohen's-kappa calibration against `attack_tests/ground_truth.json` |
-| `send_report.py` | Standalone SMTP delivery (used by `judge_cli --email`, by the GitHub Actions workflow, and importable from anywhere in the project - Gmail App Password default, any SMTP host works) |
+| `send_report.py` | Standalone SMTP delivery (used by `judge_cli --email`, by the VM worker's notifier, and importable from anywhere in the project - Gmail App Password default, any SMTP host works) |
 | `threat_intel.py` | Merges Shodan reputation into a candidate's TI signal + ranking weight (`W_TI`); loaded by the VM worker's re-rank pass |
 | `quota.py` | `QuotaStore` - a small SQLite counter for per-provider daily request / token counts, wired to the `usage` field the OpenAI-compatible clients return. Informational; nothing auto-skips a provider that hits its limit |
 | `requirements.txt` | Optional judge-only deps (`anthropic`) on top of the project root `requirements.txt` |
@@ -185,24 +185,12 @@ env vars. Writes:
 
 This is the entry point of the autonomous-agent path below.
 
-## Autonomous agent - GitHub Actions (no VM needed)
+## Autonomous agent
 
-`.github/workflows/analyze-pcap.yml` turns the judge into a hands-off
-agent that runs in GitHub's cloud, free of charge, on any PCAP you push
-(or on demand from mobile). Flow:
-
-1. Push a `.pcap`/`.pcapng` to `incoming/` (or **Actions → Analyze PCAP →
-   Run workflow** for a manual trigger with a chosen path/model).
-2. A GitHub-hosted runner: installs `tshark`, installs the project's
-   Python deps, installs Ollama (default model `llama3.2`, cached
-   between runs), and calls `judge_cli.py`.
-3. Uploads `verdicts.json` + `verdicts.md` + logs as a run artifact.
-4. Opens a **GitHub Issue** with the verdict table, labeled
-   `judge-verdict` - visible from mobile without leaving GitHub.
-
-Cost: `ubuntu-latest` runners are free (unlimited on public repos; 2,000
-min/month on private). Ollama runs locally on the runner, so no LLM API
-key or bill. See `incoming/README.md` for the full trigger reference.
+The GitHub Actions workflow (`analyze-pcap.yml`) that used to run the
+judge on pushed PCAPs was retired. The autonomous path is now the VM
+worker (`server/worker.py`), which claims each uploaded PCAP and runs
+this same CLI pipeline on it.
 
 Tests live with the rest of the suite: `tests/test_llm_judge_unit.py` and
 `tests/test_llm_judge_providers.py` (mocked LLM + in-process mock
@@ -263,7 +251,7 @@ plain-text alternative, with `verdicts.json` attached. A delivery
 failure is reported and returns a non-zero exit code from the standalone
 CLI, but never aborts `judge_cli.py` - an analysis that already ran is
 not thrown away because a mailbox rejected a login. The same module
-backs the `notify_email` input of `.github/workflows/analyze-pcap.yml`.
+backs the VM worker's email notifications (`server/notify.py`).
 
 ## Cost & determinism
 

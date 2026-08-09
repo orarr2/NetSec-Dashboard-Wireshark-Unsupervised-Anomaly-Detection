@@ -75,6 +75,8 @@ if len(k_dist) >= 4:
     eps_auto  = float(round(k_dist[elbow_idx], 2))
 else:
     eps_auto = 1.3
+if eps_auto <= 0:  # המרפק קרס ל-0 - נופלים לממוצע k-dist עם רצפה 0.05
+    eps_auto = max(round(k_dist.mean(), 3), 0.05)
 
 dbscan = DBSCAN(eps=eps_auto, min_samples=2)
 ip_agg["cluster"] = dbscan.fit_predict(X)        # -1 = noise (אנומליה)

@@ -11,7 +11,7 @@
 מוקדמת עם Docker, HMAC, Tailscale, worker queue, sqlite migration, או
 retention.
 
-**עדכון אחרון:** ‏2026-08-01 (‏prompt v0.4.0, ‏פאנל של 4 שופטים, ‏schema v4).
+**עדכון אחרון:** ‏2026-08-01 (‏prompt v0.5.0, ‏פאנל של 4 שופטים, ‏schema v6).
 
 </div>
 
@@ -182,7 +182,7 @@ iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited
 מקובץ הגדרות אחד ‏(`deploy/docker-compose.yml`). כל שירות רץ כ-**container**
 נפרד, שזה בעצם תהליך Linux מבודד עם מערכת קבצים משלו.
 
-**Docker Compose כרגע מרים 5 שירותים:**
+**Docker Compose כרגע מרים 6 שירותים:**
 
 | שירות | מה זה עושה | חייב? | סטטוס נוכחי |
 |---|---|---|---|
@@ -191,6 +191,7 @@ iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited
 | `retention` | job יומי - מוחק PCAP-ים ישנים, מבצע VACUUM ל-DB, שומר גיבויים | ✅ מומלץ | Up 24h+ |
 | `n8n` | פלטפורמת אוטומציה - fallback אם SMTP נכשל | אופציונלי | Up 2d+ |
 | `ollama` | מריץ מודלי LLM מקומית על ה-VM (‏zero-key, ‏qwen2.5:3b טעון) | אופציונלי אבל נדרש לפאנל 4-שופטים | Up |
+| `caddy` | reverse proxy עם HTTPS ו-basic auth לממשקי ה-web (‏פורטל, RAG, Companion, n8n) | אופציונלי אבל נדרש לפורטל | Up |
 
 **מה זה container בפועל?** תהליך Linux שרואה רק את הקבצים שדחפו אליו
 (‏ה-Dockerfile מגדיר איזה), לא רואה תהליכים אחרים במערכת, ומחובר לרשת
@@ -493,7 +494,7 @@ docker exec deploy-ollama-1 ollama pull qwen2.5:14b    # אם יש GPU בעתי�
 </div>
 
 ```bash
-LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:llama-3.3-70b-versatile,ollama:qwen2.5:3b,gemini:gemini-2.5-flash
+LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:openai/gpt-oss-120b,ollama:qwen2.5:3b,ollama:granite3.3:2b
 ```
 
 <div dir="rtl">
@@ -554,6 +555,10 @@ concurrency: קוראים ‏(select) יכולים לרוץ בזמן שכותב 
   שהמשתמש הזין בעת ההעלאה.
 - **v4**: הרחבת `panel_audit` ב-4 עמודות ‏(`stance`, `rebuttal`,
   `revised`, `needs_review`) + התחלת רישום per-candidate rows.
+- **v5**: הוספת עמודת `judge_panel_override` לטבלת `sessions` - בחירת
+  פאנל שופטים פר-העלאה מכפתור "Send to VM" בדשבורד.
+- **v6**: הוספת טבלת `compare_jobs` - תור לעבודות השוואה של שתי
+  sessions ‏(S1 מול S2) שמסתיימות בדוח משולב אחד.
 
 **קוד המפתח של ה-migration** (‏מ-`server/db.py`):
 
@@ -577,6 +582,8 @@ def migrate(conn):
 ```
 
 <div dir="rtl">
+
+(‏הקטע מקוצר - בקוד המלא `migrate()` ממשיך באותה תבנית גם דרך v5 ו-v6.)
 
 ### הטבלאות בגדול
 
@@ -618,16 +625,16 @@ def migrate(conn):
 | # | Provider | מודל | ‏פורמט מפתח | ‏Latency ב-VM | ‏Free-tier |
 |---|---|---|---|---|---|
 | 1 | Groq | `llama-3.1-8b-instant` | ‏Groq key ‏(`gsk_...`) | ~500ms | 100k tokens/day |
-| 2 | Groq | `llama-3.3-70b-versatile` | ‏אותו key | ~700ms | 100k tokens/day |
+| 2 | Groq | `openai/gpt-oss-120b` | ‏אותו key | ~1-3s | ‏pool יומי נפרד ‏(‏per-model) |
 | 3 | Ollama (‏local) | `qwen2.5:3b` | ‏zero-key | ~55s (‏CPU-only ARM) | ‏מקומי - ‏unlimited |
-| 4 | Gemini | `gemini-2.5-flash` | ‏AI Studio ‏(`AQ...` ‏Bearer) | ~1-2s | 15 RPM, ‏1M tokens/day |
+| 4 | Ollama (‏local) | `granite3.3:2b` | ‏zero-key | ~55s (‏CPU-only ARM) | ‏מקומי - ‏unlimited |
 
 **Wall-clock של הפאנל = max(‏כל 4)** ‏(‏ThreadPoolExecutor רץ במקביל).
 qwen2.5:3b הוא bottleneck על ARM CPU ‏(~55s per verdict), אז candidate
 בודד לוקח כדקה. ב-PCAP עם 5 candidates: ‏~5 דקות end-to-end.
 
 **למה davka 4 שופטים?** ‏(‏decision IDX-06):
-- **diversity**: ‏שני מודלי Meta (‏Llama 8B ו-70B) ‏+ ‏Google (‏Gemini) ‏+ ‏Alibaba (‏Qwen).
+- **diversity**: ‏Meta (‏Llama 8B) ‏+ ‏OpenAI (‏gpt-oss-120b) ‏+ ‏Alibaba (‏Qwen) ‏+ ‏IBM (‏Granite).
   כל אחד מאומן על corpus שונה, ומגיע לverdict מזוית אחרת. גיוון כזה
   מקטין את הסיכוי שכולם יטעו יחד באותה טעות.
 - **Fault-tolerance**: ‏אפילו אם 2 שופטים נופלים ‏(‏rate-limit, timeout,
@@ -770,7 +777,7 @@ resolver מחליט וזה נגמר. **אין לופ אינסופי**. הפער 
 </div>
 
 ```bash
-LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:llama-3.3-70b-versatile,ollama:qwen2.5:3b,gemini:gemini-2.5-flash
+LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:openai/gpt-oss-120b,ollama:qwen2.5:3b,ollama:granite3.3:2b
 ```
 
 <div dir="rtl">
@@ -929,7 +936,7 @@ reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כ�
 
 **מקור אמת מלא (‏עם דוגמאות ותוצאות):** [`docs/LLM_INTERFACE.md`](LLM_INTERFACE.md).
 
-### מה נוסף לשופט ב-I2 (‏2026-08-01, ‏prompt v0.4.0)
+### מה נוסף לשופט ב-I2 (‏2026-08-01, ‏prompt v0.4.0; כיום v0.5.0)
 
 הוספנו 5 העשרות שהשופט רואה כעת בכל candidate blob:
 
@@ -944,7 +951,8 @@ reasoning ל-400 תווים, מעגל confidence ל-3 ספרות, ודוחה כ�
 **שינוי בפייפליין**: `attack_tests/run_pipeline.py` מרחיב את שאילתת tshark
 עם 2 שדות (http.host, tls.sni) - עלות זניחה על קפצ'ר של 2000 packets.
 
-**PROMPT_VERSION** קפץ מ-v0.3.0 ל-v0.4.0 → כל ה-cache verdicts יתחדשו.
+**PROMPT_VERSION** קפץ מ-v0.3.0 ל-v0.4.0 ‏(‏כיום: v0.5.0) → כל ה-cache
+verdicts יתחדשו.
 
 ### קטע קוד - איך ה-enrichment של websites נבנה
 
@@ -985,8 +993,6 @@ def _websites_for(S, ip):
   `classify_local_device` מ-`dashboard_module.py` ‏(~380 שורות). הקטגוריה
   ‏(‏Mobile / Desktop / IoT) עדיין `"unknown"` על ה-VM; רק hostname+vendor
   נטענים כרגע.
-- TLS versions + weak ciphers - `tls_anomaly` engine כרגע מחזיר רק score.
-- Baseline history (‏האם ה-IP הזה חדש?) - יש טבלת baseline אבל לא מזרימים.
 
 </div>
 
@@ -1229,7 +1235,7 @@ docker compose exec -T ingest_api python3 -c "from server import db; ..."
 
 ```bash
 curl -sS http://100.68.246.54:8766/healthz
-# צריך להחזיר {"status":"ok","schema":4}
+# צריך להחזיר {"status":"ok","schema":6}
 
 docker compose ps
 # צריך להראות ingest_api + worker + retention כ-Up
@@ -1267,8 +1273,8 @@ docker compose ps
 ### שגיאת `no such column: notify_email`
 
 - ה-DB לא עלה לגרסת סכמה 3 או 4. `docker compose exec ingest_api
-  python3 -c "from server import db; c=db.connect(); print(c.execute('PRAGMA user_version').fetchone())"` → צריך להיות `(4,)`.
-- אם קטן מ-4: הקוד עדכני אבל ה-DB לא מיגר. בדוק `docker compose logs
+  python3 -c "from server import db; c=db.connect(); print(c.execute('PRAGMA user_version').fetchone())"` → צריך להיות `(6,)`.
+- אם קטן מ-6: הקוד עדכני אבל ה-DB לא מיגר. בדוק `docker compose logs
   worker | grep -i migrate`.
 
 ### Ollama לא מגיב
@@ -1414,14 +1420,15 @@ invalidation אוטומטי.
 | **v0.2.0** | 2026-07 | הוספת cheat sheet לקטגוריות + 2 worked examples |
 | **v0.2.5** | 2026-07 | הוספת `evidence_features` + `recommended_action` |
 | **v0.3.0** | 2026-07 | הוספת כלל HIGH-PRECISION rules + rule guardrail |
-| **v0.4.0** | 2026-08-01 | **הנוכחי**. ‏הוספת פסקאות על 5 בלוקים חדשים ב-blob: session_context.time, device_context, websites, traffic |
+| **v0.4.0** | 2026-08-01 | ‏הוספת פסקאות על 5 בלוקים חדשים ב-blob: session_context.time, device_context, websites, traffic |
+| **v0.5.0** | 2026-08-01 | **הנוכחי**. ‏הוספת בלוק `tls` (‏L4: גרסאות TLS + ‏weak ciphers) ובלוק `baseline_history` (‏L5: האם ה-IP נראה בסשנים קודמים) |
 
 **כשbump את הגרסה:** ‏(‏מ-`llm_judge/judge_config.py`)
 
 </div>
 
 ```python
-PROMPT_VERSION = "v0.4.0"  # I2: blob enrichments (time, device, websites, traffic)
+PROMPT_VERSION = "v0.5.0"  # L4+L5: TLS versions block + baseline_history block
 ```
 
 <div dir="rtl">

@@ -10,6 +10,8 @@ only if category kappa did not regress versus the previous version.
 | v0.1.0 | 2026-07-10 | Initial system prompt from docs/LLM_JUDGE_SPEC.md section 10.1, extended with the session-kind flood rule and explicit confidence/reasoning constraints. | superseded |
 | v0.2.0 | 2026-07-11 | Fix: the port_scan cheat sheet described only horizontal scans (high unique_dsts), so a vertical SYN scan (unique_dsts=1, high syn ratio - the real tcp_syn_scan.pcap) was mislabeled benign. Now covers both shapes and keys on scan_alerts firing. Added rule 8: a fired deterministic rule is high-precision and must not be overridden to benign without justification. Tightened benign_anomaly to ML-only outliers. | superseded |
 | v0.3.0 | 2026-07-12 | Added two worked examples (vertical SYN scan -> port_scan; ML-only outlier -> benign_anomaly) - measured that a small local model still ignored rule 8 without them. Note: from this version the prompt is complemented by the code-level rule guardrail (judge_config.RULE_GUARDRAIL), which enforces rule 8 deterministically regardless of model quality. | **0.7911** |
+| v0.4.0 | 2026-08-01 | I2 candidate-blob enrichments: websites / traffic / device context. | kappa not re-measured |
+| v0.5.0 | 2026-08-01 | L4 TLS versions block + L5 baseline_history block. | kappa not re-measured |
 
 First committed calibration: 2026-07-19, model `openai/gpt-oss-120b` (Groq),
 guardrail on, 33 scored candidates, 0 dropped. category kappa (linear)

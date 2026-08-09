@@ -171,8 +171,8 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 
 ### 4.3 תוכנה מומלצת
 
-- **Ollama** - להרצת LLM מקומיים חינם (כבר משמש אצלך ב־GitHub Actions
-  עם `llama3.2`). ניתן להריץ גם כ־container.
+- **Ollama** - להרצת LLM מקומיים חינם (שימש בעבר ב־GitHub Actions
+  עם `llama3.2`, ‏ב־workflow שהוצא משימוש). ניתן להריץ גם כ־container.
 - **ngrok / Cloudflare Tunnel** - אם רוצים לחשוף Webhook החוצה מבלי
   לפתוח פורט בראוטר.
 - **מפתחות API** לפי הבחירה שלך (Gemini, Groq, OpenAI-compatible וכו').
@@ -318,7 +318,7 @@ N8N_ENCRYPTION_KEY=CHANGE_ME_32_CHAR_RANDOM_STRING
 
 # LLM providers (בחר את מה שרלוונטי לך)
 LLM_JUDGE_PROVIDER=ollama              # claude | ollama | openai_compat
-OLLAMA_HOST=http://host.docker.internal:11434
+OLLAMA_HOST=http://ollama:11434
 OLLAMA_MODEL=qwen2.5:14b
 OPENAI_COMPAT_BASE_URL=
 OPENAI_COMPAT_MODEL=
@@ -334,6 +334,8 @@ DIFY_API_KEY=
 הקובץ החי הוא `deploy/docker-compose.yml`. ארבע השירותים - `n8n`,
 `ingest_api`, `worker`, `retention` - כולם קשורים ל־`${TS_BIND}` כך שרק
 Tailscale-peers רואים אותם, ותצורתם נקבעת ב־`deploy/.env`:
+
+(‏עותק מקוצר להמחשה - הקובץ הנוכחי מכיל 6 שירותים: נוספו `ollama` ו־`caddy`.)
 
 ```yaml
 services:
@@ -400,8 +402,9 @@ volumes:
 webhook אל n8n אם `N8N_WEBHOOK_URL` מוגדר. `retention` הוא אותו image
 עם `command: server.retention` (‏ניקוי יומי + גיבוי DB).
 
-Ollama לא רץ בקונטיינר משלו כי הוא רץ טוב יותר על ה־host (‏גישה ישירה
-ל־RAM/GPU). קונטיינר `worker` פונה אליו דרך `host.docker.internal:11434`.
+Ollama רץ כשירות compose משלו (‏image ‏`ollama/ollama`; volume בשם
+`ollama_models` שומר את המודלים בין restarts). קונטיינר `worker` פונה
+אליו דרך `http://ollama:11434` ברשת הפנימית של docker.
 אין `judge_runner` נפרד - כל הצינור חי בתוך `worker`, נגיש דרך התור, וללא
 `docker exec` בזמן ריצה.
 
@@ -419,7 +422,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /netsec
+WORKDIR /app
 COPY requirements.txt server/requirements.txt llm_judge/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
       -r server/requirements.txt -r llm_judge/requirements.txt \
@@ -451,20 +454,16 @@ docker compose logs -f n8n
   דרך ה־UI או ה־CLI (‏`docker compose exec n8n n8n import:workflow --input=/workflows/mvp_triage_email.json`),
   הצמדת credential SMTP לצומת המייל, ואקטיבציה של ה־workflow.
 
-### 7.6 טעינת מודל ל־Ollama (על ה־host, לא בקונטיינר)
+### 7.6 טעינת מודל ל־Ollama (שירות compose)
 
 ```bash
-# על ה־VM עצמה (או ה־host שמריץ את worker):
-curl -fsSL https://ollama.com/install.sh | sh
-sudo systemctl enable --now ollama
-ollama pull qwen2.5:14b   # ברירת מחדל של OLLAMA_MODEL ב־deploy/.env.example
-ollama pull phi4:14b      # אלטרנטיבה
-ollama pull llama3.1:8b   # קטן ומהיר
+# ה־container של ollama עולה עם docker compose up -d; מושכים מודלים לתוכו:
+docker exec deploy-ollama-1 ollama pull qwen2.5:3b     # שופט מקומי בפאנל
+docker exec deploy-ollama-1 ollama pull granite3.3:2b  # השופט המקומי השני
 ```
 
-הקונטיינר של ה־worker פונה ל־`http://host.docker.internal:11434` על
-Linux בזכות ה־`extra_hosts` שיתווסף בעת הצורך; ב־macOS/Windows זה עובד
-כברירת מחדל של Docker Desktop.
+הקונטיינר של ה־worker פונה ל־`http://ollama:11434` - שם השירות ברשת
+הפנימית של docker; מה־host עצמו ניגשים דרך `127.0.0.1:11434`.
 
 ---
 
@@ -763,8 +762,8 @@ docker compose logs -f n8n
 docker compose logs -f ingest_api
 docker compose logs -f worker
 docker compose logs -f retention
-# Ollama רץ על ה־host, לא בקונטיינר:
-sudo journalctl -u ollama -f
+# Ollama רץ כשירות compose (deploy-ollama-1):
+docker compose logs -f ollama
 # Dify (אם מותקן בנפרד):
 docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worker
 ```
@@ -788,8 +787,8 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 
 - **חינם לחלוטין**: n8n Community + Dify Community + Ollama מקומי.
   עלות = חשמל + חומרה שיש לך.
-- **חינם ב־Cloud**: GitHub Actions (כפי שקיים ב־`.github/workflows/analyze-pcap.yml`)
-  ממשיך לתת אפס עלות ל־forks ציבוריים.
+- **חינם ב־Cloud**: GitHub Actions ממשיך לתת אפס עלות ל־forks ציבוריים
+  (‏ה־workflow הישן `analyze-pcap.yml` הוצא משימוש - כיום נשאר רק `ci.yml`).
 - **ספק LLM חיצוני**: הפעל אותו רק על שלב ה־Analyst (5-40 קריאות
   ל־PCAP). Cache SQLite שמובנה ב־Judge → הרצות חוזרות = חינם.
 - **טיפ עלות**: כפה `LLM_JUDGE_MAX_CANDIDATES=40` (ברירת מחדל)
@@ -848,9 +847,9 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 - הגדל `LLM_JUDGE_TIMEOUT_S=600` ב־`deploy/.env` (ברירת מחדל 300).
 - ודא שהמודל **נמשך** (`ollama pull`) - הפעם הראשונה מורידה גיגה־בייטים.
 - למחשב חלש: החלף ל־`gemma3:4b` או `phi4:14b` (הפחות תלוי-חומרה).
-- ב־Docker Compose ה־worker פונה ל־`host.docker.internal:11434`; בדוק
-  ש־Ollama מאזין על כל הממשקים (ברירת המחדל היא רק loopback):
-  `OLLAMA_HOST=0.0.0.0 systemctl restart ollama` (או `-e` דומה).
+- ב־Docker Compose ה־worker פונה ל־`http://ollama:11434` (DNS פנימי של
+  docker). בדוק שהשירות למעלה (`docker compose up -d ollama`) ושהמודל
+  נמשך: `docker exec deploy-ollama-1 ollama pull qwen2.5:3b`.
 
 ### 17.3 "Dify לא מוצא את Ollama"
 

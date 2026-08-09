@@ -102,7 +102,7 @@
    ```bash
    curl http://<tailscale-ip>:8766/healthz
    ```
-   צריך להחזיר `{"status":"ok","schema":4}`.
+   צריך להחזיר `{"status":"ok","schema":6}`.
 
 ### תרחיש אוטומטי-לגמרי (‏CI, unattended)
 
@@ -125,7 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/orarr2/NetSec-Dashboard-Wireshark-U
 3. **Tailscale** - התקנה + `tailscale up` (עם auth key או אינטראקטיבית)
 4. **git clone** של הריפו ל-`~/netsec/`
 5. **`.env`** - מייצר מ-`.env.example` עם `TS_BIND` = כתובת ה-Tailscale
-   של ה-VM, ‏`NETSEC_ENCRYPTION_KEY` אקראית, ומבקש (אופציונלי) מפתחות.
+   של ה-VM, ‏`N8N_ENCRYPTION_KEY` אקראית, ומבקש (אופציונלי) מפתחות.
 6. **iptables** - כותב את הכללים ל-`/etc/iptables/rules.v4` (רק SSH+Tailscale),
    מפעיל `netfilter-persistent` כדי שהם יחזרו אחרי reboot.
 7. **`docker compose build`** - בונה את ה-images של `worker` ו-`ingest_api`
@@ -325,7 +325,7 @@ NETSEC_API_TOKEN=<43 chars>
 
 ```bash
 curl http://$(tailscale ip -4 | head -1):8766/healthz
-# צריך להחזיר {"status":"ok","schema":4}
+# צריך להחזיר {"status":"ok","schema":6}
 ```
 
 הרם לוגים:
@@ -411,7 +411,7 @@ sudo iptables -L INPUT -n | wc -l
 
 ```bash
 curl -sS http://$(tailscale ip -4 | head -1):8766/healthz
-# {"status":"ok","schema":4}
+# {"status":"ok","schema":6}
 ```
 
 ### 4. Worker פועל

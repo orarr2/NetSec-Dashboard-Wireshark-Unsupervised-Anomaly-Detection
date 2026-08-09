@@ -57,7 +57,7 @@ Install on the VM:
 2. **Tailscale**. `curl -fsSL https://tailscale.com/install.sh | sh &&
    sudo tailscale up --hostname=<name>`.
 3. **chrony** (NTP - required by the telemetry-reconciliation protocol,
-   `docs/ARCHITECTURE_HE.md` §12).
+   `docs/VM_ARCHITECTURE_HE.md` §13).
 
 Install on any machine that needs to talk to the VM:
 
