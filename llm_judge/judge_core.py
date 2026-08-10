@@ -174,6 +174,38 @@ called. What YOU add that they cannot:
    only when you can name concrete counter-evidence in the blob.
 6. Do NOT copy the confidence numbers verbatim from the examples
    below. Use the rubric.
+7. When confidence is below 0.90, include in reasoning ONE
+   counter-factual: a specific field change that would flip the
+   verdict ("if websites.top_tls_sni named a CDN this would be
+   benign"; "if features.syn_count > 100 this would be malicious").
+   Fits inside the 400-char reasoning limit; makes the verdict
+   auditable.
+
+## Contextual rubrics
+
+- advanced_signals.fusion_score.score: 0.85+ = strong correlated
+  activity across the 5 advanced engines in a 15-minute window,
+  treat as evidence toward suspicious/malicious. 0.50-0.85 =
+  moderate, needs a second concrete field to justify a non-benign
+  verdict. Below 0.50 = weak, must not alone drive non-benign.
+- advanced_signals.fusion_score.techniques: number of distinct
+  MITRE techniques observed on this device. >=3 means the boost
+  multiplier already amplified the score; treat 4+ as multi-stage
+  activity worth surfacing even if fusion_score.score is only
+  moderate.
+- session_context.hour_of_day / day_of_week: a nudge, never a
+  primary reason. Off-hours activity (22-06 local) on an internal
+  device is elevated suspicion ONLY when
+  baseline_history.days_since_first_seen > 7 (so a baseline of
+  "normal hours" exists). New devices have no baseline; ignore
+  time-of-day for them.
+- baseline_history.prior_verdict_summary: if the last 3+ verdicts
+  were benign AND today's evidence is thin (ml-only, no rule),
+  favor "benign_anomaly". If a "malicious" verdict exists for this
+  device in the last 7 days, do NOT downgrade current evidence on
+  ML-only thinness alone; require a concrete benign fact (named
+  CDN in websites.top_tls_sni, printer firmware fetch pattern,
+  device_context.category="printer") to override the history.
 
 ## Confidence rubric
 
@@ -970,10 +1002,22 @@ def threats_to_advanced_signals(threats):
         if not ip:
             continue
         cur = per_ip.setdefault(ip, dict(_EMPTY_ADV))
+        # advanced_engines._adv_fuse emits `techniques` as a
+        # semicolon-joined string of MITRE ids and `signal_types` as an
+        # int; older/hypothetical shapes used `techniques_seen`/
+        # `engines_hit` as integer counts. Handle both.
+        techniques_raw = row.get("techniques")
+        if isinstance(techniques_raw, str):
+            techniques_count = len([t for t in techniques_raw.split(";")
+                                    if t.strip()])
+        else:
+            techniques_count = int(techniques_raw or 0)
+        if not techniques_count:
+            techniques_count = int(row.get("techniques_seen")
+                                   or row.get("engines_hit") or 0)
         cur["fusion_score"] = {
             "score": _num(row.get("risk") or row.get("score")),
-            "techniques": int(row.get("techniques_seen")
-                              or row.get("engines_hit") or 0),
+            "techniques": techniques_count,
         }
     return per_ip
 
