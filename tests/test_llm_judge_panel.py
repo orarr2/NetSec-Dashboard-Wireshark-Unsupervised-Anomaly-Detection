@@ -137,7 +137,8 @@ class _SleepyPanelFake(PanelFake):
         return super().judge(system_prompt, user_content, schema=schema)
 
 
-def test_panel_runs_judges_in_parallel_not_sequentially(tmp_path):
+def test_panel_runs_judges_in_parallel_not_sequentially(tmp_path,
+                                                          monkeypatch):
     """Three judges each block for 400 ms in judge(). Sequential run
     would take >=1200 ms; parallel run should stay <=750 ms (that
     leaves plenty of slack for GIL / scheduling on Windows CI). The
@@ -147,8 +148,16 @@ def test_panel_runs_judges_in_parallel_not_sequentially(tmp_path):
 
     Consensus verdict on the ml_only candidate means no debate round -
     so the time we measure is purely the initial-verdict parallelism.
+
+    The panel default cap (LLM_JUDGE_PANEL_MAX_WORKERS=2) was added on
+    2026-08-09 after all-parallel dispatch froze the reference VM
+    (thrashing 5 local Ollama judges through a 4-core ARM into swap).
+    For THIS test we opt out and check the executor still fans out
+    when unbounded - that path stays alive for cloud-only panels and
+    GPU hosts.
     """
     import time as _t
+    monkeypatch.setenv("LLM_JUDGE_PANEL_MAX_WORKERS", "8")
     delay = 0.4
     clients = [
         _SleepyPanelFake("m-a", verdict("suspicious", "benign_anomaly",
@@ -168,6 +177,33 @@ def test_panel_runs_judges_in_parallel_not_sequentially(tmp_path):
     assert elapsed < 0.75, (
         f"panel round-1 ran sequentially (elapsed {elapsed:.2f}s for "
         f"3 x {delay}s judges - expected <0.75s with parallel executor)")
+
+
+def test_panel_default_workers_cap_serialises_beyond_two(tmp_path):
+    """Companion to the parallel test above: with the default cap of 2
+    concurrent workers, 3 judges of 400 ms EACH take longer than
+    max(delays) because the third has to wait for one of the first
+    two to finish. Elapsed lands between 1x delay (naive parallel)
+    and 3x delay (fully serial): ~2 x delay = 800 ms."""
+    import time as _t
+    delay = 0.4
+    clients = [
+        _SleepyPanelFake("m-a", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+        _SleepyPanelFake("m-b", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+        _SleepyPanelFake("m-c", verdict("suspicious", "benign_anomaly",
+                                        conf=0.6), delay),
+    ]
+    t0 = _t.perf_counter()
+    out = run_panel(clients, [ml_only_candidate()], tmp_path, debate=False)
+    elapsed = _t.perf_counter() - t0
+    # With cap=2: two run in parallel (400 ms), then the third waits and
+    # runs alone (another 400 ms). Total ~800 ms, well below the fully
+    # serial 1200 ms floor.
+    assert 0.7 < elapsed < 1.15, (
+        f"panel with cap=2 workers should take ~2x delay (~800 ms) not "
+        f"~1x (parallel) or ~3x (serial); got {elapsed:.2f}s")
 
 
 def test_panel_parallel_debate_stays_under_sequential_bound(tmp_path):

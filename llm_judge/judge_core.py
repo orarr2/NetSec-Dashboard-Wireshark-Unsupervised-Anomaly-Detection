@@ -2197,13 +2197,23 @@ def judge_candidates_panel(candidates, clients, cache_db=None,
     iso_min, iso_max = _iso_bounds(candidates)
     results, dropped = [], []
     cache_hits = needs_review = debated_candidates = 0
-    # Initial verdicts run in parallel per candidate - one thread per
-    # judge, so wall-clock for a 2-judge panel is ~max(A, B) instead of
-    # A + B. Results come back in `clients` order regardless of finish
+    # Initial verdicts run in a bounded pool per candidate. Default cap
+    # is 2 concurrent judges (LLM_JUDGE_PANEL_MAX_WORKERS) - measured
+    # 2026-08-09 on the reference VM: firing all 5 local judges through
+    # 5 threads pushed Ollama into RAM thrashing and froze the OS. Two
+    # concurrent calls keep the box responsive while still cutting the
+    # panel's wall-clock roughly in half vs pure serial. Bump the env
+    # var only on hardware with real headroom (GPU, or >8 CPUs, or
+    # cloud-only panels that never touch local Ollama).
+    #
+    # Results still come back in `clients` order regardless of finish
     # order (executor.map preserves input order), so the participation
     # audit and debate framing stay stable.
+    _max_workers = min(
+        max(len(clients), 1),
+        int(os.environ.get("LLM_JUDGE_PANEL_MAX_WORKERS", "2")))
     _pool = concurrent.futures.ThreadPoolExecutor(
-        max_workers=max(len(clients), 1),
+        max_workers=_max_workers,
         thread_name_prefix="panel-judge")
     try:
         # Q3: batched prefetch of initial verdicts. One worker per judge,
