@@ -6748,7 +6748,7 @@ def _render_n8n_send_button(session, session_key):
     # llm_judge import can't take down the dashboard.
     try:
         import sys as _sys
-        _here = _os.path.dirname(_os.path.abspath(__file__))
+        _here = _os.path.dirname(_os.path.abspath(__file__)) if "__file__" in globals() else _os.getcwd()
         _root = _os.path.abspath(_os.path.join(_here, ".."))
         if _root not in _sys.path:
             _sys.path.insert(0, _root)
@@ -9235,7 +9235,7 @@ def send_session_to_n8n(n_clicks, btn_id, email, panel_preset):
     # tools/upload_pcap.upload_file is the same signing + streaming code
     # the CLI uses, so the dashboard path is byte-identical over the wire.
     import sys as _sys
-    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _here = _os.path.dirname(_os.path.abspath(__file__)) if "__file__" in globals() else _os.getcwd()
     _tools = _os.path.abspath(_os.path.join(_here, "..", "tools"))
     if _tools not in _sys.path:
         _sys.path.insert(0, _tools)
@@ -9844,7 +9844,7 @@ app.run(debug=False, port=PORT, use_reloader=False, jupyter_mode="external")
 # depends on it.
 import os as _os_vmclient, sys as _sys_vmclient
 try:
-    _base_vmclient = _os_vmclient.path.dirname(_os_vmclient.path.abspath(__file__))
+    _base_vmclient = _os_vmclient.path.dirname(_os_vmclient.path.abspath(__file__)) if "__file__" in globals() else _os_vmclient.getcwd()
 except NameError:
     _base_vmclient = _os_vmclient.getcwd()
 for _cand_vmclient in (_base_vmclient, _os_vmclient.path.dirname(_base_vmclient),
