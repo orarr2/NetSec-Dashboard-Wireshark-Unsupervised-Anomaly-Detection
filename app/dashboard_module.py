@@ -8495,9 +8495,6 @@ def handle_analyze_staged(n_click, staged, rebuild_count, replacing_s1):
     if ok:
         # delete tmp upload + clear stale live pending for S1 so
         # freshly-loaded PCAP cannot be overwritten by an old "Analyze" click.
-        if staged and staged.get("source") == "upload" and staged.get("path"):
-            try: os.remove(staged["path"])
-            except Exception: pass
         try:
             w = LIVE_SESSIONS.get("S1")
             if w is not None and getattr(w, "_pending_snapshot", None) is not None:
@@ -8707,9 +8704,6 @@ def handle_second_analyze_staged(n_click, staged, rebuild_count, s2_tick):
     if ok:
         # delete tmp upload + clear stale live pending for S2 so
         # freshly-loaded PCAP cannot be overwritten by an old "Analyze" click.
-        if staged and staged.get("source") == "upload" and staged.get("path"):
-            try: os.remove(staged["path"])
-            except Exception: pass
         try:
             w = LIVE_SESSIONS.get("S2")
             if w is not None and getattr(w, "_pending_snapshot", None) is not None:

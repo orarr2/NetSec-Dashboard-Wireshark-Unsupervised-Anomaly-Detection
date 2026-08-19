@@ -62,12 +62,11 @@ def test_valid_spec_allows_empty_for_single_judge_fallback():
 
 def test_choices_for_ui_is_ordered_and_lists_labels():
     choices = panel_presets.choices_for_ui()
-    assert len(choices) >= 3
-    # Ordered: DEFAULT_PRESET_ID first (so the dropdown opens on the
-    # option the button will use), single_groq_fast last.
-    ids = [pid for pid, _ in choices]
-    assert ids[0] == panel_presets.DEFAULT_PRESET_ID
-    assert ids[-1] == "single_groq_fast"
+    # The dashboard sidebar exposes exactly two options - Cloud and
+    # Local - even though older preset ids remain in PRESETS for
+    # historical audit compatibility.
+    assert [pid for pid, _ in choices] == ["cloud", "local"]
+    assert [lab for _, lab in choices] == ["Cloud", "Local"]
     for pid, label in choices:
         assert isinstance(label, str) and label
 

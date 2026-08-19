@@ -151,14 +151,51 @@ PRESETS = {
                   "No debate, no resolver - the model's answer is "
                   "final. Use for smoke tests."),
     },
+    # Two-choice UI presets (dashboard dropdown shows only these).
+    # `cloud` fans out to every free cloud key wired on the VM; a judge
+    # whose key is missing or whose endpoint 4xx's is logged as an
+    # init/verdict failure and the panel keeps going with the rest.
+    # `local` fans out to every chat-capable Ollama model installed on
+    # the VM, so a new model that shows up in `ollama list` is added
+    # here and lands in the dropdown automatically (no idle-VM models).
+    "cloud": {
+        "label": "Cloud",
+        "spec": ("groq:llama-3.3-70b-versatile,"
+                 "groq:openai/gpt-oss-20b,"
+                 "groq:openai/gpt-oss-120b,"
+                 "groq:qwen/qwen3.6-27b,"
+                 "gemini:gemini-2.5-flash,"
+                 "cerebras:llama-3.3-70b,"
+                 "openrouter:deepseek/deepseek-r1:free,"
+                 "github:gpt-4o-mini"),
+        "wallclock_per_candidate_s": 5,
+        "notes": ("Every free cloud key the operator has wired on the "
+                  "VM: 4 Groq (Meta 70B, OpenAI 20B/120B, Alibaba "
+                  "Qwen3.6) + Gemini + Cerebras + OpenRouter DeepSeek + "
+                  "GitHub Models. Providers whose key is unset or whose "
+                  "endpoint 4xx's are logged as failures and skipped; "
+                  "the panel survives on the judges that answer."),
+    },
+    "local": {
+        "label": "Local",
+        "spec": ("ollama:qwen2.5:3b,"
+                 "ollama:gemma2:2b,"
+                 "ollama:phi3.5,"
+                 "ollama:llama3.2:3b,"
+                 "ollama:granite3.3:2b"),
+        "wallclock_per_candidate_s": 250,
+        "notes": ("Every chat-capable Ollama model installed on the "
+                  "VM. Ollama serialises inference on CPU so wall-clock "
+                  "is the sum of the five model latencies, not the max. "
+                  "Zero external calls - all bytes stay on the box."),
+    },
 }
 
 # The default preset ID for a new upload that did not pick one.
-# Was balanced_4 until 2026-08; its gemini-2.5-flash slot measured 4%
-# yield and its llama-3.3-70b slot 22%, so two of its four judges were
-# effectively absent. reliable_hybrid_4 keeps the two cloud judges that
-# actually answer and backs them with two zero-quota local models.
-DEFAULT_PRESET_ID = "reliable_hybrid_4"
+# The dashboard dropdown was collapsed to two entries in 2026-08 (Cloud /
+# Local) so the operator picks how the report is judged with one click.
+# Default is `local` so no bytes leave the VM until the operator asks.
+DEFAULT_PRESET_ID = "local"
 
 
 def preset_by_id(preset_id):
@@ -182,9 +219,12 @@ def valid_spec(spec):
 
 
 def choices_for_ui():
-    """Return [(id, label)] pairs ordered for a dropdown."""
-    ordered = ["reliable_hybrid_4", "fast_cloud_3", "fresh_cloud_3",
-               "cloud_max_6", "balanced_4", "local_only_2",
-               "local_diverse_5", "hybrid_6", "max_11", "single_groq_fast"]
+    """Return [(id, label)] pairs ordered for a dropdown.
+
+    The dashboard sidebar shows only two entries - Cloud and Local -
+    even though older preset ids stay in PRESETS for backward-compat
+    with historical audit records that reference them by name.
+    """
+    ordered = ["cloud", "local"]
     return [(pid, PRESETS[pid]["label"]) for pid in ordered
             if pid in PRESETS]
