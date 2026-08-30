@@ -119,7 +119,7 @@ def test_ingest_stores_notify_email_on_new_session(api):
     payload = b"\xd4\xc3\xb2\xa1" + b"x" * 1024
     _, headers = _upload_headers(
         sensor, payload,
-        extra={"X-Notify-Email": "orarbeli1@gmail.com"})
+        extra={"X-Notify-Email": "test@example.com"})
     r = client.post("/v1/pcap", content=payload, headers=headers)
     assert r.status_code == 202
     sid = r.json()["session_id"]
@@ -130,7 +130,7 @@ def test_ingest_stores_notify_email_on_new_session(api):
                            (sid,)).fetchone()
     finally:
         conn.close()
-    assert row["notify_email"] == "orarbeli1@gmail.com"
+    assert row["notify_email"] == "test@example.com"
 
 
 def test_ingest_invalid_email_stored_as_null_but_upload_still_accepted(api):
@@ -261,12 +261,12 @@ def test_upload_pcap_cli_sends_email_header(tmp_path):
              "--url", f"http://127.0.0.1:{server.server_address[1]}",
              "--sensor", sensor_name, "--secret", secret,
              "--manifest", str(tmp_path / "telemetry.jsonl"),
-             "--email", "orarbeli1@gmail.com"],
+             "--email", "test@example.com"],
             capture_output=True, text=True, timeout=60,
             encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         assert r.returncode == 0, r.stderr
-        assert seen.get("notify_email") == "orarbeli1@gmail.com"
+        assert seen.get("notify_email") == "test@example.com"
     finally:
         server.shutdown()
 
