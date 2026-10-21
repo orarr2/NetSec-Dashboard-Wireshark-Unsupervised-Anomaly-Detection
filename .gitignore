@@ -24,6 +24,27 @@ netsec_upload_*.pcapng
 !docs/VM_ARCHITECTURE_HE.md
 !docs/VM_BOOTSTRAP_HE.md
 !docs/DATA_ENGINEERING_HE.md
+!README_HE.md
+!attack_tests/README_HE.md
+!attack_tests/advanced/README_HE.md
+!companion/README_HE.md
+!deploy/README_HE.md
+!docs/ARCHITECTURE_HE.md
+!docs/AUTOMATION_QUICKSTART_HE.md
+!docs/CELL_BY_CELL_HE.md
+!docs/LLM_INTERFACE_HE.md
+!docs/LLM_JUDGE_SPEC_HE.md
+!docs/LLM_PANEL_ROLE_HE.md
+!docs/MODEL_DIAGNOSTICS_HE.md
+!docs/QA_HE.md
+!docs/SCIENTIFIC_AUDIT_HE.md
+!docs/SECURITY_MODEL_HE.md
+!docs/TRADEOFFS_HE.md
+!docs/VM_DEPLOYMENT_HE.md
+!docs/VM_OPS_HE.md
+!docs/decision_graphs/README_HE.md
+!llm_judge/PROMPT_CHANGELOG_HE.md
+!llm_judge/README_HE.md
 
 # local working backups created by tooling
 *.local-bak
