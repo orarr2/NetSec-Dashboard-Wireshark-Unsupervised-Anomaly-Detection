@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # יומן שינויים של ה-Prompt לשופט
 

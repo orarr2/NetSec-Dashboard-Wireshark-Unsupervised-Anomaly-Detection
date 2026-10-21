@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # פריסת VM - הרצת מערך הניתוח 24/7
 

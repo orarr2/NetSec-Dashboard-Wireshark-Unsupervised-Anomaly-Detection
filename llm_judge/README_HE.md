@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # LLM-as-Judge - Notebook עצמאי ל-Triage
 

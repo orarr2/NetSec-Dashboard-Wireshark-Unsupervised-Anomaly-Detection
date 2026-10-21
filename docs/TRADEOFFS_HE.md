@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # החלטות עיצוב ו-tradeoffs - דשבורד Network Security
 

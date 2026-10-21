@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # מדריך תא-אחר-תא - דשבורד Network Security
 

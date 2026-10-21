@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # פאנל ה-LLM: למה הוא קיים ואיזה פער הוא ממלא
 

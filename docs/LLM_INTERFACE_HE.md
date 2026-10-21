@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # שופט LLM - מה שואלים, מה המודל רואה, מה הוא מחזיר
 

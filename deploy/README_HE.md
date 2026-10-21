@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # הפעלת VM ניתוח משלכם - scaffolding של deployment
 

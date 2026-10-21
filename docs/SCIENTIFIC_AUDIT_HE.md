@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # ביקורת מדעית - איכות זיהוי והפחתת FP/FN
 

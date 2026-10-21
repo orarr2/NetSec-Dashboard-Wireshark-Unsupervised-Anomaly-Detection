@@ -1,4 +1,4 @@
-<div dir="rtl">
+<div dir="rtl" align="right">
 
 # שכבת Triage של LLM-as-Judge - מפרט ועיצוב
 
