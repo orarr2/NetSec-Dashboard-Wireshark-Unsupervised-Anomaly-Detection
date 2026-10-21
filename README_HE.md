@@ -2,8 +2,6 @@
 
 # NetSec - לוח בקרה פורנזי של Wireshark עם למידת מכונה
 
-> גרסה עברית של [`README.md`](README.md).
-
 לוח בקרה פורנזי לקבצי `.pcapng` של Wireshark, בנוי על Dash + scikit-learn
 + PyTorch. טוען עד שני סבבי הקלטה (S1 ו-S2), מריץ במקביל שלושה
 מודלי זיהוי אנומליות (‏IsolationForest, ‏DBSCAN, ‏LSTM) ושתי שכבות של

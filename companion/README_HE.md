@@ -2,8 +2,6 @@
 
 # AI Companion
 
-> גרסה עברית של [`README.md`](README.md).
-
 צ'אט עם מודלי Ollama על ה-VM של NetSec שלכם. רץ על ה-VM עצמו
 כשירות systemd, נגיש בכתובת
 `https://netsec-agent.<tailnet>.ts.net/chat/` מאחורי ה-basic-auth

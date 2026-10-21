@@ -2,8 +2,6 @@
 
 # פריסת VM - הרצת מערך הניתוח 24/7
 
-> גרסה עברית של [`VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md).
-
 הרצת מערך הניתוח בן ארבעת השירותים (`deploy/docker-compose.yml`)
 על VM קטן שבבעלותכם, שנגיש רק דרך רשת Tailscale פרטית.
 הפריסה הייחוס משתמשת ב-instance ARM חינמי של Oracle Cloud;

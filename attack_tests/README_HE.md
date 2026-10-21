@@ -2,8 +2,6 @@
 
 # בדיקות שפיות של Attack-PCAP
 
-> גרסה עברית של [`README.md`](README.md).
-
 ה-notebook של הדשבורד (`app/Network_Security_Dashboard.ipynb`) בנוי
 עבור הקלטות של גלישה ברשת ביתית. התיקייה הזאת נותנת לו חמישה
 קבצי PCAP של תקיפות אמיתיות ו-CLI עצמאי שמחקה את תאים

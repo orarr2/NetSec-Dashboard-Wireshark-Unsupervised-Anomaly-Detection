@@ -2,8 +2,6 @@
 
 # תפעול VM הניתוח שלכם
 
-> גרסה עברית של [`VM_OPS.md`](VM_OPS.md).
-
 מדריך ההקמה הוא [`docs/VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md); המסמך
 הזה הוא cheat-sheet לפעולות שוטפות. כל בלוק למטה מוכן להדבקה -
 החליפו את `<vm>` (ה-IP או ה-hostname של Tailscale של ה-VM שלכם),

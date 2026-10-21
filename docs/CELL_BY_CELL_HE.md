@@ -2,8 +2,6 @@
 
 # מדריך תא-אחר-תא - דשבורד Network Security
 
-> גרסה עברית של [`CELL_BY_CELL_EN.md`](CELL_BY_CELL_EN.md).
-
 ה-notebook מכיל 50 תאים (25 קוד, 25 markdown). המסמך הזה עובר על
 כל תא קוד בסדר הופעתו ב-`app/Network_Security_Dashboard.ipynb`.
 הנרטיב תואם לקוד שנשלח היום; כשערכים חשובים (ספירות פיצ'רים, ספים,

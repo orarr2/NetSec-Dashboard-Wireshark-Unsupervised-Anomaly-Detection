@@ -2,8 +2,6 @@
 
 # NetSec Automation Quickstart
 
-> גרסה עברית של [`AUTOMATION_QUICKSTART.md`](AUTOMATION_QUICKSTART.md).
-
 הפריסה הייחוס רצה על VM קטן שבשליטתכם (‏Oracle Always Free ARM
 הוא נתיב ה-$0 המומלץ) שאליו מגיעים דרך Tailscale. הדשבורד,
 ה-notebook וה-CLI כולם יכולים לשלוח PCAP לתוכו; ה-worker מנתח כל

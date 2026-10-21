@@ -2,8 +2,6 @@
 
 # LLM-as-Judge - Notebook עצמאי ל-Triage
 
-> גרסה עברית של [`README.md`](README.md).
-
 הרחבה **אופציונלית, עצמאית לחלוטין** לדשבורד NetSec. הדשבורד הראשי
 (`app/Network_Security_Dashboard.ipynb`) רץ בדיוק כמו קודם ולא יודע
 על התיקייה הזאת; אם לעולם לא תפתחו את ה-notebook הזה, שום דבר כאן

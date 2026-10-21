@@ -2,8 +2,6 @@
 
 # פאנל ה-LLM: למה הוא קיים ואיזה פער הוא ממלא
 
-> גרסה עברית של [`LLM_PANEL_ROLE.md`](LLM_PANEL_ROLE.md).
-
 צינור NetSec מריץ שלוש שכבות זיהוי דטרמיניסטיות לפני ש-LLM
 רואה פקטה בכלל: חוקים היוריסטיים (‏SYN flood, ‏port scan, ‏ARP MITM,
 ‏DNS amplification), ‏ML לא-מפוקח (‏IsolationForest, ‏DBSCAN, ‏LSTM),

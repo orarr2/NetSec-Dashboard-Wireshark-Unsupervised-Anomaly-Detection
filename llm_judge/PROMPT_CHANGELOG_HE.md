@@ -2,8 +2,6 @@
 
 # יומן שינויים של ה-Prompt לשופט
 
-> גרסה עברית של [`PROMPT_CHANGELOG.md`](PROMPT_CHANGELOG.md).
-
 כל שינוי prompt מעלה את `PROMPT_VERSION` ב-`judge_config.py` (מה שגם
 מבטל את מטמון הפסיקות), מקבל ריצת כיול מהסקשן המיועד לכך ב-notebook,
 ונרשם כאן עם ה-kappa שלו. ניתן לבצע commit לשינוי prompt רק אם ה-kappa

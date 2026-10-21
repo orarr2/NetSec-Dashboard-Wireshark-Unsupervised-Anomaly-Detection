@@ -2,8 +2,6 @@
 
 # דיאגנוסטיקת מודלים
 
-> גרסה עברית של [`MODEL_DIAGNOSTICS.md`](MODEL_DIAGNOSTICS.md).
-
 ערכים פר-session ששלושת המודלים הלא-מפוקחים מייצרים. אלה המספרים
 שמוצגים בלשוניות Analysis Insights ומאוחסנים במילון ה-session
 לבחינה מאוחרת (‏`ip_agg.attrs`).
