@@ -23,7 +23,7 @@
 | `netsec-rag.service` + `-ingest.service` + `.timer` | יחידות systemd ל-RAG. |
 | `netsec-companion.service` | יחידת systemd ל-Companion. |
 | `netsec-tls-renew.service` + `.timer` | חידוש שבועי של תעודת Let's Encrypt שהונפקה דרך Tailscale. |
-| `n8n_workflows/mvp_triage_email.json` | workflow של n8n לייבוא: מקבל את ה-alert webhook של ה-worker ושולח אימייל כש-verdict הוא malicious/suspicious. |
+| `n8n_workflows/mvp_triage_email.json` | תהליך עבודה של n8n לייבוא: מקבל את ה-alert webhook של ה-worker ושולח אימייל כש-verdict הוא malicious/suspicious. |
 | `create_sensor.py` | רושם sensor ב-DB ההיסטוריה ומדפיס את האישורים שלו פעם אחת. |
 | `../server/` | סכמת DB היסטוריה, auth של העלאת HMAC, אחסון streaming, ושכבת ingest של FastAPI. |
 | `../tools/netsec_rag.py` | מנוע RAG (retrieval + generation). ‏CLI + Python API. |
@@ -32,7 +32,7 @@
 | `../tools/upload_pcap.py` | העלאת streaming חתומה מכל מכונה - המחליף ללא תקרת-גודל לנתיב 25MB של GitHub. |
 | `../tools/measure_pipeline_ratios.py` | מודד מחדש את יחסי הגדלים PCAP-מול-fields שעליהם בנויה התכנית, מול הקלטה ארוכה משלכם (המספרים של התכנית הגיעו מדוגמה אחת של 135 שניות). |
 | `../server/retention.py` | אחזקה יומית (רץ כשירות compose של `retention`): גיבוי + גיזום של DB, מחיקת הגולמי אחרי 7 ימים עם backfill של אינדקס השדות הקבוע קודם, סימן מים של 85% דיסק, VACUUM חודשי. ‏`--once --dry-run` מראה מה הוא היה עושה. |
-| `../tools/watchdog.py` | checker חיצוני עצמאי - העתיקו לכל מכונה פעילה תמיד **מחוץ** ל-VM, הפנו אותו ל-`http://<vm>:8766/healthz`, קבלו אימייל אחד לכל outage ואחד לכל התאוששות. אין מכונה שמנטרת את עצמה. |
+| `../tools/watchdog.py` | checker חיצוני עצמאי - העתיקו לכל מכונה פעילה תמיד **מחוץ** ל-VM, הפנו אותו ל-`http://<vm>:8766/healthz`, קבלו אימייל אחד לכל תקלה ואחד לכל התאוששות. אין מכונה שמנטרת את עצמה. |
 
 ## התחלה מהירה על VM טרי
 
@@ -142,7 +142,7 @@ BASIC_AUTH_HASH="$(sudo docker run --rm caddy:2 caddy hash-password --plaintext 
 ## הרצת sensor (מחשב נייד היום, ‏Raspberry Pi 5 מחר)
 
 סוכן ה-capture (`sensor/capture_agent.py`) הוא Tier 0 - הוא מקליט PCAP
-גולמי ב-ring buffer של tshark ומעלה כל chunk סגור ל-VM. זה אותו קוד
+גולמי ב-מאגר טבעתי של tshark ומעלה כל חתיכה סגור ל-VM. זה אותו קוד
 על מחשב נייד ועל Pi 5 (החלטה IDX-01, שלב J):
 רק הסביבה שונה.
 
@@ -171,7 +171,7 @@ python3 sensor/capture_agent.py --interface wlan0
   לשאת (`files:N x duration:S` שניות של היסטוריה).
 
 כל מה שבהמשך הצינור - קליטה, worker, היסטוריה, בייסליין, דוחות -
-אינו משתנה: עבור ה-VM chunk של Pi ו-chunk של מחשב נייד הם אותה
+אינו משתנה: עבור ה-VM חתיכה של Pi ו-חתיכה של מחשב נייד הם אותה
 העלאה חתומה.
 
 ## סודות

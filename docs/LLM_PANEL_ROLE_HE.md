@@ -23,7 +23,7 @@ tunneling, ‏DGA, ‏TLS anomaly, ‏ARP/DHCP, ‏fusion).
 
 2. **הדחקת false-positive על יעדים ידועים-טובים.** host client יחיד
    שמגיע ל-260 יעדים ביחס SYN של 0.01 הוא IsolationForest outlier
-   אבל לא סריקה. הפאנל מזהה CDNs ו-endpoints של ענן מוכרים (‏Akamai,
+   אבל לא סריקה. הפאנל מזהה CDNs ו-נקודות קצה של ענן מוכרים (‏Akamai,
    ‏Google, ‏Zoom, ‏Microsoft, ‏Cloudflare) מ-`websites.top_tls_sni`
    ומוריד את ה-verdict. הקשחת חוק הסריקה מ-2026-08-09 הוציאה את רוב
    המקרים האלה משכבת החוקים לגמרי, אבל שכבת ה-ML עדיין מציפה אותם
@@ -94,7 +94,7 @@ tunneling, ‏DGA, ‏TLS anomaly, ‏ARP/DHCP, ‏fusion).
 
 **בקוד** (`llm_judge/judge_core.py`):
 - `validate_verdict()`: אימות JSON-schema קפדני של כל תגובת פאנל;
-  כישלונות עוברים retry אחד, ואז השופט מסומן ככושל והפאנל ממשיך
+  כישלונות עוברים ניסיון חוזר אחד, ואז השופט מסומן ככושל והפאנל ממשיך
   בלעדיו.
 - `validate_verdict_semantics()`: בדיקות סמנטיות אחרי-verdict.
   קטגוריית `port_scan` על מועמד בלי flag mass ועם יעד יחיד מורדת
@@ -120,7 +120,7 @@ tunneling, ‏DGA, ‏TLS anomaly, ‏ARP/DHCP, ‏fusion).
 
 שכבת השופט היא פאנל לפי העיצוב. עקרונות הרכב:
 
-1. **יתירות.** איפוס מכסה של free-tier, ‏API 429, או outage מצד
+1. **יתירות.** איפוס מכסה של free-tier, ‏API 429, או תקלה מצד
    הספק לעולם לא עוצר את הצינור - השופטים הנותרים נושאים את
    ההצבעה.
 2. **גיוון.** משפחות מודל שונות מתנגדות בדרכים שונות; חילוקי דעות
@@ -143,9 +143,9 @@ tunneling, ‏DGA, ‏TLS anomaly, ‏ARP/DHCP, ‏fusion).
 - ‏prompt לסבב debate: ‏`DEBATE_SYSTEM_PROMPT` (אותו קובץ).
 - ‏prompt לזוג sessions: ‏`PAIR_SYSTEM_PROMPT`.
 - Pin של גרסה: ‏`PROMPT_VERSION` ב-`llm_judge/judge_config.py` (חלק
-  מ-fingerprint של ה-verdict cache - העלאתו מבטלת את ה-verdicts
+  מ-טביעת אצבע של ה-verdict cache - העלאתו מבטלת את ה-verdicts
   ב-cache).
-- יומן שינויים עם deltas של kappa: ‏`llm_judge/PROMPT_CHANGELOG.md`.
+- יומן שינויים עם deltas של kappa: ‏`llm_judge_PROMPT_CHANGELOG.md`.
 - חוזה עם הקוד: ‏`docs/LLM_INTERFACE.md`.
 
 ## מסמכים קשורים
@@ -154,7 +154,7 @@ tunneling, ‏DGA, ‏TLS anomaly, ‏ARP/DHCP, ‏fusion).
 - `docs/LLM_INTERFACE.md` - חוזה ה-blob בין הצינור לפאנל.
 - `docs/MODELS.md`, `docs/MODEL_DIAGNOSTICS.md`, `docs/SCIENTIFIC_AUDIT.md`
   - מגלי ה-ML שהפאנל שופט מעליהם.
-- `llm_judge/README.md` - רפרנס תפעולי (משתני סביבה, ספקים,
+- `llm_judge_README.md` - רפרנס תפעולי (משתני סביבה, ספקים,
   presets, סטיות מה-spec).
 - `llm_judge/panel_presets.py` - ה-lineups של הפאנל שנשלחים (ענן
   יחיד, היברידי, הכל-מקומי, ‏cloud-max, וכו').

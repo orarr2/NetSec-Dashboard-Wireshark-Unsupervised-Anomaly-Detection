@@ -144,7 +144,7 @@ The only chain that would silently break is: `Tailscale on the laptop` <-> `Tail
 
 ## Rebuilding from zero on a fresh Oracle VM
 
-See `deploy/README.md` for the exact commands. Roughly:
+See `deploy_README.md` for the exact commands. Roughly:
 
 ```
 git clone <repo>

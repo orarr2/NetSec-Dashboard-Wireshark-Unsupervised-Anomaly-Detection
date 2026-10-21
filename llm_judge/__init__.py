@@ -1,7 +1,7 @@
 """Standalone LLM-as-Judge triage layer for the NetSec Dashboard.
 
 Optional add-on: the main dashboard runs without this package. See
-llm_judge/README.md and docs/LLM_JUDGE_SPEC.md.
+docs/llm_judge_README.md and docs/LLM_JUDGE_SPEC.md.
 """
 import os as _os
 import shutil as _shutil

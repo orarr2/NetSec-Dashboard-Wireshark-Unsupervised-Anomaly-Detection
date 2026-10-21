@@ -30,7 +30,7 @@
 4. ‏`eps` של DBSCAN → מרפק אוטומטי של k-distance, פר-הקלטה (מדידות להמחשה הראו 0.78 ו-4.86 בשתי הקלטות אמיתיות); ה-fallbacks מתועדים ב-`docs/MODEL_DIAGNOSTICS.md`.
 5. ‏`min_samples` של DBSCAN → 2 (העלאת הערך קורסת את מרחב ה-10 ממדים ל-noise).
 6. דגימת רצפים ל-LSTM → רציפה (לא step-sampling).
-7. בייסליין שגיאות ה-LSTM → ‏validation-set מופרש (לא training), דגל כש-mean+2σ חרגו.
+7. בייסליין שגיאות ה-LSTM → ‏אימות-set מופרש (לא training), דגל כש-mean+2σ חרגו.
 8. הערכה מול ground truth מתויג → fixtures של `attack_tests/` + סוויטת רגרסיה.
 
 </div>

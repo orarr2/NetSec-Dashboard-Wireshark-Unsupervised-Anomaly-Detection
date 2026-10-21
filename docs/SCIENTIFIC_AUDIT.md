@@ -196,7 +196,7 @@ no-op there - the effect is only on multi-judge panels).
 **Risk.** A silent shift in the "safe" default. Ship behind
 `LLM_JUDGE_PANEL_QUORUM=majority|fail-safe`, defaulting to `majority`
 in v0.4 and documenting it prominently in the panel section of
-`llm_judge/README.md`. Users who prefer the strict fail-safe (any
+`llm_judge_README.md`. Users who prefer the strict fail-safe (any
 `malicious` wins) can set it back.
 
 ---

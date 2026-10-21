@@ -19,7 +19,7 @@
 8. [Dify: פריסה מלאה ב־Docker Compose](#8-dify-פריסה-מלאה-ב־docker-compose)
 9. [חיבור LLM חינמי או בתשלום](#9-חיבור-llm-חינמי-או-בתשלום)
 10. [חשיפת ה־PCAP והפרויקט לסוכן](#10-חשיפת-ה־pcap-והפרויקט-לסוכן)
-11. [תבניות זרימה (Workflows) לדוגמה](#11-תבניות-זרימה-workflows-לדוגמה)
+11. [תבניות זרימה (Workflows) לדוגמה](#11-תבניות-זרימה-תהליכי עבודה-לדוגמה)
 12. [תבניות סוכן אוטונומי (Agentic Patterns)](#12-תבניות-סוכן-אוטונומי-agentic-patterns)
 13. [אבטחת מידע, סודות ו־Hardening](#13-אבטחת-מידע-סודות-ו־hardening)
 14. [ניטור, לוגים ודיאגנוסטיקה](#14-ניטור-לוגים-ודיאגנוסטיקה)
@@ -172,7 +172,7 @@ File in incoming/ ──► n8n (trigger) ──► judge_cli.py (docker exec)
 ### 4.3 תוכנה מומלצת
 
 - **Ollama** - להרצת LLM מקומיים חינם (שימש בעבר ב־GitHub Actions
-  עם `llama3.2`, ‏ב־workflow שהוצא משימוש). ניתן להריץ גם כ־container.
+  עם `llama3.2`, ‏ב־תהליך עבודה שהוצא משימוש). ניתן להריץ גם כ־container.
 - **ngrok / Cloudflare Tunnel** - אם רוצים לחשוף Webhook החוצה מבלי
   לפתוח פורט בראוטר.
 - **מפתחות API** לפי הבחירה שלך (Gemini, Groq, OpenAI-compatible וכו').
@@ -452,7 +452,7 @@ docker compose logs -f n8n
   אשף יצירת owner account - שמור את פרטי ההתחברות).
 - מומלץ מיד: יצירת חשבון owner, ‏import של `n8n_workflows/mvp_triage_email.json`
   דרך ה־UI או ה־CLI (‏`docker compose exec n8n n8n import:workflow --input=/workflows/mvp_triage_email.json`),
-  הצמדת credential SMTP לצומת המייל, ואקטיבציה של ה־workflow.
+  הצמדת credential SMTP לצומת המייל, ואקטיבציה של ה־תהליך עבודה.
 
 ### 7.6 טעינת מודל ל־Ollama (שירות compose)
 
@@ -495,14 +495,14 @@ docker compose up -d
 הוספת ספק לפי בחירה:
 - **Ollama** - לחיבור ל־Ollama המקומי: base URL `http://host.docker.internal:11434`
   ב־Windows/Mac, או שם השירות ב־Docker אם באותה רשת.
-- **OpenAI-compatible** - כל endpoint שנותן פרוטוקול OpenAI (LM Studio /
+- **OpenAI-compatible** - כל נקודת קצה שנותן פרוטוקול OpenAI (LM Studio /
   llamafile / vLLM / TGI / ספק ענן שתומך בכך).
 - ספקים אחרים בעלי SDK רשמי ב־Dify (Gemini, Mistral, DeepSeek וכו').
 
 ### 8.3 יצירת Agent App
 
 - **Studio → Create App → Agent**.
-- הוסף Knowledge (RAG): העלה את `docs/*.md`, `llm_judge/README.md`,
+- הוסף Knowledge (RAG): העלה את `docs/*.md`, `llm_judge_README.md`,
   `PROMPT_CHANGELOG.md`. Dify יבצע chunking + embedding.
 - Tools לדוגמה:
   - **HTTP** - קריאה ל־`ingest_api` (‏`POST http://ingest_api:8766/v1/pcap`)
@@ -551,7 +551,7 @@ rule-based pipeline over Wireshark captures, and you must:
   `phi3:mini`. פועל CPU-only, איטי אך מעולה לפיילוט. עובד ללא רשת.
 - **LM Studio** / **llamafile** / **vLLM** / **Text-Generation-WebUI** -
   כולם חושפים API בפורמט OpenAI-compatible → משתמש באותה
-  הגדרת provider.
+  הגדרת ספק.
 
 ### 9.2 חינמי דרך ענן (Free-tier / Freemium)
 
@@ -597,11 +597,11 @@ rule-based pipeline over Wireshark captures, and you must:
 2. עם סיום הצינור, ה־worker שולח POST ל־`N8N_WEBHOOK_URL` עם
    `{session_id, label, kind, sha256, results, worst}` (‏ראו
    `server/worker.py::_notify`).
-3. ה־workflow ב־n8n מפעיל לוגיקה על ה־payload (סינון malicious/
+3. ה־תהליך עבודה ב־n8n מפעיל לוגיקה על ה־payload (סינון malicious/
    suspicious, שליחת מייל, בקשת RAG מ־Dify, וכו').
-4. כאשר צריך את ה־HTML/PDF/JSON המלא, ה־workflow קורא ל־
+4. כאשר צריך את ה־HTML/PDF/JSON המלא, ה־תהליך עבודה קורא ל־
    `GET /v1/reports/{session_id}.{html|pdf|json|map}` על ה־`ingest_api`
-   ‏(‏עם bearer token של החיישן שיצר את הסשן; ראו `server/ingest_api.py`).
+   ‏(‏עם bearer טוקנים של החיישן שיצר את הסשן; ראו `server/ingest_api.py`).
 
 ### 10.2 הרשאות ובידוד
 
@@ -610,7 +610,7 @@ rule-based pipeline over Wireshark captures, and you must:
   לרשת. אינו רואה את `/srv/netsec` ישירות בכלל.
 - `worker` הוא היחיד שכותב ל־`/srv/netsec/reports/` ול־DB. אין `docker
   exec` שיוצא מהסוכן פנימה.
-- ‏Bearer tokens נשמרים כ־hash ב־DB; ‏HMAC secrets בשל הגנת המערכת נשמרים
+- ‏Bearer טוקנים נשמרים כ־hash ב־DB; ‏HMAC secrets בשל הגנת המערכת נשמרים
   בפורמט גלוי ומוגנים דרך הרשאות קובץ ה־DB.
 
 ### 10.3 שילוב Dify (אופציונלי)
@@ -631,7 +631,7 @@ trigger, כי הצינור רץ אוטומטית ברגע ש־PCAP מגיע ל־
 1. **Webhook** על `/webhook/netsec-alert` (מקבל את payload ה־worker).
 2. **IF** - אם `body.worst ∈ {malicious, suspicious}`:
    - **HTTP Request** → `GET http://ingest_api:8766/v1/reports/{body.session_id}.md`
-     עם ה־bearer token של החיישן, לקבלת הדוח בפורמט Markdown.
+     עם ה־bearer טוקנים של החיישן, לקבלת הדוח בפורמט Markdown.
    - **HTTP Request** → `POST /v1/chat-messages` של Dify (אופציונלי)
      עם ה־MD המלא ובקשה לסיכום מקוצר בעברית.
    - **Slack / Telegram / Email** - שליחת הסיכום + לינק ל־`report.html`.
@@ -699,7 +699,7 @@ trigger, כי הצינור רץ אוטומטית ברגע ש־PCAP מגיע ל־
 
 ### 12.5 Guardrails (חובה)
 
-- **Rule guardrail** - כבר קיים בפרויקט:
+- **Rule מעקה בטיחות** - כבר קיים בפרויקט:
   אם חוק דטרמיניסטי נפל, `benign` נחסם. אין לבטל.
 - **Rate limit** - n8n `Wait` + Dify concurrency limit.
 - **Timeouts** - פר קריאה: 60-300 שנ' בהתאם למודל.
@@ -748,7 +748,7 @@ trigger, כי הצינור רץ אוטומטית ברגע ש־PCAP מגיע ל־
 
 - `n8n_data`, `ollama_data`, `dify_postgres` - לגבות תקופתית
   (rsync/borg). אחסון מחוץ למכונה.
-- workflows של n8n גם ניתנים ליצוא כ־JSON וגם לגבותם ב־git פרטי
+- תהליכי עבודה של n8n גם ניתנים ליצוא כ־JSON וגם לגבותם ב־git פרטי
   (לא בפרויקט הפומבי הזה).
 
 ---
@@ -774,7 +774,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
   ב־SQLite לצד ה־verdict.
 - דיוק (Cohen's kappa) - כבר קיים; הרץ מחדש אחרי החלפת מודל
   (`llm_judge/calibration.py`).
-- שיעור override של ה־guardrail - סימן שהמודל נבחר לא מתאים.
+- שיעור override של ה־מעקה בטיחות - סימן שהמודל נבחר לא מתאים.
 
 ### 14.3 התראות
 
@@ -788,7 +788,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 - **חינם לחלוטין**: n8n Community + Dify Community + Ollama מקומי.
   עלות = חשמל + חומרה שיש לך.
 - **חינם ב־Cloud**: GitHub Actions ממשיך לתת אפס עלות ל־forks ציבוריים
-  (‏ה־workflow הישן `analyze-pcap.yml` הוצא משימוש - כיום נשאר רק `ci.yml`).
+  (‏ה־תהליך עבודה הישן `analyze-pcap.yml` הוצא משימוש - כיום נשאר רק `ci.yml`).
 - **ספק LLM חיצוני**: הפעל אותו רק על שלב ה־Analyst (5-40 קריאות
   ל־PCAP). Cache SQLite שמובנה ב־Judge → הרצות חוזרות = חינם.
 - **טיפ עלות**: כפה `LLM_JUDGE_MAX_CANDIDATES=40` (ברירת מחדל)
@@ -835,7 +835,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 
 ### 17.1 "n8n לא מקבל אירוע webhook"
 
-- ודא שה־workflow פעיל (Active מלמעלה-ימין) ושה־Webhook הוא מסוג
+- ודא שה־תהליך עבודה פעיל (Active מלמעלה-ימין) ושה־Webhook הוא מסוג
   Production, לא Test - ה־Test URL תקף לביקור ידני יחיד ואז נעלם.
 - ודא ש־`N8N_WEBHOOK_URL` ב־`deploy/.env` מצביע לאותה כתובת של
   ה־Webhook, ושה־worker רוענן (`docker compose restart worker`).
@@ -860,7 +860,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 ### 17.4 "ה־LLM ממציא ראיות"
 
 - ודא ש־RAG פעיל, וה־retriever מחזיר snippets מהמסמכים.
-- הפעל את ה־guardrail (`LLM_JUDGE_RULE_GUARDRAIL=1`).
+- הפעל את ה־מעקה בטיחות (`LLM_JUDGE_RULE_GUARDRAIL=1`).
 - הפחת temperature, בקש schema-strict.
 - שקול מודל בינוני-גדול יותר לשלב ה־Analyst.
 
@@ -883,7 +883,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 
 1. ✅ **פיילוט מקומי** - `deploy/` על VM (Oracle Always Free ARM
    או כל Ubuntu 22.04+) עם n8n + `ingest_api` + `worker` + `retention`,
-   Ollama על ה־host, workflow אחד (`mvp_triage_email.json`) שנשלח
+   Ollama על ה־host, תהליך עבודה אחד (`mvp_triage_email.json`) שנשלח
    בריפו.
 2. ✅ **פאנל שופטים הטרוגני** (‏במקום הקומיטה הישנה של שני שופטים):
    Groq + Gemini + Ollama, ‏panel debate עם צד fail-safe והצבעה
@@ -896,7 +896,7 @@ docker compose -f ../dify/docker/docker-compose.yaml logs -f dify-api dify-worke
 6. **התראות מובנות** - Slack / Telegram חיבורים מובנים ב־n8n מעבר
    ל־Email.
 7. **Observability** - Prometheus/Grafana לצד המדדים של הפרויקט.
-8. **Multi-tenant** - הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
+8. **Multi-דייר** - הפרדת נתיבים לפי משתמש/ארגון, סודות לפי משתמש.
 9. **הרחבת CI Gate** - `tests/test_judge_kappa_regression.py` שיריץ
    גם את הזרימה החדשה על PCAP סינטטי כחלק מ־regression.
 

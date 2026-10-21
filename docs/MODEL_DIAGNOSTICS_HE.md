@@ -17,7 +17,7 @@
 | DBSCAN | `clusters / noise` | ספירת תוויות non-noise / ספירת תוויות `-1` |
 | DBSCAN | `silhouette` | silhouette על נקודות non-noise כשיש ≥ 2 אשכולות, אחרת `n/a` |
 | DBSCAN | `>5000 IPs` | **מדלג לגמרי** (כל `cluster = -1`) כדי להימנע מהתפוצצות ה-O(n²) של השכונה שנראתה בהצפות מזויפות |
-| LSTM | `threshold` | `val_mean + 2·val_std` של שגיאת החיזוי פר-רצף על ה-split של ה-validation המופרש |
+| LSTM | `threshold` | `val_mean + 2·val_std` של שגיאת החיזוי פר-רצף על ה-split של ה-אימות המופרש |
 | LSTM | `#flagged / #sequences` | רצפים ששגיאתם חרגה מהסף |
 | LSTM | שער אימון | דורש ≥ 20 מקבצי-שנייה שמישים (‏SEQ_LEN=10 מותיר 10 חלונות גולשים). הקלטות קצרות יותר מדלגות על LSTM בשקט; החוקים הדטרמיניסטיים מכסים אותן. |
 

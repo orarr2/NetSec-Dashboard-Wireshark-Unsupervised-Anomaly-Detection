@@ -79,7 +79,7 @@ FTP / SMTP / SYN / FIN / NULL / Xmas / RST / ARP / DNS, חוק
    ((>20-dst AND ratio>0.25) OR ratio>0.7). הפלט כעת כולל `scan_alerts`.
 5. **תא 16** - חוק הגברה מצד תגובות DNS: לכל IP מקור ששלח ≥ 50
    תשובות DNS מתוך UDP/53 עם גודל תגובה ממוצע ≥ 200 בייט,
-   מופק ממצא reflector. הפלט מוסיף `dns_amp`.
+   מופק ממצא מגיב-החזר. הפלט מוסיף `dns_amp`.
 
 ## מטריצת זיהוי אחרי התיקונים
 
@@ -88,7 +88,7 @@ FTP / SMTP / SYN / FIN / NULL / Xmas / RST / ARP / DNS, חוק
 | TCP SYN scan      | ✅ | ✅ | ✅ סריקה אופקית | n/a |
 | TCP Xmas scan     | - (אוכלוסייה קטנה) | - | ✅ סריקה אופקית | n/a |
 | ARP spoofing      | ✅ | ✅ | ✅ ARP multi-MAC | ➖ |
-| DNS amplification | ✅ | ✅ | ✅ amp / reflector | n/a |
+| DNS amplification | ✅ | ✅ | ✅ amp / מגיב-החזר | n/a |
 | Spoofed SYN flood | ✅ | ✅ (עם שומר דילוג) | ✅ syn_counter | n/a |
 
 </div>

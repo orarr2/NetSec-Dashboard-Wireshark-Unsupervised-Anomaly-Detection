@@ -57,11 +57,11 @@
 | `app/dns_fingerprints.json` | 217 טביעות אצבע של DNS להסקת סוג התקן מהתנהגות |
 | `attack_tests/` | חמש הקלטות אמיתיות של תקיפות ועוד צינור רגרסיה בשורת פקודה |
 | `tests/` | סוויטת רגרסיה של pytest מול האמת המתויגת |
-| `llm_judge/` | **‏אופציונלי** - מחברת triage עצמאית של "שופט LLM". ממזגת את כל האותות של מנועי הזיהוי לפסיקה מדורגת ומוסברת אחת לכל מועמד. הדשבורד רץ במלואו גם בלעדיה; ראו `llm_judge/README.md` |
-| `companion/` | **‏AI Companion** - צ'אט Dash מעל Ollama מקומי (streaming, תשובות מרונדרות כ-markdown, כפתור עצירה, הגדרות לכל שיחה). רץ על ה-VM כשירות `netsec-companion.service`; אותו קובץ עובד גם ממחשב נייד דרך מנהרת SSH. ראו `companion/README.md` |
+| `llm_judge/` | **‏אופציונלי** - מחברת triage עצמאית של "שופט LLM". ממזגת את כל האותות של מנועי הזיהוי לפסיקה מדורגת ומוסברת אחת לכל מועמד. הדשבורד רץ במלואו גם בלעדיה; ראו `llm_judge_README.md` |
+| `companion/` | **‏AI Companion** - צ'אט Dash מעל Ollama מקומי (streaming, תשובות מרונדרות כ-markdown, כפתור עצירה, הגדרות לכל שיחה). רץ על ה-VM כשירות `netsec-companion.service`; אותו קובץ עובד גם ממחשב נייד דרך מנהרת SSH. ראו `companion_README.md` |
 | `tools/netsec_rag.py` + `tools/netsec_rag_web.py` | QA מועשר-אחזור על ארכיון הדוחות וקבצים נוספים שהוזנו לאינדקס. ‏Ollama embeddings, מאגר וקטורים ב-SQLite, ממשק Dash זורם במבנה דומה ל-Companion. רץ על ה-VM כשירות `netsec-rag.service` |
 | `server/` | מערך השרת שעל ה-VM - ‏API קליטה חתום, ‏worker, שימור נתונים, התראות. מריץ את צינור הזיהוי המדויק של הדשבורד על VM קטן שבשליטתכם |
-| `deploy/` | ‏Docker Compose, ‏Dockerfiles, ‏Caddyfile, יחידות systemd וסקריפטי התקנה לכל המערך. ראו `deploy/README.md` לתחילה מהירה על VM טרי |
+| `deploy/` | ‏Docker Compose, ‏Dockerfiles, ‏Caddyfile, יחידות systemd וסקריפטי התקנה לכל המערך. ראו `deploy_README.md` לתחילה מהירה על VM טרי |
 | `docs/ARCHITECTURE.md` | מפה מקצה-לקצה: מה רץ היכן, פורטים, שמירת נתונים, זרימת הנתונים בכל המערך |
 | `docs/SECURITY_MODEL.md` | מי יכול להגיע לאיזה שירות, איזה אימות שומר על כל שירות, אילו איומים מנוטרלים ואילו לא |
 | `tools/upload_pcap.py` | כלי שורת פקודה להעלאת הקלטה חתומה HMAC - מזרים קובץ PCAP לכתובת `/v1/pcap` של ה-VM, עם דגל `--email <address>` לדוח |
@@ -148,7 +148,7 @@ Tailscale (מתחדשת אוטומטית פעם בשבוע). שם ה-DNS מתפ�
 **[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)** למודל האימות
 והאיומים.
 
-להתקנה טרייה של VM: **[deploy/README.md](deploy/README.md)**.
+להתקנה טרייה של VM: **[deploy_README.md](deploy_README.md)**.
 
 ## הרצה על הקלטות משלכם (שלוש דרכים)
 
@@ -195,7 +195,7 @@ python llm_judge/judge_cli.py path/to.pcap \
 ‏Ollama למסלול בלי מפתח (`LLM_JUDGE_PROVIDER=ollama`), או
 Groq / Gemini / Cerebras / OpenRouter / Anthropic / GitHub Models
 עם מפתח משלכם. הגדירו `LLM_JUDGE_PANEL=<m1>,<m2>[,...]` לדיון
-אמיתי בין כמה שופטים. ראו `llm_judge/README.md` לכל הכפתורים.
+אמיתי בין כמה שופטים. ראו `llm_judge_README.md` לכל הכפתורים.
 
 **‏ב2. העלאה ל-VM שלכם + משלוח הדוח באימייל** (זהה לכפתור
 הדשבורד, משורת הפקודה):
@@ -213,7 +213,7 @@ python tools/upload_pcap.py capture.pcapng --email you@example.com
 
 לניטור רציף שלא תלוי בכך שהמחשב הנייד שלכם ער - וגם לשמור את
 הפקטות הגולמיות ברשת שלכם בלבד - הריצו את מערך הניתוח על VM קטן
-שבשליטתכם. העיצוב המלא (בעברית, לפי בקשה) נמצא ב-`ARCHITECTURE_HE.md`,
+שבשליטתכם. העיצוב המלא (בעברית, לפי בקשה) נמצא ב-`ARCHITECTURE_SPEC_HE.md`,
 ותבניות הפריסה נמצאות ב-`deploy/`.
 
 **מה זה.** ארבע שכבות משתפות פעולה במקום ארבעה כלים מודבקים ב-`scp`:
@@ -237,7 +237,7 @@ python tools/upload_pcap.py capture.pcapng --email you@example.com
   מעבד בלבד, כ-55 שניות לפסיקה על ARM 24GB), ו-`gemini:gemini-2.5-flash`
   (‏Google AI Studio באימות Bearer). ה-`ThreadPoolExecutor` מריץ
   את כל הארבעה במקביל, אז זמן השעון שווה בערך למקסימום של השופטים
-  ולא לסכום. פירוט מלא ועם קוד נמצא ב-`docs/VM_ARCHITECTURE_HE.md`
+  ולא לסכום. פירוט מלא ועם קוד נמצא ב-`docs/VM_ARCHITECTURE_SPEC_HE.md`
   סעיף 10, וה-prompt המדויק ב-`docs/LLM_INTERFACE.md`.
 - **צרכנים (שכבה 3)** - ה-notebook (כלקוח מרוחק *או* כאנליזר
   מקומי מלא), אימייל, והתראות n8n.
@@ -249,7 +249,7 @@ python tools/upload_pcap.py capture.pcapng --email you@example.com
 25 MB של Actions הפכה אותו לבלתי שמיש להקלטות אמיתיות, ומסלול
 ה-VM מכסה כל מקרה שהיה בטיפולו.
 
-**התחלה מהירה** (מדריך מלא ב-`deploy/README.md`):
+**התחלה מהירה** (מדריך מלא ב-`deploy_README.md`):
 
 ```bash
 # על ה-VM (כל קופסה של Ubuntu 22.04+; Oracle Always Free הוא מסלול ה-0$)
@@ -282,7 +282,7 @@ python3 tools/upload_pcap.py capture.pcapng
 
 הגדירו `WIGLE_API_NAME`/`WIGLE_API_TOKEN`, ‏`SHODAN_API_KEY` ו-
 `NETSEC_ENABLE_SHODAN=1` ב-`deploy/.env`. בלי מפתחות המפה נשארת
-ריקה ומשקל ה-threat intel לא תורם דבר - התנהגות זהה לבסיס.
+ריקה ומשקל ה-מודיעין איומים לא תורם דבר - התנהגות זהה לבסיס.
 
 **כל מה שלמעלה אופציונלי.** ה-notebook של הדשבורד המקומי עדיין
 מנתח קובץ בלי VM ובלי רשת בכלל; מסלול ה-VM הוא מה שהופך notebook

@@ -8,7 +8,7 @@
 מרגע שהוא נשלח למכונה ועד שהדוח נוחת בתיבת המייל.
 
 כל מונח שיוצא-דופן מוסבר בפעם הראשונה שהוא מופיע - לא מונחות שום היכרות
-מוקדמת עם Docker, HMAC, Tailscale, worker queue, sqlite migration, או
+מוקדמת עם Docker, HMAC, Tailscale, worker תור, sqlite migration, או
 retention.
 
 **עדכון אחרון:** ‏2026-08-01 (‏prompt v0.5.0, ‏פאנל של 4 שופטים, ‏schema v6).
@@ -30,7 +30,7 @@ retention.
 7. [Retention - שירות תחזוקה שוטף](#7-retention---שירות-תחזוקה-שוטף)
 8. [Ollama - LLM מקומי חופשי (אופציונלי)](#8-ollama---llm-מקומי-חופשי-אופציונלי)
 9. [מסד הנתונים - SQLite ומעברי-סכמה](#9-מסד-הנתונים---sqlite-ומעברי-סכמה)
-10. [ה-Panel של השופטים - LLM-as-Judge](#10-ה-panel-של-השופטים---llm-as-judge)
+10. [ה-Panel של השופטים - שופט LLM](#10-ה-panel-של-השופטים---llm-as-judge)
 11. [Sensors ו-HMAC - איך זיהוי מכריע מי רשאי להעלות](#11-sensors-ו-hmac---איך-זיהוי-מכריע-מי-רשאי-להעלות)
 12. [Retention ו-Data Lifecycle](#12-retention-ו-data-lifecycle)
 13. [Reconciliation - זיהוי תעבורת המערכת עצמה](#13-reconciliation---זיהוי-תעבורת-המערכת-עצמה)
@@ -57,7 +57,7 @@ retention.
   שהמחשב יהיה מחובר לפייתון, ל-tshark, למפתחות LLM וכו'.
 
 - **מסלול המכונה המנתחת** (‏זה מה שהמסמך הזה מסביר): המשתמש שולח
-  את ה-PCAP במסלול HTTP מוצפן ל-VM ‏(שרת ענן), ה-VM מריץ *את אותו pipeline
+  את ה-PCAP במסלול HTTP מוצפן ל-VM ‏(שרת ענן), ה-VM מריץ *את אותו צינור
   בדיוק* של הדשבורד, אבל בצד השרת, שומר את התוצאות ב-DB היסטורי, ושולח
   דוח למייל של המשתמש. המחשב של המשתמש יכול להיסגר תוך שנייה - הניתוח
   ממשיך לרוץ.
@@ -187,9 +187,9 @@ iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited
 | שירות | מה זה עושה | חייב? | סטטוס נוכחי |
 |---|---|---|---|
 | `ingest_api` | מקבל PCAP-ים מהמשתמשים בבקשת HTTP חתומה, שומר לדיסק, מכניס לתור לניתוח | ✅ קריטי | Up 13h+ |
-| `worker` | קורא מהתור, מריץ את ה-pipeline המלא, כותב תוצאות, שולח מייל | ✅ קריטי | Up (‏מתחדש בעת deploy) |
+| `worker` | קורא מהתור, מריץ את ה-צינור המלא, כותב תוצאות, שולח מייל | ✅ קריטי | Up (‏מתחדש בעת deploy) |
 | `retention` | job יומי - מוחק PCAP-ים ישנים, מבצע VACUUM ל-DB, שומר גיבויים | ✅ מומלץ | Up 24h+ |
-| `n8n` | פלטפורמת אוטומציה - fallback אם SMTP נכשל | אופציונלי | Up 2d+ |
+| `n8n` | פלטפורמת אוטומציה - נפילה חזרה אם SMTP נכשל | אופציונלי | Up 2d+ |
 | `ollama` | מריץ מודלי LLM מקומית על ה-VM (‏zero-key, ‏qwen2.5:3b טעון) | אופציונלי אבל נדרש לפאנל 4-שופטים | Up |
 | `caddy` | reverse proxy עם HTTPS ו-basic auth לממשקי ה-web (‏פורטל, RAG, Companion, n8n) | אופציונלי אבל נדרש לפורטל | Up |
 
@@ -223,7 +223,7 @@ docker compose ps
 ## 5. Ingest API - נקודת הכניסה של PCAP
 
 **מה זה בכלל "ingest"?** מונח שאול מ-data engineering, פירושו "לבלוע" -
-לקבל נתונים לתוך המערכת מקבצי חוץ. בעולם שלנו, "ingest" הוא ה-endpoint
+לקבל נתונים לתוך המערכת מקבצי חוץ. בעולם שלנו, "ingest" הוא ה-נקודת קצה
 שמקבל את קובץ ה-PCAP מהמשתמש ומכניס אותו לתהליך הניתוח.
 
 ### הפורט ומיקום
@@ -285,7 +285,7 @@ def _signature(secret, file_sha256, sensor_id, timestamp):
 ## 6. Worker - מנוע הניתוח שרץ מאחורי הקלעים
 
 **מה זה worker?** תהליך רקע שעושה עבודה כבדה. לא מגיב לבקשות מהמשתמש -
-במקום זאת, הוא בודק **תור** ‏(queue) של משימות ומטפל בכל אחת בסדר.
+במקום זאת, הוא בודק **תור** ‏(תור) של משימות ומטפל בכל אחת בסדר.
 
 ### לולאת ה-worker
 
@@ -309,7 +309,7 @@ def _signature(secret, file_sha256, sensor_id, timestamp):
 - `tshark` (‏גרסת command-line של Wireshark) קורא את ה-PCAP ומייצא 26
   שדות רלוונטיים (‏IPs, פורטים, TCP flags, DNS queries, TLS SNI/JA3,
   ARP opcodes, DHCP server IDs וכו') לטבלת pandas.
-- מ-Frame בסיסית, ה-pipeline בונה **פר-IP feature vector**: כמה חבילות
+- מ-Frame בסיסית, ה-צינור בונה **פר-IP feature vector**: כמה חבילות
   יצאו ממנו, לאילו יעדים, מה ההתפלגות של גדלי חבילות, איזה TCP flags
   הופיעו, כמה DNS lookups עשה, וכו'.
 
@@ -448,7 +448,7 @@ limits, כל התעבורה נשארת פנימית.
 
 ### למה בכלל להריץ מקומית אם יש Groq בחינם?
 
-- **Groq TPD limits**: 100k tokens ליום לכל מודל. אם מעלים הרבה PCAP-ים
+- **Groq TPD limits**: 100k טוקנים ליום לכל מודל. אם מעלים הרבה PCAP-ים
   ‏(‏או משתמשים בפאנל של 4-5 שופטים), אפשר להיתקל ב-429.
 - **פרטיות**: הפרומפט של השופט כולל את ה-candidate context (IPs, MAC
   addresses, שמות דומיין). מי שלא רוצה לשלוח את זה לספק חיצוני יכול
@@ -591,7 +591,7 @@ def migrate(conn):
 |---|---|
 | `sensors` | הגדרות ה-sensors המורשים (name, HMAC secret, revoked_at) |
 | `pcap_files` | כל קובץ PCAP שהתקבל (sha256 unique, storage_path, size) |
-| `sessions` | ריצת ניתוח - state machine (queued → running → done/error) |
+| `sessions` | ריצת ניתוח - state machine (הוכנס לתור → running → done/error) |
 | `ip_features` | וקטור פיצ'רים לכל IP לכל סשן (mean_len, syn_count, iso_score...) |
 | `findings` | התראות מהחוקים הדטרמיניסטיים (scan_alerts, flood_alerts...) |
 | `adv_signals` | אותות המנועים המתקדמים (per device + peer, tactic, technique) |
@@ -610,7 +610,7 @@ def migrate(conn):
 
 <div dir="rtl">
 
-## 10. ה-Panel של השופטים - LLM-as-Judge
+## 10. ה-Panel של השופטים - שופט LLM
 
 ### הרעיון
 
@@ -624,7 +624,7 @@ def migrate(conn):
 
 | # | Provider | מודל | ‏פורמט מפתח | ‏Latency ב-VM | ‏Free-tier |
 |---|---|---|---|---|---|
-| 1 | Groq | `llama-3.1-8b-instant` | ‏Groq key ‏(`gsk_...`) | ~500ms | 100k tokens/day |
+| 1 | Groq | `llama-3.1-8b-instant` | ‏Groq key ‏(`gsk_...`) | ~500ms | 100k טוקנים/day |
 | 2 | Groq | `openai/gpt-oss-120b` | ‏אותו key | ~1-3s | ‏pool יומי נפרד ‏(‏per-model) |
 | 3 | Ollama (‏local) | `qwen2.5:3b` | ‏zero-key | ~55s (‏CPU-only ARM) | ‏מקומי - ‏unlimited |
 | 4 | Ollama (‏local) | `granite3.3:2b` | ‏zero-key | ~55s (‏CPU-only ARM) | ‏מקומי - ‏unlimited |
@@ -637,10 +637,10 @@ qwen2.5:3b הוא bottleneck על ARM CPU ‏(~55s per verdict), אז candidate
 - **diversity**: ‏Meta (‏Llama 8B) ‏+ ‏OpenAI (‏gpt-oss-120b) ‏+ ‏Alibaba (‏Qwen) ‏+ ‏IBM (‏Granite).
   כל אחד מאומן על corpus שונה, ומגיע לverdict מזוית אחרת. גיוון כזה
   מקטין את הסיכוי שכולם יטעו יחד באותה טעות.
-- **Fault-tolerance**: ‏אפילו אם 2 שופטים נופלים ‏(‏rate-limit, timeout,
+- **Fault-tolerance**: ‏אפילו אם 2 שופטים נופלים ‏(‏הגבלת קצב, timeout,
   ‏broken model), ה-resolver עדיין מקבל 2 verdicts תקפים ומסוגל להכריע.
-- **Free-tier headroom**: ‏Groq נותן 100k tokens ליום *לכל מודל* - שני
-  Groq שונים = כפל quota. Ollama בכלל לא סופר. Gemini עוד 1M tokens.
+- **Free-tier headroom**: ‏Groq נותן 100k טוקנים ליום *לכל מודל* - שני
+  Groq שונים = כפל quota. Ollama בכלל לא סופר. Gemini עוד 1M טוקנים.
 
 ### שלבי הפאנל
 
@@ -789,12 +789,12 @@ LLM_JUDGE_PANEL=groq:llama-3.1-8b-instant,groq:openai/gpt-oss-120b,ollama:qwen2.
 מצביע פעם אחת, resolver מכריע ישר).
 
 **עלות בפועל** (‏מדוד על ‏session 6, ‏xmas_scan, ‏candidate בודד):
-- Groq llama-8b: ‏~460ms, ‏~1200 tokens (‏prompt+response)
-- Groq llama-70b: ‏~715ms, ‏~1200 tokens
-- Ollama qwen 3b: ‏~52700ms (‏CPU-bound), ‏~1200 tokens (‏חופשי)
-- Gemini flash: ‏~1500ms (‏באזור הצפוני), ‏~1300 tokens
+- Groq llama-8b: ‏~460ms, ‏~1200 טוקנים (‏prompt+response)
+- Groq llama-70b: ‏~715ms, ‏~1200 טוקנים
+- Ollama qwen 3b: ‏~52700ms (‏CPU-bound), ‏~1200 טוקנים (‏חופשי)
+- Gemini flash: ‏~1500ms (‏באזור הצפוני), ‏~1300 טוקנים
 
-**סך הכל טוקנים ליום** על 5 sessions * 3 candidates ממוצע = ‏~18k tokens/day
+**סך הכל טוקנים ליום** על 5 sessions * 3 candidates ממוצע = ‏~18k טוקנים/day
 per Groq model, ‏רחוק מ-100k limit.
 
 ### קוד מרכזי - בניית ה-clients
@@ -1154,7 +1154,7 @@ reconciliation אנחנו רק "מפחיתים תעבורה שאנחנו יוד�
 
 | container | RAM | CPU idle | CPU בעומס |
 |---|---|---|---|
-| `ingest_api` | 32 MB | 0% | ~10% במהלך upload |
+| `ingest_api` | 32 MB | 0% | ~10% במהלך העלאה |
 | `worker` | 413 MB | 0% | 40-70% במהלך parse+ML |
 | `retention` | 15 MB | 0% | ~5% פעם ביום |
 | `n8n` | ~200 MB | 0% | - |
@@ -1295,7 +1295,7 @@ docker compose ps
 ### הפאנל תקוע "judging..." זמן ארוך
 
 - זה יכול לקרות אם מודל שבור (‏למשל `allam-2-7b`) מחזיר 400 שוב ושוב.
-  התיקון של H3 מ-2026-08-01 סימן 4xx כ-`permanent` ומדלג על retry loop.
+  התיקון של H3 מ-2026-08-01 סימן 4xx כ-`permanent` ומדלג על ניסיון חוזר loop.
 - לוודא שהקוד עדכני: `docker exec deploy-worker-1 grep "permanent" /app/llm_judge/llm_clients.py`
 - אם 0 → צריך `git pull && docker compose build worker` + ‏restart.
 
@@ -1308,7 +1308,7 @@ docker compose ps
 ## 17. הוספת ספק LLM חדש לפאנל
 
 רוצים להוסיף ספק חדש (‏Cerebras, ‏OpenRouter, ‏Anthropic, ‏DeepSeek)?
-הפרויקט תוכנן ‏mecanismo של **endpoint profiles** ‏(‏decision IDX-05) שמאפשר
+הפרויקט תוכנן ‏mecanismo של **נקודת קצה profiles** ‏(‏decision IDX-05) שמאפשר
 להוסיף ספק ב-3 שורות ב-`.env`, בלי לגעת בקוד.
 
 ### 3 השורות שדרוש להוסיף לספק חדש
@@ -1356,10 +1356,10 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
 
 ### מה שכן צריך לוודא לפני שמוסיפים
 
-1. **OpenAI-compatible chat endpoint** - הספק חייב לתמוך במסלול
+1. **OpenAI-compatible chat נקודת קצה** - הספק חייב לתמוך במסלול
    `POST /chat/completions` עם המבנה הסטנדרטי.
 2. **JSON response format** - עדיף שהספק תומך ב-`response_format: json_object`.
-   אם רק ב-`json_schema` - עדיין יעבוד אצלנו (‏יש fallback ל-json_object).
+   אם רק ב-`json_schema` - עדיין יעבוד אצלנו (‏יש נפילה חזרה ל-json_object).
 3. **מפתח לא בפורמט מוזר** - `Authorization: Bearer <key>` הוא הדפולט.
    אם הספק דורש `X-Api-Key` או משהו אחר - צריך לגעת בקוד.
 
@@ -1367,7 +1367,7 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
 
 `llm_judge/judge_config.py::endpoint_profiles` סורק את `.env` על כל
 `LLM_JUDGE_EP_<NAME>_BASE_URL` ובונה dict של profiles. `judge_cli._build_panel`
-קורא את `LLM_JUDGE_PANEL`, ואם רואה prefix מסוג `cerebras:` - מחפש את
+קורא את `LLM_JUDGE_PANEL`, ואם רואה קידומת מסוג `cerebras:` - מחפש את
 ה-profile ומרים `OpenAICompatClient` עם ה-base_url המתאים.
 
 </div>
@@ -1392,7 +1392,7 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
 | **DB נעול** (‏שני processes מנסים לכתוב) | WAL mode - כותב אחד, קורא רב-מפעילים בו זמנית. ‏SQLite עצמו queues writes |
 | **הדיסק מתמלא > 85%** | retention מתחיל מחיקה אגרסיבית של PCAP-ים ישנים |
 | **הדיסק מתמלא > 95%** | ingest_api יכול להיכשל בכתיבה - PCAPs חדשים ידחו עם 507 Insufficient Storage |
-| **Groq TPD limit** (‏100k tokens ליום) | 429 עם retry logic. אם באמת מיצה - השופט נופל, ‏אחרים ממשיכים |
+| **Groq TPD limit** (‏100k טוקנים ליום) | 429 עם ניסיון חוזר logic. אם באמת מיצה - השופט נופל, ‏אחרים ממשיכים |
 | **Gemini quota depleted** | 429 "prepayment credits depleted". ‏מטופל אותו דבר כ-permanent 4xx (‏‏‏‏השופט נופל, אחרים ממשיכים) |
 | **Ollama container down** | worker רואה connection refused, ‏השופט הזה נופל, ‏אחרים ממשיכים |
 | **Tailscale down על ה-VM** | לפטופ לא יכול לשלוח PCAP חדש, ‏אבל ה-worker ממשיך לעבד sessions בתור |
@@ -1411,7 +1411,7 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
 ## 19. היסטוריית גרסאות ה-prompt
 
 הפרומפט המערכתי (`SYSTEM_PROMPT` ‏ב-`llm_judge/judge_core.py`) עובר גרסאות
-מסודרות. גרסת הפרומפט היא חלק מ-cache fingerprint - ‏bump = ‏cache
+מסודרות. גרסת הפרומפט היא חלק מ-cache טביעת אצבע - ‏bump = ‏cache
 invalidation אוטומטי.
 
 | גרסה | תאריך | שינוי מרכזי |
@@ -1419,7 +1419,7 @@ invalidation אוטומטי.
 | **v0.1.0** | 2026-06 | פרומפט בסיסי - ‏verdict/category/confidence/reasoning בלבד |
 | **v0.2.0** | 2026-07 | הוספת cheat sheet לקטגוריות + 2 worked examples |
 | **v0.2.5** | 2026-07 | הוספת `evidence_features` + `recommended_action` |
-| **v0.3.0** | 2026-07 | הוספת כלל HIGH-PRECISION rules + rule guardrail |
+| **v0.3.0** | 2026-07 | הוספת כלל HIGH-PRECISION rules + מעקה החוקים |
 | **v0.4.0** | 2026-08-01 | ‏הוספת פסקאות על 5 בלוקים חדשים ב-blob: session_context.time, device_context, websites, traffic |
 | **v0.5.0** | 2026-08-01 | **הנוכחי**. ‏הוספת בלוק `tls` (‏L4: גרסאות TLS + ‏weak ciphers) ובלוק `baseline_history` (‏L5: האם ה-IP נראה בסשנים קודמים) |
 
@@ -1434,7 +1434,7 @@ PROMPT_VERSION = "v0.5.0"  # L4+L5: TLS versions block + baseline_history block
 <div dir="rtl">
 
 **מה קורה אחרי bump:**
-- ‏כל cache verdicts הופכים ל-stale (‏fingerprint כולל את PROMPT_VERSION)
+- ‏כל cache verdicts הופכים ל-stale (‏טביעת אצבע כולל את PROMPT_VERSION)
 - ‏בהעלאה הבאה של PCAP: השופטים נקראים מחדש, אבל עם הבלוב החדש ‏(‏מכיל
   את השדות שהוספנו)
 - ‏אם השופטים משנים verdict בעקבות מידע חדש - ‏זה מופיע ב-debate audit

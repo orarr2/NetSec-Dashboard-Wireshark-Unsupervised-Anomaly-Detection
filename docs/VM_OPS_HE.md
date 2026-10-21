@@ -207,7 +207,7 @@ sudo NETSEC_DATA_ROOT=/srv/netsec python3 create_sensor.py <sensor>2
 
 ## משלוח אימייל בסיום
 
-ה-worker הולך בשרשרת fallback: **‏SMTP קודם, ‏n8n webhook כגיבוי**
+ה-worker הולך בשרשרת נפילה חזרה: **‏SMTP קודם, ‏n8n webhook כגיבוי**
 כש-SMTP נכשל. סדר העדיפויות של הנמען: ‏`X-Notify-Email` של ההעלאה
 מנצח את `NETSEC_NOTIFY_EMAIL` ב-`.env` (ברירת המחדל של מפעיל-יחיד).
 
@@ -247,7 +247,7 @@ python3 tools/upload_pcap.py <capture.pcap> --email you@example.com
 [worker] notify [smtp]: report sent to you@example.com
 ```
 
-או בכישלון עם fallback:
+או בכישלון עם נפילה חזרה:
 
 ```
 [worker] notify FAILED [smtp]: SMTP authentication failed (535)...
@@ -268,7 +268,7 @@ python3 tools/upload_pcap.py <capture.pcap> --email you@example.com
 LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,openai_compat:openai/gpt-oss-20b
 ```
 
-לכל מודל יש מכסה חינמית משלו של 100k-token/יום, אז מודל אחד שנגמר
+לכל מודל יש מכסה חינמית משלו של 100k-טוקנים/יום, אז מודל אחד שנגמר
 לא חוסם את השני. אלצו recreate של ה-worker אחרי העריכה:
 
 ```bash
@@ -296,7 +296,7 @@ ORDER BY day DESC, tokens_in DESC;
 
 ה-free tier של Groq הוא 100k טוקנים/יום למשפחת 70B; אם תחצו אותו,
 השופט מחזיר 429 שנרשם כשורת `judge failed` - התאימו את
-`LLM_JUDGE_PANEL` או עברו ל-fallback של Ollama מקומי במקום
+`LLM_JUDGE_PANEL` או עברו ל-נפילה חזרה של Ollama מקומי במקום
 להעמיד פנים שהפאנל הצביע.
 
 ---
@@ -314,6 +314,6 @@ sudo rm -rf /srv/netsec/data /srv/netsec/reports /srv/netsec/db
 ```
 
 ה-`-v` ב-`down` מסיר גם את ה-volume של n8n - גבו אותו קודם אם אתם
-רוצים לשמור את ה-workflows והאישורים שלכם.
+רוצים לשמור את ה-תהליכי עבודה והאישורים שלכם.
 
 </div>

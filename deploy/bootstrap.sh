@@ -296,6 +296,6 @@ Next steps:
        # then add ollama:llama3.1 to LLM_JUDGE_PANEL and force-recreate
 
   5. Ops cheat sheet: docs/VM_OPS.md
-  6. Full Hebrew deep-dive: docs/VM_ARCHITECTURE_HE.md
+  6. Full Hebrew deep-dive: docs/VM_docs/ARCHITECTURE_SPEC_HE.md
   7. Bootstrap troubleshooting: docs/VM_BOOTSTRAP_HE.md
 EOF

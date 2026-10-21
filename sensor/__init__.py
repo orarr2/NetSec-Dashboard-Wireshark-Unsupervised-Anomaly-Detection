@@ -1,4 +1,4 @@
-"""Sensor-side capture agent (stage F of ARCHITECTURE_HE.md).
+"""Sensor-side capture agent (stage F of docs/ARCHITECTURE_SPEC_HE.md).
 
 Runs on the laptop today and on a Raspberry Pi 5 tomorrow with no
 change (Tier 0). Records raw PCAP in a tshark ring buffer, and for each

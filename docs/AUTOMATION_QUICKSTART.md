@@ -10,7 +10,7 @@ when SMTP fails - see [VM_OPS.md](VM_OPS.md#email-delivery-on-completion).
 
 Everything the VM needs is in `deploy/`. This file walks through the
 common questions people hit when standing that up. For the reference
-deployment steps, see [deploy/README.md](../deploy/README.md); for the
+deployment steps, see [deploy_README.md](../deploy_README.md); for the
 firewall / Oracle Security-List / iptables details, see
 [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md).
 
@@ -57,7 +57,7 @@ Install on the VM:
 2. **Tailscale**. `curl -fsSL https://tailscale.com/install.sh | sh &&
    sudo tailscale up --hostname=<name>`.
 3. **chrony** (NTP - required by the telemetry-reconciliation protocol,
-   `docs/VM_ARCHITECTURE_HE.md` §13).
+   `docs/VM_ARCHITECTURE_SPEC_HE.md` §13).
 
 Install on any machine that needs to talk to the VM:
 

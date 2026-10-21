@@ -3,7 +3,7 @@
 Running the four-service analysis stack (`deploy/docker-compose.yml`)
 on a small VM you own, reachable only over a private Tailscale network.
 The reference deployment uses a free Oracle Cloud ARM instance; any
-Ubuntu 22.04+ VM with 4 GB RAM works identically. `deploy/README.md`
+Ubuntu 22.04+ VM with 4 GB RAM works identically. `deploy_README.md`
 covers the minimal quickstart; this file goes deeper on ARM64
 compatibility, the Tailscale-only network model, first-time setup, and
 verifying that the analysis path actually made an LLM call.

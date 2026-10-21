@@ -6,13 +6,13 @@
 הוא נתיב ה-$0 המומלץ) שאליו מגיעים דרך Tailscale. הדשבורד,
 ה-notebook וה-CLI כולם יכולים לשלוח PCAP לתוכו; ה-worker מנתח כל
 capture, כותב verdicts + דוחות HTML/PDF, ושולח את הדוח המוגמר
-ישירות (‏SMTP) לכתובת שהמעלה סיפק. ‏workflow של n8n יכול להיות
-מחווט כערוץ משלוח fallback כש-SMTP נכשל - ראו
+ישירות (‏SMTP) לכתובת שהמעלה סיפק. ‏תהליך עבודה של n8n יכול להיות
+מחווט כערוץ משלוח נפילה חזרה כש-SMTP נכשל - ראו
 [`VM_OPS.md`](VM_OPS.md#email-delivery-on-completion).
 
 כל מה שה-VM צריך נמצא ב-`deploy/`. הקובץ הזה עובר על השאלות
 הנפוצות שאנשים נתקלים בהן כשהם מקימים את זה. לצעדי הפריסה הייחוס
-ראו [`deploy/README.md`](../deploy/README.md); לפרטי firewall /
+ראו [`deploy_README.md`](../deploy_README.md); לפרטי firewall /
 Oracle Security-List / iptables, ראו [`VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md).
 
 ‏notebook הדשבורד עובד בלי כלום מזה - נתיב ה-VM הוא המצב
@@ -28,10 +28,10 @@ Oracle Security-List / iptables, ראו [`VM_DEPLOYMENT.md`](VM_DEPLOYMENT.md).
 
 | שירות | פורט | מה הוא עושה |
 |-------------|------|-----------------------------------------------------------------|
-| `ingest_api`| 8766 | ‏endpoint להעלאת HMAC streaming חתום (`/v1/pcap`), ‏health + דוחות |
+| `ingest_api`| 8766 | ‏נקודת קצה להעלאת HMAC streaming חתום (`/v1/pcap`), ‏health + דוחות |
 | `worker`    | -    | תופס sessions בתור, מריץ צינור זיהוי, כותב דוחות, שולח את ה-PDF המוגמר דרך SMTP |
 | `retention` | -    | אחזקה יומית (מחיקת גולמי של 7 ימים, סימן מים של 85%, גיבוי DB, ‏VACUUM) |
-| `n8n`       | 5678 | *אופציונלי* - מקבל את ה-fallback webhook של ה-worker כש-SMTP עצמו נכשל |
+| `n8n`       | 5678 | *אופציונלי* - מקבל את ה-נפילה חזרה webhook של ה-worker כש-SMTP עצמו נכשל |
 
 פריסת אחסון תחת `NETSEC_DATA_ROOT` (ברירת מחדל `/srv/netsec`):
 
@@ -58,7 +58,7 @@ db/netsec.db (+ גיבויים מתוארכים)             היסטוריית 
 2. **‏Tailscale**. ‏`curl -fsSL https://tailscale.com/install.sh | sh &&
    sudo tailscale up --hostname=<name>`.
 3. **‏chrony** (‏NTP - נדרש על ידי פרוטוקול telemetry-reconciliation,
-   `docs/VM_ARCHITECTURE_HE.md` §13).
+   `docs/VM_ARCHITECTURE_SPEC_HE.md` §13).
 
 התקינו על כל מכונה שצריכה לדבר עם ה-VM:
 
@@ -154,7 +154,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://<vm-tailscale-ip>:5678/
 sudo NETSEC_DATA_ROOT=/srv/netsec python3 create_sensor.py laptop
 ```
 
-פלט (מודפס פעם אחת, לא ניתן לשחזור - ה-token נשמר hashed, סוד
+פלט (מודפס פעם אחת, לא ניתן לשחזור - ה-טוקנים נשמר hashed, סוד
 ה-HMAC נשמר בטקסט פתוח כי אימות HMAC דורש את הסוד עצמו):
 
 ```
@@ -171,14 +171,14 @@ NETSEC_API_TOKEN=<44-char urlsafe>
 UPDATE sensors SET revoked_at = datetime('now') WHERE name = 'laptop';
 ```
 
-אוטוריזציה בין sensors נאכפת: ‏bearer token יכול לקרוא רק את
+אוטוריזציה בין sensors נאכפת: ‏bearer טוקנים יכול לקרוא רק את
 ה-sessions והדוחות שלו. הגדירו `NETSEC_ADMIN_SENSOR=<name>` (שם
-ה-sensor שהדשבורד המרכזי שלכם רושם איתו) אם אתם רוצים שה-token של
+ה-sensor שהדשבורד המרכזי שלכם רושם איתו) אם אתם רוצים שה-טוקנים של
 אותו sensor יקרא sessions של כל sensor.
 
 ---
 
-## חיווט ה-workflow של התרעת n8n
+## חיווט ה-תהליך עבודה של התרעת n8n
 
 פתחו `http://<vm-tailscale-ip>:5678` בדפדפן (הביקור הראשון מוביל
 אתכם דרך יצירת חשבון owner - שמרו את האישור הזה בטוח;
@@ -191,7 +191,7 @@ UPDATE sensors SET revoked_at = datetime('now') WHERE name = 'laptop';
    docker compose exec n8n n8n import:workflow \
      --input=/workflows/mvp_triage_email.json
    ```
-2. פתחו את ה-workflow המיובא (**‏NetSec Triage Alert**). לחצו על
+2. פתחו את ה-תהליך עבודה המיובא (**‏NetSec Triage Alert**). לחצו על
    ה-node **‏Send Email Alert** וצרפו אישור SMTP - **‏+ Add
    Credential** → **‏SMTP**:
 
@@ -213,7 +213,7 @@ UPDATE sensors SET revoked_at = datetime('now') WHERE name = 'laptop';
 
 זהו. ה-worker עושה POST של `{session_id, label, kind, sha256,
 results, worst}` ל-webhook אחרי כל session; ה-node IF של
-ה-workflow בודק ש-`worst` מתאים ל-`malicious|suspicious`;
+ה-תהליך עבודה בודק ש-`worst` מתאים ל-`malicious|suspicious`;
 ‏sessions מתאימים יוצאים באימייל.
 
 אישורים צריכים להיות מוזנים מחדש רק אם ה-volume בשם `n8n_data`
@@ -273,7 +273,7 @@ open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
 ה-session הקיים במקום להכניס את אותה עבודה לתור פעמיים, והכפתור
 אומר זאת.
 
-**ג. ‏GitHub Actions אינו נתיב ingest.** ה-workflow ‏`analyze-pcap.yml`
+**ג. ‏GitHub Actions אינו נתיב ingest.** ה-תהליך עבודה ‏`analyze-pcap.yml`
 שצפה בתיקיית `incoming/` נגרס - תקרת ההעלאה של 25MB של Actions
 הפכה אותו לחסר תועלת ל-captures אמיתיים, ונתיב ה-VM מכסה כל מקרה
 שהוא כיסה. מה שנשאר תחת `.github/` הוא `ci.yml`: בדיקות בתוספת
@@ -288,7 +288,7 @@ open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
 (או `n8n` אם השינוי נוגע באותו שירות):
 
 - `LLM_JUDGE_PANEL` - אילו שופטים מצביעים. כל שופט שאתם מפרטים
-  רץ וכל verdict חוזר (אין fallback אוטומטי שמחליף מודלים בשקט;
+  רץ וכל verdict חוזר (אין נפילה חזרה אוטומטי שמחליף מודלים בשקט;
   שופט כושל מדווח).
 - `LLM_JUDGE_MAX_CANDIDATES` - מועמדים מסומנים שנשפטים פר-PCAP.
   **ברירת מחדל `40`.** ‏Free tiers עם תקציבי טוקנים צפופים לדקה
@@ -305,7 +305,7 @@ open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
 - `LLM_JUDGE_TIMEOUT_S` - timeout פר-בקשה בשניות. **ברירת מחדל
   `300`** בקוד; העלו ל-`600` כאשר מודל Ollama מקומי קר צריך לטעון
   לפני תשובתו הראשונה.
-- `NETSEC_MAX_UPLOAD_GB` - תקרת גודל קובץ יחיד על endpoint
+- `NETSEC_MAX_UPLOAD_GB` - תקרת גודל קובץ יחיד על נקודת קצה
   הקליטה. ברירת מחדל `10`.
 - `NETSEC_ENABLE_SHODAN=1` (בתוספת `SHODAN_API_KEY`) - חיפושי מוניטין
   של peer חיצוני. כבוי כברירת מחדל; כשמופעל, מפעיל את משקל ה-threat
@@ -328,7 +328,7 @@ open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
   היסטוריה.
 - `${NETSEC_DATA_ROOT}/reports/` - ‏HTML/PDF/JSON, נשמרים לנצח.
 - ‏Volume בשם `n8n_data` של Docker - ‏SQLite DB של n8n, מחזיק את
-  ה-workflow והאישורים. גבו על ידי ייצוא מה-container:
+  ה-תהליך עבודה והאישורים. גבו על ידי ייצוא מה-container:
   ```bash
   docker compose exec n8n \
     tar -czf - -C /home/node/.n8n . > n8n_backup_$(date +%Y%m%d).tgz
@@ -336,8 +336,8 @@ open http://<vm-tailscale-ip>:8766/v1/reports/N.html   # or .pdf, .json, .map
 
 **אם ה-DB של n8n אבד** (`docker compose down -v`, כשל דיסק, פגימת
 volume): ייבאו מחדש את `mvp_triage_email.json` וצרו מחדש את אישור
-ה-SMTP. קובץ ה-workflow נשלח עם הריפו אז הוא תמיד ניתן לשחזור;
-האישור מוצפן עם `N8N_ENCRYPTION_KEY` ולא יכול להישלח בתוך ה-workflow.
+ה-SMTP. קובץ ה-תהליך עבודה נשלח עם הריפו אז הוא תמיד ניתן לשחזור;
+האישור מוצפן עם `N8N_ENCRYPTION_KEY` ולא יכול להישלח בתוך ה-תהליך עבודה.
 
 **שום דבר לגבות:** ה-images של Docker שנבנו (`docker compose build`
 יוצר אותם מחדש), ‏buffer הטבעת של ה-capture המקומי של ה-sensor
@@ -369,8 +369,8 @@ volume): ייבאו מחדש את `mvp_triage_email.json` וצרו מחדש את
 - **‏`HTTP 403 - error code: 1010`.** ‏Cloudflare חוסם את ה-User-Agent
   ברירת המחדל של Python. ‏`llm_judge/llm_clients.py` כבר שולח אחד
   מותאם; אם ערכתם את הקובץ הזה, שחזרו את ה-header של User-Agent.
-- **ה-workflow של n8n רץ אבל אין אימייל.** פתחו את טאב ה-Executions
-  של ה-workflow ב-n8n. הכישלון כמעט תמיד הוא אישור ה-SMTP (סיסמה
+- **ה-תהליך עבודה של n8n רץ אבל אין אימייל.** פתחו את טאב ה-Executions
+  של ה-תהליך עבודה ב-n8n. הכישלון כמעט תמיד הוא אישור ה-SMTP (סיסמה
   שגויה, ‏2FA לא מופעל, פורט שגוי).
 - **הדשבורד מראה `[Errno 22] Invalid argument` בטעינה.** ה-loader
   פגע ב-PCAP עם timestamp לפני 1970. השתמשו ב-capture שהוקלט
@@ -384,10 +384,10 @@ volume): ייבאו מחדש את `mvp_triage_email.json` וצרו מחדש את
   להריץ אותו בנפרד על אותו VM אם יש לכם RAM לחסוך (המערך של
   Dify הוא עוד 7 containers).
 - **ניתוב רב-משתמשי.** הכל כרגע הולך למי שבבעלותו אישור ה-SMTP.
-  הוסיפו ניתוב פר-sensor ב-workflow של n8n אם צריך - ה-payload של
+  הוסיפו ניתוב פר-sensor ב-תהליך עבודה של n8n אם צריך - ה-payload של
   ה-webhook כולל `sha256`, `label` ו-`kind`.
 - **טריגרים של capture בזמן אמת.** העיצוב הוא: ‏sensor דוחף על כל
-  chunk סגור של ring-buffer; ‏latency של תור הקליטה היא שניות, לא
+  חתיכה סגור של ring-buffer; ‏latency של תור הקליטה היא שניות, לא
   מחזור poll של 60 שניות שהמערך המקומי-בלבד הקודם השתמש בו.
 
 </div>

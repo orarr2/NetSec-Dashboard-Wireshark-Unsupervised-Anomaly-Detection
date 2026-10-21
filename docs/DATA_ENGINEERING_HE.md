@@ -35,7 +35,7 @@ tshark -i <interface> -w <label>_chunk_<ts>_<n>.pcap -l \
 
 הפרמטרים:
 - `-i <interface>` - הכרטיס לסניפור (למשל `Wi-Fi` או `Ethernet`)
-- `-w` - כותב chunk של pcap לדיסק; כל Pause/Resume פותח chunk חדש,
+- `-w` - כותב חתיכה של pcap לדיסק; כל Pause/Resume פותח חתיכה חדש,
   וב-Stop & Save כל ה-chunks מתמזגים לקובץ אחד עם `mergecap`
 - `-l -T fields -E separator=|` - במקביל לכתיבה, tshark פולט שדות
   חיים ל-stdout עבור המונים החיים בדשבורד
@@ -143,14 +143,14 @@ for df in reader:
 1. **hostname / OUI / port rules** - `app/device_rules.json` (261
    כללים). מסתכל על שם המכשיר, על יצרן ה-MAC (OUI), ועל אילו פורטים
    הוא פותח, ומצליב עם רשימה
-2. **DNS fingerprints** - `app/dns_fingerprints.json` (217 חתימות).
+2. **DNS טביעות אצבע** - `app/dns_fingerprints.json` (217 חתימות).
    מסתכל אילו domain-ים המכשיר שאל (Xbox, Ring, Alexa הם ידועים)
 3. **heuristics התנהגותיים** - במקרה של אין תשובה מהשניים הקודמים,
    מכריע לפי דפוסים (למשל: הרבה DNS + הרבה HTTPS = "browser device")
 
 תוצאה: לכל IP יש קטגוריה מ-12 האפשרויות (`camera`, `tv`, `iot`,
 `computer`, `mobile`, `printer`, `gaming`, `voice-assistant`, `smart-
-home`, `router`, `nas`, `unknown`).
+home`, `נתב`, `nas`, `unknown`).
 
 זה לא רק תיאורי - זה משפיע על ההחלטה של ה-Judge (מדפסת שסורקת פורטים
 זה חשוד; מחשב שלוקח DNS זה נורמלי).
@@ -236,7 +236,7 @@ async def upload_pcap(request, x_sensor_id: str, x_hmac: str,
 
 **שלב ב' - התור** (`server/worker.py::run_once`):
 worker בלולאה אינסופית קורא ל-`db.claim_next_job()` שמבצע `SELECT ...
-FOR UPDATE` פייתוני (transactional): מוצא סשן בסטטוס queued, מסמן אותו
+FOR UPDATE` פייתוני (transactional): מוצא סשן בסטטוס הוכנס לתור, מסמן אותו
 running, מחזיר את הרשומה. שני workers במקביל לא יכולים לתפוס את אותה
 עבודה.
 
@@ -265,8 +265,8 @@ llama-8b, gpt-oss-20b, gemini-flash, וכו'). כל אחד מחזיר verdict
 
 הקוד: `llm_judge/judge_core.py::judge_candidates_panel`.
 
-**שלב ה' - guardrail**:
-לפני שהתשובה נכנסת לדוח, יש guardrail שאם קוד דטרמיניסטי אמר "port
+**שלב ה' - מעקה בטיחות**:
+לפני שהתשובה נכנסת לדוח, יש מעקה בטיחות שאם קוד דטרמיניסטי אמר "port
 scan" ו-LLM אמר "benign", הguardrail מדליק את התשובה של הקוד. שירותי-
 תוכנה אנושיים לא תמיד יבינו את זה נכון (הם מנסים להיות "מוגנים לא
 לפגוע"), אבל למידה חד-משמעית של port scan דטרמיניסטי גוברת.
@@ -287,7 +287,7 @@ scan" ו-LLM אמר "benign", הguardrail מדליק את התשובה של הק
 - `summary.md` - סיכום קצר, מתאים לגוף מייל
 
 **שלב ח' - Delivery** (`server/notify.py::deliver`):
-נשלח למייל דרך SMTP (Gmail app-password ברירת מחדל). fallback ל-n8n
+נשלח למייל דרך SMTP (Gmail app-password ברירת מחדל). נפילה חזרה ל-n8n
 webhook אם ה-SMTP נפל.
 
 
@@ -355,14 +355,14 @@ python3 tools/netsec_rag.py ingest-netsec /srv/netsec/reports
 | `app/dashboard_module.py` | ייצוא אוטומטי של הנוטבוק לספרייה שאפשר לייבא (אל תערוך ידנית) |
 | `attack_tests/run_pipeline.py` | CLI נקי שמריץ בדיוק את אותה צנרת בלי UI |
 | `app/advanced_engines.py` | 6 המנועים המתקדמים (beacon, DGA, DNS tunnel, ARP, TLS, fusion) |
-| `tools/upload_pcap.py` | חתימת HMAC + streaming upload ל-VM |
-| `server/ingest_api.py` | FastAPI endpoint שמקבל את ה-upload |
+| `tools/upload_pcap.py` | חתימת HMAC + streaming העלאה ל-VM |
+| `server/ingest_api.py` | FastAPI נקודת קצה שמקבל את ה-העלאה |
 | `server/worker.py` | לוקח סשן מהתור, קורא ל-analyze, כותב את הכל |
 | `llm_judge/judge_cli.py::analyze_and_judge` | הפונקציה הראשית - צנרת מלאה |
 | `llm_judge/judge_core.py::judge_candidates_panel` | פאנל של מודלים עם debate |
 | `server/results.py` | כתיבה ל-DB (verdicts, panel_audit) + לקובץ JSON |
 | `server/compare_report.py` | דוח השוואה S1 מול S2 |
-| `server/notify.py` | שליחת מייל / fallback ל-n8n |
+| `server/notify.py` | שליחת מייל / נפילה חזרה ל-n8n |
 | `tools/netsec_rag.py` | האינדקסינג של הדוחות ל-RAG store |
 | `deploy/brand/write-latest-json.py` | מייצר את הכרטיס "הסשן האחרון" בפורטל |
 | `deploy/brand/write-sessions-json.py` | מייצר את רשימת כל הסשנים ל-Reports Browser |
@@ -372,13 +372,13 @@ python3 tools/netsec_rag.py ingest-netsec /srv/netsec/reports
 
 הרבה שיטות אמת של data engineering נמצאות פה בקטן: schema קפדני
 (pandas dtypes, sqlite `NOT NULL` + `CHECK`), idempotency
-(dedup לפי sha256 של pcap, לפי content_hash של chunk), separation of
-concerns (extract vs transform vs load), streaming (upload בלי לטעון
+(dedup לפי sha256 של pcap, לפי content_hash של חתיכה), separation of
+concerns (extract vs transform vs load), streaming (העלאה בלי לטעון
 לזיכרון), retention policies, monitoring (`/healthz`, systemd
 `Restart=on-failure`), auditability (`panel_audit` שומרת גם את
 ההצבעות שהוחלפו בדיון, לא רק את הסופיות).
 
 ההבדל מ-data engineering תעשייתי (Kafka + Spark + data lake) הוא רק
 בסקאלה. פה DB אחד של SQLite, workers חד-קונטיינריים, אין distributed
-computing - אבל **הצורה** של הזרימה זהה: source → ingest → validate
+computing - אבל **הצורה** של הזרימה זהה: source → ingest → אמת
 → transform → analyze → store → notify → archive.

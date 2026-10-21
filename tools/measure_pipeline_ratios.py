@@ -1,6 +1,6 @@
 """Re-measure the size ratios the ecosystem plan is built on.
 
-Stage A task from ARCHITECTURE_HE.md (sections 1, 2.9, 10): the plan's
+Stage A task from docs/ARCHITECTURE_SPEC_HE.md (sections 1, 2.9, 10): the plan's
 headline numbers - ~590 MB/hour of raw PCAP, ~368x reduction for the
 gzipped field export - were measured on a single 135-second capture.
 Run this against a long capture of your own network to confirm or

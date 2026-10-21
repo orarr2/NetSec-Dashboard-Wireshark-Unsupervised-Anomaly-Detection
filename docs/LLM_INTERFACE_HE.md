@@ -30,7 +30,7 @@
 5. ‏resolver דטרמיניסטי בוחר את ה-verdict האפקטיבי מכל העמדות
    שאחרי ה-debate (החמורות ביותר מנצחות על פיצולים; תיקו נפתר
    על confidence).
-6. ‏rule guardrail מכריח "suspicious" (עם קטגוריית החוק) על כל
+6. ‏מעקה החוקים מכריח "suspicious" (עם קטגוריית החוק) על כל
    מועמד שעל חוקו שנדלק הפאנל אמר "benign".
 
 זמן השעון נשלט על ידי השופט האיטי ביותר, לא על ידי מספר השופטים.
@@ -209,7 +209,7 @@ job:
   `S["ip_to_mac"]` (עבור `oui_vendor` דרך חבילת `manuf`) וב-
   `S["dns_per_ip"]` (עבור `hostname` דרך שמות mDNS של .local).
   בנתיב ה-worker ‏`_lightweight_device_context` עכשיו גוזר `category`
-  מ-OUI / פורטים / שמות DNS כ-fallback; מצאי שהופק בדשבורד שמחובר
+  מ-OUI / פורטים / שמות DNS כ-נפילה חזרה; מצאי שהופק בדשבורד שמחובר
   ב-`S["_local_inv"]` עדיין מקבל קדימות.
 - **‏`websites`** - `top_http_hosts` / `top_tls_sni` / `top_dns_queries`,
   כל אחד רשימה מסודרת (עד 5, לפי count) של פריטי `{host, count}` או
@@ -276,10 +276,10 @@ job:
 - קוצץ `evidence_features` ל-12 פריטים,
 - דוחה כל דבר מחוץ ל-enums או שדה נדרש חסר.
 
-תגובה בעלת פגם עוברת retry **פעם אחת** (שגיאת אימות JSON היא
+תגובה בעלת פגם עוברת ניסיון חוזר **פעם אחת** (שגיאת אימות JSON היא
 בדרך כלל שיהוק חד-פעמי של מודל); ‏4xx קבוע מהשרת
 (‏`json_validate_failed` של ‏`allam-2-7b`, מודל לא ידוע, מפתח גרוע)
-מתויג עכשיו `permanent=True` ומדלג על לולאת ה-retry לגמרי - תיקון
+מתויג עכשיו `permanent=True` ומדלג על לולאת ה-ניסיון חוזר לגמרי - תיקון
 H3.
 
 ---
@@ -355,7 +355,7 @@ groq:openai/gpt-oss-120b, ollama:qwen2.5:3b, ollama:granite3.3:2b):
 שגם מכסה את המקרה של "מה אם כל ספקי הענן יורדים". הוספת מודל 5
 על Groq תספור כפול את הטיית המשפחה; הוספת מודל מקומי 5 איטי
 תדחוף את זמן השעון מעבר ל-2 דקות פר-מועמד. קונפיגורציית 4 השופטים
-היא נקודת-אמצע מתועדת של diversity-cost ב-`docs/VM_ARCHITECTURE_HE.md`
+היא נקודת-אמצע מתועדת של diversity-cost ב-`docs/VM_ARCHITECTURE_SPEC_HE.md`
 סעיף 10.
 
 ---
@@ -402,12 +402,12 @@ verdict ב-cache כך שהמודל שופט מחדש עם הקלט העשיר י
 | הוספה / עריכה של סעיפי prompt | `llm_judge/judge_core.py` (`SYSTEM_PROMPT`, `DEBATE_SYSTEM_PROMPT`) |
 | הוספה / עריכה של סכמת output | `llm_judge/judge_core.py` (`VERDICT_SCHEMA`, `DEBATE_SCHEMA`) |
 | הוספה / הסרה של שדות blob | `llm_judge/judge_core.py` (`assemble_candidates`) |
-| התנהגות rate-limit / retry | `llm_judge/llm_clients.py` (`OpenAICompatClient._MAX_RETRIES`, `_MAX_WAIT_S`, `permanent`-tagging) |
+| התנהגות הגבלת קצב / ניסיון חוזר | `llm_judge/llm_clients.py` (`OpenAICompatClient._MAX_RETRIES`, `_MAX_WAIT_S`, `permanent`-tagging) |
 | אילו שופטים רצים | `LLM_JUDGE_PANEL` ב-`deploy/.env` |
 | ‏Debate on/off | `LLM_JUDGE_DEBATE` ב-`deploy/.env` |
 
 שינוי prompt מעלה את `PROMPT_VERSION` ב-`llm_judge/judge_config.py`;
-הגרסה הזאת היא חלק מה-fingerprint של ה-cache, אז העלאתה מבטלת
+הגרסה הזאת היא חלק מה-טביעת אצבע של ה-cache, אז העלאתה מבטלת
 כל verdict ב-cache אוטומטית.
 
 </div>

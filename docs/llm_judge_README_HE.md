@@ -1,6 +1,6 @@
 <div dir="rtl" align="right">
 
-# LLM-as-Judge - Notebook עצמאי ל-Triage
+# שופט LLM - Notebook עצמאי ל-Triage
 
 הרחבה **אופציונלית, עצמאית לחלוטין** לדשבורד NetSec. הדשבורד הראשי
 (`app/Network_Security_Dashboard.ipynb`) רץ בדיוק כמו קודם ולא יודע
@@ -27,7 +27,7 @@
 
 ## ספקים - הביאו מודל משלכם
 
-שלושה ספקים מובנים בתוספת מספר שרירותי של **פרופילי endpoint
+שלושה ספקים מובנים בתוספת מספר שרירותי של **פרופילי נקודת קצה
 מוגדרים בשם**. בחרו ריצת שופט יחיד עם `LLM_JUDGE_PROVIDER`, או פאנל
 רב-ספקי עם `LLM_JUDGE_PANEL`:
 
@@ -35,12 +35,12 @@
 |---|---|---|---|
 | `claude` (ברירת מחדל) | Anthropic API - איכות ה-JSON הטובה ביותר | `pip install -r llm_judge/requirements.txt` + הגדירו `ANTHROPIC_API_KEY` עם מפתח **משלכם** | המפתח שלכם, סנטים לכל PCAP |
 | `ollama` | מודל מקומי דרך daemon של Ollama | התקינו מ-<https://ollama.com>, ‏`ollama pull qwen2.5:14b` (או כל מודל אחר) | חינם, offline |
-| `openai_compat` | כל endpoint בסגנון OpenAI chat-completions: ‏LM Studio / llamafile / vLLM מקומי, או שירותים מאוחסנים שחושפים את פרוטוקול OpenAI | הגדירו `OPENAI_COMPAT_BASE_URL` + `OPENAI_COMPAT_MODEL` (+ `OPENAI_COMPAT_API_KEY` אם ה-endpoint צריך אחד) | חינם מקומית; מאוחסן לפי תנאיו |
-| **פרופיל endpoint** | host שתואם ל-OpenAI עם שם, כך שפאנל יחיד יכול לערבב מספר ספקים (‏Groq + Gemini + …) בלי לערוך קוד | הגדירו שלושה משתני סביבה לכל פרופיל: ‏`LLM_JUDGE_EP_<NAME>_BASE_URL`, ‏`LLM_JUDGE_EP_<NAME>_MODEL`, ‏`LLM_JUDGE_EP_<NAME>_KEY_ENV=<env-var-holding-the-key>`. ‏`deploy/.env.example` נשלח עם חמישה פרופילים מוכנים לשימוש: ‏`GROQ`, ‏`GEMINI`, ‏`CEREBRAS`, ‏`OPENROUTER`, ‏`GITHUB`. התייחסו אליהם בפאנל כ-`groq:<model>`, ‏`gemini:<model>`, ... | לפי תנאי ה-free-tier של הספק |
+| `openai_compat` | כל נקודת קצה בסגנון OpenAI chat-completions: ‏LM Studio / llamafile / vLLM מקומי, או שירותים מאוחסנים שחושפים את פרוטוקול OpenAI | הגדירו `OPENAI_COMPAT_BASE_URL` + `OPENAI_COMPAT_MODEL` (+ `OPENAI_COMPAT_API_KEY` אם ה-נקודת קצה צריך אחד) | חינם מקומית; מאוחסן לפי תנאיו |
+| **פרופיל נקודת קצה** | host שתואם ל-OpenAI עם שם, כך שפאנל יחיד יכול לערבב מספר ספקים (‏Groq + Gemini + …) בלי לערוך קוד | הגדירו שלושה משתני סביבה לכל פרופיל: ‏`LLM_JUDGE_EP_<NAME>_BASE_URL`, ‏`LLM_JUDGE_EP_<NAME>_MODEL`, ‏`LLM_JUDGE_EP_<NAME>_KEY_ENV=<env-var-holding-the-key>`. ‏`deploy/.env.example` נשלח עם חמישה פרופילים מוכנים לשימוש: ‏`GROQ`, ‏`GEMINI`, ‏`CEREBRAS`, ‏`OPENROUTER`, ‏`GITHUB`. התייחסו אליהם בפאנל כ-`groq:<model>`, ‏`gemini:<model>`, ... | לפי תנאי ה-free-tier של הספק |
 
 **מפתח API לעולם לא נשמר בריפו הזה.** מפתחות נקראים מהסביבה בזמן
 הקריאה; כל משתמש משלם (או לא) על שימוש משלו. מנגנון פרופילי
-ה-endpoint במכוון לא לווה את `OPENAI_COMPAT_API_KEY` או את
+ה-נקודת קצה במכוון לא לווה את `OPENAI_COMPAT_API_KEY` או את
 `OPENAI_COMPAT_MODEL` הגלובליים: מפתח ומודל של פרופיל חייבים להיות
 משלו, כך שמפתח שגוי לעולם לא ידלוף בין ספקים.
 
@@ -65,14 +65,14 @@ jupyter notebook llm_judge/LLM_Judge_Notebook.ipynb
 של ה-notebook שופט את כולם עם כל מודל שתשמו ונותן לו ציון:
 
 - **‏detection rate** - מועמדי תקיפה שנשפטו כלא-benign (עם ה-rule
-  guardrail זה 1.0 לכל מודל שמחזיר JSON תקין);
+  מעקה בטיחות זה 1.0 לכל מודל שמחזיר JSON תקין);
 - **‏category accuracy** - התאמה מדויקת של קטגוריית תקיפה: שם איכות
   המודל באמת מופיעה;
 - **‏benign accuracy** - ‏ML-only outliers שנשארו נכון benign.
 
-נמדד על מכונת CPU-only (11 fixtures, ‏guardrail פועל): ‏`llama3.2`
+נמדד על מכונת CPU-only (11 fixtures, ‏מעקה בטיחות פועל): ‏`llama3.2`
 (3B) קיבל 100% בדיוק קטגוריה - אבל 7 מתוך 7 פסיקות התקיפה שלו היו
-הצלות של ה-guardrail (המודל הגולמי אמר benign); ‏`gemma3:4b` קיבל
+הצלות של ה-מעקה בטיחות (המודל הגולמי אמר benign); ‏`gemma3:4b` קיבל
 91% עם אפס הצלות (הפסיקות הגולמיות שלו כבר היו לא-benign). מודלים
 מקומיים קטנים הם לכן שימושיים ל-triage ברמת detection; איכות
 השיפוט הגולמית שלהם מופיעה רק על מועמדים שאף חוק לא מכסה, וזה
@@ -101,7 +101,7 @@ set LLM_JUDGE_PANEL=openai_compat:llama-3.3-70b-versatile,ollama:llama3.2
    נוספות.
 3. **פתרון דטרמיניסטי** - הסכמה לוקחת את ה-verdict שלו ה-confidence
    הגבוה ביותר; מחלוקת ששרדה לוקחת את הצד ה-fail-safe (החמור יותר)
-   ומסמנת `needs_human_review` (⚖). ה-rule guardrail עדיין שוכב מעל
+   ומסמנת `needs_human_review` (⚖). ה-מעקה החוקים עדיין שוכב מעל
    כל הפאנל.
 
 כל ריצה גם מפיקה **דוח השתתפות** (ב-`verdicts.json` וב-markdown):
@@ -136,7 +136,7 @@ frontend של `tools/netsec_rag_web.py` ב-Dash מאנדקסים את ה-verdict
 ה-`LLM_JUDGE_COMMITTEE` הישן (צורה קבועה של שני מודלים, ללא debate)
 נשמר כמצב legacy; כששניהם מוגדרים, הפאנל מנצח.
 
-## ה-rule guardrail
+## ה-מעקה החוקים
 
 שכבת החוקים הדטרמיניסטיים היא בעלת דיוק גבוה. נמדד שמודלים מקומיים
 קטנים דורסים חוק שנדלק עם "benign" (תוך הזיה שלא נדלק שום חוק),
@@ -144,7 +144,7 @@ frontend של `tools/netsec_rag_web.py` ב-Dash מאנדקסים את ה-verdict
 ה-verdict מועלה ל-`suspicious` עם הקטגוריה שהחוק מרמז עליה, ה-verdict
 המקורי של המודל נשמר בתוצאה, וה-override מסומן (עמודת ⚑ ב-notebook).
 כבו עם `LLM_JUDGE_RULE_GUARDRAIL=0`. ה-verdict הגולמי של המודל הוא
-מה שנכנס ל-cache, אז החלפת מצב ה-guardrail לעולם לא דורשת איפוס cache.
+מה שנכנס ל-cache, אז החלפת מצב ה-מעקה בטיחות לעולם לא דורשת איפוס cache.
 
 ## קבצים
 
@@ -152,8 +152,8 @@ frontend של `tools/netsec_rag_web.py` ב-Dash מאנדקסים את ה-verdict
 |---|---|
 | `LLM_Judge_Notebook.ipynb` | נקודת כניסה אינטראקטיבית (‏Jupyter) |
 | `judge_cli.py` | **‏CLI ללא ראש** - אותו צינור, בלי Jupyter, בשימוש על ידי ה-worker של ה-VM (גם שימושי מקומית) |
-| `judge_config.py` | ספק/מודל, ‏guardrail, משקלים, ספים, גרסת prompt |
-| `judge_core.py` | הרכבת מועמדים, system prompt, אימות verdict, ‏rule guardrail, ‏cache של SQLite, דירוג ensemble |
+| `judge_config.py` | ספק/מודל, ‏מעקה בטיחות, משקלים, ספים, גרסת prompt |
+| `judge_core.py` | הרכבת מועמדים, system prompt, אימות verdict, ‏מעקה החוקים, ‏cache של SQLite, דירוג ensemble |
 | `llm_clients.py` | `ClaudeClient` + `OllamaClient` + `OpenAICompatClient` |
 | `benchmark.py` | הסמכת מודל: שופט את ה-fixtures המתויגים, מדרג דיוק/latency |
 | `benchmark_fixtures.json` | 11 מועמדים מתויגים שחולצו מה-attack PCAPs (מחויב) |
@@ -175,7 +175,7 @@ python llm_judge/judge_cli.py path/to.pcap \
     --markdown verdicts.md
 ```
 
-אותו צינור זיהוי כמו ה-notebook, אותו guardrail, אותם משתני סביבה
+אותו צינור זיהוי כמו ה-notebook, אותו מעקה בטיחות, אותם משתני סביבה
 של ספק. כותב:
 
 - `verdicts.json` - batch מלא קריא-מכונה (סטטיסטיקות + תוצאות
@@ -192,7 +192,7 @@ python llm_judge/judge_cli.py path/to.pcap \
 
 ## סוכן אוטונומי
 
-ה-workflow של GitHub Actions (`analyze-pcap.yml`) שבעבר הריץ את
+ה-תהליך עבודה של GitHub Actions (`analyze-pcap.yml`) שבעבר הריץ את
 השופט על PCAPs שנדחפו נגרס. הנתיב האוטונומי הוא כעת ה-worker של
 ה-VM (`server/worker.py`), שתופס כל PCAP שהועלה ומריץ עליו את
 אותו צינור CLI.
@@ -212,18 +212,18 @@ mock בתוך התהליך - בלי רשת), וגם
 | `LLM_JUDGE_MODEL` | `claude-opus-4-8` | מזהה מודל Claude |
 | `OLLAMA_MODEL` | `llama3.2` | שם מודל Ollama מקומי |
 | `OLLAMA_HOST` | `http://localhost:11434` | כתובת daemon של Ollama |
-| `OPENAI_COMPAT_BASE_URL` | `http://localhost:1234/v1` | ‏endpoint בסגנון OpenAI (ברירת מחדל: שרת LM Studio מקומי) |
-| `OPENAI_COMPAT_MODEL` | - | שם מודל ב-endpoint הזה (נדרש לספק הזה) |
-| `OPENAI_COMPAT_API_KEY` | - | מפתח Bearer, רק אם ה-endpoint צריך |
-| `LLM_JUDGE_EP_<NAME>_BASE_URL` / `_MODEL` / `_KEY_ENV` | - | פרופיל endpoint עם שם (ראו סעיף Providers). מספר שרירותי של פרופילים; מתייחסים אליהם בפאנל כ-`<name>:<model>`. |
+| `OPENAI_COMPAT_BASE_URL` | `http://localhost:1234/v1` | ‏נקודת קצה בסגנון OpenAI (ברירת מחדל: שרת LM Studio מקומי) |
+| `OPENAI_COMPAT_MODEL` | - | שם מודל ב-נקודת קצה הזה (נדרש לספק הזה) |
+| `OPENAI_COMPAT_API_KEY` | - | מפתח Bearer, רק אם ה-נקודת קצה צריך |
+| `LLM_JUDGE_EP_<NAME>_BASE_URL` / `_MODEL` / `_KEY_ENV` | - | פרופיל נקודת קצה עם שם (ראו סעיף Providers). מספר שרירותי של פרופילים; מתייחסים אליהם בפאנל כ-`<name>:<model>`. |
 | `LLM_JUDGE_PANEL` | - | פאנל מומחים: שופטים מופרדים בפסיק (`model` או `provider:model`), ‏min 2 ייחודיים; ריק = כבוי. מנצח את `LLM_JUDGE_PROVIDER` עבור הריצה |
 | `LLM_JUDGE_DEBATE` | `1` | `0` מדלג על סבב debate (הצבעת N-way פשוטה) |
 | `LLM_JUDGE_PANEL_QUORUM` | `majority` | איך פאנל מפוצל מכריע. `majority`: רוב מוחלט (>50%) של שופטים תקפים בוחר את התווית; בלי רוב הצד החמור ביותר מנצח והמועמד מסומן `needs_human_review`. `fail-safe`: התווית החמורה ביותר תמיד מנצחת על כל פיצול (התנהגות לפני v0.5) |
-| `LLM_JUDGE_GUARDRAIL_ESCAPE` | `1` | פתח יציאה צר ל-rule guardrail: ‏verdict ‏`benign` ב-confidence >= 0.85 שמצטט ראיות ב-whitelist (public resolver / anycast / known cloud provider) מועבר במקום להסתלם. כל bypass נרשם כ-`guardrail_bypassed`. `0` דורס כל benign-על-חוק-שנדלק |
+| `LLM_JUDGE_GUARDRAIL_ESCAPE` | `1` | פתח יציאה צר ל-מעקה החוקים: ‏verdict ‏`benign` ב-confidence >= 0.85 שמצטט ראיות ב-whitelist (public resolver / anycast / known cloud ספק) מועבר במקום להסתלם. כל bypass נרשם כ-`guardrail_bypassed`. `0` דורס כל benign-על-חוק-שנדלק |
 | `LLM_JUDGE_BATCH_SIZE` | `1` | מועמדים ארוזים לקריאה אחת בסבב הראשוני של הפאנל. `1` = פר-מועמד. גודל לפי אריתמטיקה: בקשה עולה `1675 + n x 720` טוקנים (נמדד 2026-08 - ה-system prompt הוא ~1675 טוקנים משולם פעם אחת לקריאה, כל blob של מועמד ~720). מול תקרת הטוקנים לדקה החינמית של Groq של 6000 ל-`llama-3.1-8b-instant`, ‏`n=3` עולה 3835 ונכנס עם מקום; ‏`n=5` עולה 5275, כלומר 88% מהדקה כולה בבקשה אחת, אז כל קריאה מקבילה חונקת אותה לנפילה פר-מועמד שהיתה אמורה להחליף. ‏`n=3` גם מוציא 47% פחות טוקנים פר-capture מ-`n=1` |
 | `LLM_JUDGE_COMMITTEE` | `0` | מצב ועדה של שני שופטים legacy. הוחלף על ידי `LLM_JUDGE_PANEL` |
 | `LLM_JUDGE_COMMITTEE_MODEL_B` | `llama-3.1-8b-instant` | מודל שני לוועדת legacy |
-| `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` מכבה את ה-benign-override guardrail |
+| `LLM_JUDGE_RULE_GUARDRAIL` | `1` | `0` מכבה את ה-benign-override מעקה בטיחות |
 | `LLM_JUDGE_EFFORT` | `medium` | מאמץ reasoning של Claude (`low`/`medium`/`high`) |
 | `LLM_JUDGE_TIMEOUT_S` | `300` | timeout פר-בקשה (מודלים מקומיים צריכים דקות ב-load הראשון) |
 | `LLM_JUDGE_MAX_TOKENS` | `8192` | מקסימום טוקני פלט לכל verdict |
@@ -260,7 +260,7 @@ python llm_judge/send_report.py verdicts.md you@example.com --json verdicts.json
 ## עלות ודטרמיניזם
 
 - כל מועמד הוא קריאת LLM אחת של בערך 2-4 KB קלט ופלט JSON קטן.
-  ‏Verdicts **ב-cache ב-SQLite** לפי fingerprint של (blob מועמד,
+  ‏Verdicts **ב-cache ב-SQLite** לפי טביעת אצבע של (blob מועמד,
   גרסת prompt, מודל) - ריצה חוזרת של אותו PCAP היא בחינם וזהה
   byte-byte. ספקים מקומיים עולים כלום; על Claude PCAP טיפוסי
   (5-40 מועמדים) עולה סנטים על המפתח של המשתמש עצמו.
@@ -290,8 +290,8 @@ python llm_judge/send_report.py verdicts.md you@example.com --json verdicts.json
 | candidate kind ‏`ip \| flow` | + `session` | הצפות מזויפות (37k מקורות) צריכות verdict אחד ב-scope של session, לא אלפי verdicts פר-IP חסרי משמעות |
 | temperature 0.0 / 0.2 | אין params של sampling על Claude (נדחה על ידי מודלים נוכחיים); 0.0 על ספקים מקומיים | דטרמיניזם מגיע מ-cache הפסיקות |
 | timeout של 15 שניות | ברירת מחדל 300 שניות | מודלים מקומיים שנטענים מדיסק צריכים דקות בקריאה הראשונה |
-| "JSON קפדני" prompt-בלבד | פלטי מבנה של ספק + אימות client-side | חוקי-schema בבנייה על כל הספקים; retry-once-then-drop עדיין חל |
-| ‏LLM verdict הוא סופי | + rule guardrail (הרחבה) | כישלון שנמדד: מודלים קטנים דורסים חוקים גבוהי-דיוק שנדלקו עם "benign"; ה-guardrail הופך את זה לבלתי אפשרי תוך שימור ה-verdict של המודל לשקיפות |
+| "JSON קפדני" prompt-בלבד | פלטי מבנה של ספק + אימות client-side | חוקי-schema בבנייה על כל הספקים; ניסיון חוזר-once-then-drop עדיין חל |
+| ‏LLM verdict הוא סופי | + מעקה החוקים (הרחבה) | כישלון שנמדד: מודלים קטנים דורסים חוקים גבוהי-דיוק שנדלקו עם "benign"; ה-מעקה בטיחות הופך את זה לבלתי אפשרי תוך שימור ה-verdict של המודל לשקיפות |
 | כרטיס UI של דשבורד + פילת Model Diagnostics | טבלת notebook + ייצוא JSON | ההרחבה הזאת מופרדת במכוון מ-`app/` - הדשבורד נשאר ללא שינוי |
 | CLI של ‏`attack_tests/calibrate_judge.py` | סקשני כיול + benchmark בתוך ה-notebook | ה-notebook הוא נקודת הכניסה היחידה לפי התכנון |
 

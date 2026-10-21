@@ -2,7 +2,7 @@
 
 **Status:** **Implemented and shipping.** This document is preserved as
 the design record - the design decisions that landed, the trade-offs that
-were made, and (in the deviations table in `llm_judge/README.md`) the small
+were made, and (in the deviations table in `llm_judge_README.md`) the small
 set of choices where the shipped code intentionally differs from the
 original plan. The authoritative implementation lives in `llm_judge/` and
 is exercised end to end by `tests/test_llm_judge_*.py`; the former
@@ -770,7 +770,7 @@ Category cheat sheet:
   pattern in the signals. Prefer this over "malicious" when in doubt.
 ```
 
-Prompt versioning: currently `v0.5.0` (see `llm_judge/PROMPT_CHANGELOG.md`
+Prompt versioning: currently `v0.5.0` (see `llm_judge_PROMPT_CHANGELOG.md`
 for the version history and kappa per version). Bumped by
 `docs/PROMPT_CHANGELOG.md`.
 

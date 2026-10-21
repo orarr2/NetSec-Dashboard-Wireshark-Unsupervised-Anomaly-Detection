@@ -1,12 +1,12 @@
 <div dir="rtl" align="right">
 
-# שכבת Triage של LLM-as-Judge - מפרט ועיצוב
+# שכבת Triage של שופט LLM - מפרט ועיצוב
 
 **סטטוס:** **הוטמע ונשלח.** המסמך הזה נשמר כרשומת העיצוב - החלטות
 העיצוב שנחתו, ה-tradeoffs שנעשו, ו-(בטבלת הסטיות ב-
-`llm_judge/README.md`) הקבוצה הקטנה של בחירות שבהן הקוד שנשלח
+`llm_judge_README.md`) הקבוצה הקטנה של בחירות שבהן הקוד שנשלח
 במכוון שונה מהתכנית המקורית. הטמעה סמכותית חיה ב-`llm_judge/`
-ומופעלת end-to-end על ידי `tests/test_llm_judge_*.py`; ‏workflow
+ומופעלת end-to-end על ידי `tests/test_llm_judge_*.py`; ‏תהליך עבודה
 ‏`analyze-pcap.yml` של Actions לשעבר נגרס (worker ה-VM הוא הנתיב
 האוטונומי).
 **קהל:** כל מי שמרחיב את שכבת השופט או רוצה את ההיגיון מאחורי
@@ -36,7 +36,7 @@
 בשפה טבעית. האנליסט משלם את העלות הקוגניטיבית המלאה של כל false
 positive.
 
-המפרט הזה מוסיף רכיב אחד: **‏LLM-as-Judge** שמקבל מועמד אחד בכל
+המפרט הזה מוסיף רכיב אחד: **‏שופט LLM** שמקבל מועמד אחד בכל
 פעם (IP אחד, או flow אחד), רואה כל אות רלוונטי ב-JSON blob דחוס,
 ומחזיר verdict JSON קפדני עם קטגוריה, confidence, רשימת ראיות,
 ועקבות reasoning של פסקה אחת. הפלט שלו מדרג מחדש את התור שהאנליסט
@@ -67,7 +67,7 @@ positive.
 | LSTM זמני | תאים 22-26 | שגיאה פר-bin, סף `val_mean + 2σ` |
 | חוקים דטרמיניסטיים | תא 16 / `run_security_scans` | `scan_alerts`, `flood_alerts`, `amp_alerts`, `arp_spoofing_ips`, `arp_spoofing_macs` |
 | מנועי איום מתקדמים | תא 47 של `Network_Security_Dashboard.ipynb` | חמישה מנועים - beaconing, DNS tunneling, DGA, ARP/DHCP, TLS - ו-scorer של fusion פר-התקן מעליהם בחלון של 15 דקות (לא מנוע שישי) |
-| סיווג התקנים | מנוע 3 שכבות (hostname/OUI/port → DNS fingerprints → heuristics) | 12 קטגוריות |
+| סיווג התקנים | מנוע 3 שכבות (hostname/OUI/port → DNS טביעות אצבע → heuristics) | 12 קטגוריות |
 
 ### 2.2 וקטור פיצ'רים (פר-IP)
 
@@ -129,7 +129,7 @@ syn_count, rst_count, fin_count, null_count, xmas_count
 
 ## 4. פתרון מוצע
 
-להכניס רכיב אחד לצינור: **‏LLM-as-Judge** שמקבל מועמד אחד בכל פעם,
+להכניס רכיב אחד לצינור: **‏שופט LLM** שמקבל מועמד אחד בכל פעם,
 רואה כל אות רלוונטי ב-JSON blob דחוס, ומחזיר verdict JSON קפדני.
 
 ### 4.1 מהו "מועמד"
@@ -209,7 +209,7 @@ syn_count, rst_count, fin_count, null_count, xmas_count
 
 ### 4.3 מה השופט מחזיר
 
-JSON קפדני - התגובה נדחית ועוברת retry אם היא נכשלת באימות סכמה:
+JSON קפדני - התגובה נדחית ועוברת ניסיון חוזר אם היא נכשלת באימות סכמה:
 
 ```json
 {
@@ -230,7 +230,7 @@ JSON קפדני - התגובה נדחית ועוברת retry אם היא נכש�
   highlights, לא לזרימת שליטה.
 - `reasoning` היא מחרוזת יחידה, בלי newlines, חסומה קשה על ידי
   prompt.
-- אימות סכמה כושל: ‏**retry פעם אחת**, אז זורק את המועמד מתור
+- אימות סכמה כושל: ‏**ניסיון חוזר פעם אחת**, אז זורק את המועמד מתור
   השופט ורושם את הכישלון. לעולם אל תרעיל את ה-scoreboard עם
   תגובה חצי-מפוענחת.
 
@@ -327,7 +327,7 @@ truth הנוכחי. הקטגוריות `beaconing_c2` ו-`dns_tunnel` מוצהר
 
 - **קריאת ה-LLM היא הצעד היחיד שתלוי ב-I/O.** כל השאר הוא Python
   דטרמיניסטי על DataFrames שכבר חושבו.
-- **‏Cache אגרסיבי.** ‏fingerprint של מועמד = hash של JSON blob
+- **‏Cache אגרסיבי.** ‏טביעת אצבע של מועמד = hash של JSON blob
   הקלט. שני blobs זהים פוגעים באותו verdict. ‏Fingerprint גם כולל
   את גרסת ה-prompt כך שעריכות prompt מבטלות את ה-cache.
 - **כישלון מתבודד למועמד.** תגובת LLM רעה יחידה זורקת את אותו
@@ -489,8 +489,8 @@ Dash, שבבעלותו:
 
 - ה-client של ה-LLM.
 - ה-SQLite cache.
-- ‏endpoint POST ‏`/judge` שמקבל blob של מועמד ומחזיר verdict.
-- ‏endpoint GET ‏`/kappa` שמחזיר kappa חי נוכחי לפילת Model
+- ‏נקודת קצה POST ‏`/judge` שמקבל blob של מועמד ומחזיר verdict.
+- ‏נקודת קצה GET ‏`/kappa` שמחזיר kappa חי נוכחי לפילת Model
   Diagnostics.
 - אופציונלי: ‏worker thread שמחמם מראש verdicts למועמדים
   שמוזרמים מה-notebook דרך תור.
@@ -501,11 +501,11 @@ Dash, שבבעלותו:
 
 - ‏UX הטוב ביותר תחת עומס - אפליקציית Dash יכולה לרנדר את התור
   כש-verdicts מגיעים במקום לחסום על כל ה-batch.
-- ‏endpoint של kappa חי טריוויאלי. כרטיס Model Diagnostics עושה
+- ‏נקודת קצה של kappa חי טריוויאלי. כרטיס Model Diagnostics עושה
   לו poll.
-- השירות יכול לאכוף תקציב קשה פר-batch מרכזית (rate limit,
+- השירות יכול לאכוף תקציב קשה פר-batch מרכזית (הגבלת קצב,
   cap של טוקנים).
-- הגבול הנקי ביותר להרחבות עתידיות (רב-tenant, ‏backends של LLM
+- הגבול הנקי ביותר להרחבות עתידיות (רב-דייר, ‏backends של LLM
   מרוחקים, תגובות streaming).
 
 **חסרונות:**
@@ -532,7 +532,7 @@ Dash, שבבעלותו:
 | ‏Latency ל-verdict ראשון | ~1× LLM RTT | ~1× LLM RTT | ~1× LLM RTT (streaming אפשרי) |
 | מתאים לצורת הריפו הנוכחית | מאולץ | טבעי (משקף `run_pipeline.py`) | תבנית חדשה |
 | בידוד תקלות | קריסת notebook = אובדן מלא | בידוד פר-מועמד | בידוד פר-בקשה |
-| פילת kappa חיה | לא ישירה | מחושבת מחדש על רענון Dash | endpoint טריוויאלי |
+| פילת kappa חיה | לא ישירה | מחושבת מחדש על רענון Dash | נקודת קצה טריוויאלי |
 | עלות היפוך | שכתוב תא | מחיקת מודול + החזרת תא | הסרת שירות + החזרת תא |
 | חיווט CI | לוגיקה כפולה | ייבוא אחד בבדיקה | צריך שירות שיעלה ב-CI |
 | תלויות נוספות | jsonschema, LLM SDK | jsonschema, LLM SDK | jsonschema, LLM SDK, FastAPI/Flask |
@@ -608,7 +608,7 @@ predicted     |
 - **‏Category kappa** (7 דרכים) - המד הקפדני.
 
 שער CI משתמש ב-**‏category kappa**, סף `0.60` ב-
-`judge_config.KAPPA_THRESHOLD` הנוכחי (rollout §14 נפתח ב-0.60;
+`judge_config.KAPPA_THRESHOLD` הנוכחי (שחרור §14 נפתח ב-0.60;
 המדידה שנשלחה של v0.3.0 היא 0.7911 על `openai/gpt-oss-120b`,
 הרבה מעל יעד הטיוטה של 0.65 שהתכנית הקודמת הגדירה כיעד שאיפה).
 
@@ -703,7 +703,7 @@ priority(c) = w_anom * normalized_iso_score(c)
 | `w_anom` | 0.20 | שמור על ה-detector הבסיסי כרצפה |
 | `w_judge_conf` | 0.40 | השופט הוא האות הראשי |
 | `w_cat` | 0.30 | משקל קטגוריה מעניש benign_anomaly, מתגמל קטגוריות malicious |
-| `w_ti` | 0.10 | שמור לאינטגרציית threat-intel מאוחרת |
+| `w_ti` | 0.10 | שמור לאינטגרציית מודיעין איומים מאוחרת |
 
 משקלי קטגוריה (טיוטה ראשונית):
 
@@ -767,7 +767,7 @@ Category cheat sheet:
   pattern in the signals. Prefer this over "malicious" when in doubt.
 ```
 
-גרסת prompt: כרגע `v0.5.0` (ראו `llm_judge/PROMPT_CHANGELOG.md`
+גרסת prompt: כרגע `v0.5.0` (ראו `llm_judge_PROMPT_CHANGELOG.md`
 להיסטוריית הגרסאות ו-kappa פר-גרסה). מועלה על ידי
 `docs/PROMPT_CHANGELOG.md`.
 
@@ -781,9 +781,9 @@ Category cheat sheet:
   קפדני).
 - Temperature: ‏`0.0` לשחזור במהלך כיול; ‏`0.2` בפרודקשן לווריאציה
   קלה על `reasoning`.
-- Max output tokens: 400.
+- Max output טוקנים: 400.
 - Timeout: 15 שניות פר-בקשה. ב-timeout, להתייחס ככישלון סכמה
-  (retry פעם אחת, אז drop).
+  (ניסיון חוזר פעם אחת, אז drop).
 
 ### 10.4 בחירת ספק
 
@@ -902,7 +902,7 @@ tests/
 
 ---
 
-## 14. תכנית rollout
+## 14. תכנית שחרור
 
 שלבים מסודרים. כל אחד הוא commit / PR עצמאי.
 
@@ -915,7 +915,7 @@ tests/
    התנהגות.
 3. **נחיתת `app/llm_judge.py` מאחורי feature flag, flag כבוי
    כברירת מחדל.** כולל `assemble_candidates()`, protocol
-   `LLMClient`, ספק קונקרטי אחד, ‏cache, ‏retry/drop.
+   `LLMClient`, ספק קונקרטי אחד, ‏cache, ‏ניסיון חוזר/drop.
 4. **נחיתת `attack_tests/calibrate_judge.py`** ו-commit של תוצאת
    הכיול הראשונה ב-`attack_tests/calibration/results/v0.1.0.json`.
    דווחו kappa בתיאור ה-PR.

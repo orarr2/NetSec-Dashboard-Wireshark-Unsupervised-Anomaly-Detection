@@ -87,7 +87,7 @@
 
 התוצאה שמורה ב-cache כ-`_TSHARK_PATH_FOR_LOADER`. קובץ `manuf`
 של Wireshark מתגלה באותה דרך לתוך `MANUF_PATH`. ‏tshark חסר אינו
-קטלני - ה-fallback של scapy בתא 8 תופס.
+קטלני - ה-נפילה חזרה של scapy בתא 8 תופס.
 
 **תופעות לוואי:** ‏`scapy.conf.verb = 0`, ‏`warnings.filterwarnings("ignore")`.
 
@@ -109,7 +109,7 @@
 
 - `decode_uploaded_pcap(contents, filename)` מפצל את ה-data URL,
   מפענח base64, אוכף `MAX_UPLOAD_BYTES`, מנקה את שם הקובץ ל-
-  `[alnum._-]`, מכריח את ה-suffix ל-`.pcap` / `.pcapng`, וכותב
+  `[alnum._-]`, מכריח את ה-סיומת ל-`.pcap` / `.pcapng`, וכותב
   לנתיב `tempfile.mkstemp(prefix="netsec_upload_")`. מחזיר
   `(path, error)`.
 - `validate_pcap_path(text)` חותך גרשים, בודק `exists` /
@@ -162,13 +162,13 @@ radiotap.dbm_antsignal, wlan_radio.signal_dbm
 | `protocols` | מונה פרוטוקולים (שם שכבה אחרונה) |
 | `macs` | ספירת פקטות פר-MAC |
 | `dns_real`, `dns_timeline`, `dns_per_ip`, `mdns_per_ip`, `dns_nxdomain`, `dns_nonstandard`, `dns_long_queries`, `nxdomain_per_dst` | אגרגטי DNS |
-| `dns_amp_per_src` | מועמדי reflector לחוק ה-amp |
+| `dns_amp_per_src` | מועמדי מגיב-החזר לחוק ה-amp |
 | `arp_ip_to_macs` | dict של `ip -> set(macs)` לזיהוי ARP-spoof |
 | `syn_counter`, `rst_counter`, `fin_counter`, `null_counter`, `xmas_counter` | מוני flags של TCP פר-מקור (מסוכים עם `0x3F` כך ש-ECE/CWR מתעלמים) |
 | `ports_per_ip` | איחוד פר-IP של פורטי tcp/udp src+dst (לסיווג) |
 | `ip_agg` | frame פיצ'רים פר-IP (ראו תא 12) |
 | `timeline_df`, `pkt_sizes` | לצ'ארטי ה-timeline וה-burst |
-| `wlan_features` | דגימות RSSI פר-MAC, ספירת probe request, ספירת association, ספירת retry |
+| `wlan_features` | דגימות RSSI פר-MAC, ספירת probe request, ספירת association, ספירת ניסיון חוזר |
 | `wifi_bssid` | BSSIDs שנראו (בשימוש על ידי מפת geo של Wigle ב-VM) |
 | `t0`, `t1` | timestamp מוקדם ביותר / מאוחר ביותר של פקטה |
 
@@ -332,7 +332,7 @@ both = ips1 & ips2
 
 1. דובר מקומי דומיננטי (נפח בייטים הגבוה ביותר)
 2. יעד חיצוני גדול ביותר
-3. ‏fingerprint של סביבת DNS (8 שירותים מובילים דרך
+3. ‏טביעת אצבע של סביבת DNS (8 שירותים מובילים דרך
    `classify_external_ip`)
 4. בריאות ARP (כל IP עם >1 MAC?)
 5. ספירת שאילתות DNS ארוכות
@@ -388,7 +388,7 @@ class LSTMModel(nn.Module):
 `evaluate_lstm(...)` מריץ את המודל המאומן על כל הרצף ומחשב שגיאת
 חיזוי פר-רצף. **הסף** של האנומליה הוא
 `val_errors.mean() + 2 * val_errors.std()` - נמדד על פרוסת
-ה-validation המופרשת, לא על סט האימון, אז הסף משקף הכללה. שומר
+ה-אימות המופרשת, לא על סט האימון, אז הסף משקף הכללה. שומר
 `lstm_errors` (כל הרצפים) ו-`lstm_threshold` ב-dict ה-session.
 
 ---
@@ -411,7 +411,7 @@ class LSTMModel(nn.Module):
    `priority` יורד; 12 קטגוריות היררכיה)
 2. `cloud_ranges.json` → 27 IPs סטטיים + 247 טווחי CIDR + 332
    תבניות regex של rDNS
-3. `dns_fingerprints.json` → 217 ‏fingerprints
+3. `dns_fingerprints.json` → 217 ‏טביעות אצבע
 
 `_load_oui_db()` בונה `OUI_DB` מאחד מאלה, בסדר:
 
@@ -419,7 +419,7 @@ class LSTMModel(nn.Module):
    שהתגלו בתא 4)
 2. פלט `tshark -G manuf`
 3. חבילת Python ‏`manuf`
-4. ‏fallback משובץ של 30 vendors
+4. ‏נפילה חזרה משובץ של 30 vendors
 
 Helpers פומביים:
 
@@ -427,25 +427,25 @@ Helpers פומביים:
   מחזיר את מחרוזת ה-vendor.
 - `is_random_mac(mac)` בודק את ה-bit של U/L של ה-octet הראשון
   (`first & 0b10`); set = ‏MAC פרטיות מנוהל מקומית.
-- `_match_dns_fingerprint(dns_queries)` עובר על 217 ה-fingerprints,
+- `_match_dns_fingerprint(dns_queries)` עובר על 217 ה-טביעות אצבע,
   מתאים substring של כל דומיין חתימה מול סט השאילתות (ומתאים
-  regex אם החתימה מכילה metacharacters של regex). ה-fingerprint
+  regex אם החתימה מכילה metacharacters של regex). ה-טביעת אצבע
   המדורג הגבוה ביותר שמעל `match_threshold` שלו מנצח.
 - `_behavioral_classify(port_set, dns_queries, vendor, mac_random)`
-  הוא ה-fallback הסופי. היוריסטיקות פורטים: 554→מצלמת IP;
+  הוא ה-נפילה חזרה הסופי. היוריסטיקות פורטים: 554→מצלמת IP;
   {9100,631,515}→מדפסת; {5060,5061,2000}→טלפון VoIP;
   {8008,8009,8443}+vendor של Google→‏Chromecast; 62078→‏iPhone;
   1900→‏UPnP; {1883,8883}→‏MQTT; ‏web-only עם MAC אקראי→"טלפון
   או מחשב נייד"; ‏web-only עם vendor ידוע→"מחשב vendor"; ‏vendor
-  ידוע ללא פורטים ברורים→"generic vendor endpoint"; כלום→
-  "Network endpoint".
+  ידוע ללא פורטים ברורים→"generic vendor נקודת קצה"; כלום→
+  "Network נקודת קצה".
 
 `classify_local_device(mac, mdns_names, ports, dns_queries)` הוא
 ה-dispatcher של 3 השכבות. שכבה 1 חוקים של `device_rules.json`
 (סוגי תנאים: `vendor_match`, `mdns_regex`, `ports_any`,
 `dns_regex`; ‏confidence מה-`priority` של החוק - ≥800 גבוה, ≥500
-בינוני, ≥200 נמוך, אחרת very-low). שכבה 2 ‏fingerprints של DNS.
-שכבה 3 ה-fallback ההתנהגותי. מחזיר dict עם
+בינוני, ≥200 נמוך, אחרת very-low). שכבה 2 ‏טביעות אצבע של DNS.
+שכבה 3 ה-נפילה חזרה ההתנהגותי. מחזיר dict עם
 `category, subcategory, vendor, model, rule_id, vendor_from_oui,
 confidence, mac_privacy_random`.
 
@@ -471,7 +471,7 @@ confidence, mac_privacy_random`.
 עבור IP (התקן ששינה MAC באמצע ה-capture מניב את ה-MAC של הרוב).
 
 `_derive_device_name(ip, mdns_names, model)` מפיק שם ידידותי -
-‏hostname של mDNS כשנוכח (עם suffix של `.local` נחתך נכון כ-suffix,
+‏hostname של mDNS כשנוכח (עם סיומת של `.local` נחתך נכון כ-סיומת,
 לא כסט תווים - ראו רגרסיה ב-
 `tests/test_device_name_derivation.py`), אחרת `<model>-<last_octet>`.
 
@@ -508,7 +508,7 @@ external_inv)` מחזיר ספירות סיווג פר-שכבה עבור gauges 
 
 ## תא 41 - ‏Capture חי
 
-`LiveCaptureWorker` מריץ `tshark -i <iface> -w chunk -l -T fields
+`LiveCaptureWorker` מריץ `tshark -i <iface> -w חתיכה -l -T fields
 -E separator=|` עם 18 שדות תחת lock, קורא כל שורה למונים פר-IP.
 התנגשות interface מוגנת על פני workers. מכונת מצבים:
 ‏`idle → recording ⇄ paused → saved`, עם
@@ -518,7 +518,7 @@ external_inv)` מחזיר ספירות סיווג פר-שכבה עבור gauges 
 של tshark.
 
 `stop_and_save()` ממזג את ה-chunks המוקלטים עם `mergecap`; אם
-`mergecap` חסר הוא שומר רק את ה-chunk הראשון ומדווח על אובדן
+`mergecap` חסר הוא שומר רק את ה-חתיכה הראשון ומדווח על אובדן
 הנתונים ב-`error_msg`.
 
 `LIVE_SESSIONS = {"S1": LiveCaptureWorker(), "S2": LiveCaptureWorker()}`
@@ -726,7 +726,7 @@ inventory, external, coverage). ‏Session sub-tabs (גלולות S1 / S2)
 jupyter_mode="external")`.
 
 הכפתור לשליחת session לשופט LLM ב-GitHub Actions
-(`_render_ai_judge_link`) מצביע ל-`<repo>/upload/main/incoming`
+(`_render_ai_judge_link`) מצביע ל-`<repo>/העלאה/main/incoming`
 שנגזר מ-`git remote get-url origin`, כך ש-fork אוטומטית מכוון
 לריפו שלו.
 
@@ -737,7 +737,7 @@ jupyter_mode="external")`.
 בלוק ייבוא אופציונלי. כאשר `server/dashboard_client.py` ב-path,
 הוא חושף את `load_session_from_api` ו-`upload_session_via_api`
 ב-namespace של המודול כך ששליטה עתידית של דשבורד תוכל למשוך
-‏dict של session מ-endpoint `/v1/sessions/{id}` של ה-VM או לדחוף
+‏dict של session מ-נקודת קצה `/v1/sessions/{id}` של ה-VM או לדחוף
 ‏PCAP ל-`/v1/pcap`. היום ה-UI עדיין מנתב העלאות דרך כפתור ה-scp
 בתא 48; חיווט נתיב ה-HTTP ל-callback נמצא ברשימת המעקב.
 

@@ -357,7 +357,7 @@ covers the "what if all cloud providers are down" case. Adding a 5th
 model on Groq would double-count the family bias; adding a 5th slow
 local model would push wall-clock past 2 minutes per candidate. The
 4-judge config is the diversity-cost sweet spot documented in
-`docs/VM_ARCHITECTURE_HE.md` section 10.
+`docs/VM_ARCHITECTURE_SPEC_HE.md` section 10.
 
 ---
 

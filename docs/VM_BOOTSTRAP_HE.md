@@ -44,7 +44,7 @@
 - **חשבון Tailscale** ‏(‏[tailscale.com](https://tailscale.com)) - חינם עד
   100 מכשירים. השירות מייצר רשת פרטית מוצפנת בין המחשבים שלך.
 - **מפתח Groq API** ‏(‏[console.groq.com/keys](https://console.groq.com/keys)) - חינם
-  עם 100k tokens/day per model. נדרש אם רוצים לרוץ בLLM Judge.
+  עם 100k טוקנים/day per model. נדרש אם רוצים לרוץ בLLM Judge.
 - **חשבון Gmail** - אופציונלי, לשליחת דוחות. דורש
   [app password](https://myaccount.google.com/apppasswords) בן 16 תווים.
 
@@ -379,7 +379,7 @@ docker compose logs -f worker
 
 ### Home server (Proxmox / bare metal)
 
-- **Port forwarding on your router**: SSH (22) if you want external
+- **Port forwarding on your נתב**: SSH (22) if you want external
   access, otherwise skip (Tailscale gives you access from anywhere).
 - Otherwise identical to Ubuntu install.
 
@@ -422,7 +422,7 @@ docker compose logs --tail=5 worker
 # צריך להראות "polling every 10s"
 ```
 
-### 5. End-to-end upload
+### 5. End-to-end העלאה
 
 מהלפטופ שלך (‏אחרי ‏Tailscale up):
 
@@ -524,5 +524,5 @@ c.commit()
 
 ---
 
-*המסמך משלים את [docs/VM_ARCHITECTURE_HE.md](VM_ARCHITECTURE_HE.md) (מה יש על
+*המסמך משלים את [docs/VM_ARCHITECTURE_SPEC_HE.md](VM_ARCHITECTURE_SPEC_HE.md) (מה יש על
 ה-VM) ו-[docs/VM_OPS.md](VM_OPS.md) (פקודות יומיומיות).*

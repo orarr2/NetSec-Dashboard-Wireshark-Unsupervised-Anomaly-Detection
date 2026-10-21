@@ -149,7 +149,7 @@ The judge layer is a panel by design. Composition principles:
 - Version pin: `PROMPT_VERSION` in `llm_judge/judge_config.py` (part
   of the verdict-cache fingerprint - bumping it invalidates cached
   verdicts).
-- Change log with kappa deltas: `llm_judge/PROMPT_CHANGELOG.md`.
+- Change log with kappa deltas: `llm_judge_PROMPT_CHANGELOG.md`.
 - Contract with the code: `docs/LLM_INTERFACE.md`.
 
 ## Related documents
@@ -159,7 +159,7 @@ The judge layer is a panel by design. Composition principles:
   and the panel.
 - `docs/MODELS.md`, `docs/MODEL_DIAGNOSTICS.md`, `docs/SCIENTIFIC_AUDIT.md`
   - the ML detectors the panel judges on top of.
-- `llm_judge/README.md` - operational reference (env vars, providers,
+- `llm_judge_README.md` - operational reference (env vars, providers,
   presets, deviations from the spec).
 - `llm_judge/panel_presets.py` - the shipped panel lineups (single
   cloud, hybrid, all-local, cloud-max, etc.).

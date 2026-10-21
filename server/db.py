@@ -1,4 +1,4 @@
-"""SQLite history database - the schema from ARCHITECTURE_HE.md section 7.
+"""SQLite history database - the schema from docs/ARCHITECTURE_SPEC_HE.md section 7.
 
 Stdlib only. One deliberate deviation from the spec's first draft: the
 sensors table stores ``hmac_secret`` itself, not a hash of it - HMAC

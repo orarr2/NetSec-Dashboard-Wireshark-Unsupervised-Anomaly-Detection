@@ -1,4 +1,4 @@
-"""VM-side ingest and history layer (stage B of ARCHITECTURE_HE.md).
+"""VM-side ingest and history layer (stage B of docs/ARCHITECTURE_SPEC_HE.md).
 
 Package layout keeps the FastAPI surface thin on purpose:
 

@@ -53,11 +53,11 @@ traffic, coverage).
 | `app/dns_fingerprints.json` | 217 DNS fingerprints for behavioural device-type inference |
 | `attack_tests/` | 5 real attack PCAPs + CLI regression pipeline |
 | `tests/` | pytest regression suite vs labeled ground truth |
-| `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `llm_judge/README.md` |
-| `companion/` | AI Companion - Dash chat over local Ollama (streaming, markdown replies, stop button, per-chat settings). Runs on the VM as `netsec-companion.service`; the same file works from a laptop via SSH tunnel. See `companion/README.md` |
+| `llm_judge/` | **Optional** standalone LLM-as-Judge triage notebook - fuses all detector signals into one ranked, explained verdict per candidate. The dashboard runs fully without it; see `docs/llm_judge_README.md` |
+| `companion/` | AI Companion - Dash chat over local Ollama (streaming, markdown replies, stop button, per-chat settings). Runs on the VM as `netsec-companion.service`; the same file works from a laptop via SSH tunnel. See `docs/companion_README.md` |
 | `tools/netsec_rag.py` + `tools/netsec_rag_web.py` | Retrieval-augmented QA over the report archive + arbitrary indexed files. Ollama embeddings, SQLite vector store, streaming Dash UI structured like Companion. Runs on the VM as `netsec-rag.service` |
 | `server/` | Analyzer VM stack - signed ingest API, worker, retention, notify. Runs the exact detection pipeline of the dashboard on a small VM you control |
-| `deploy/` | Docker Compose + Dockerfiles + Caddyfile + systemd units + install scripts for the whole VM stack. See `deploy/README.md` for the fresh-VM quick start |
+| `deploy/` | Docker Compose + Dockerfiles + Caddyfile + systemd units + install scripts for the whole VM stack. See `docs/deploy_README.md` for the fresh-VM quick start |
 | `docs/ARCHITECTURE.md` | End-to-end map: what runs where, ports, persistence, data flow through the stack |
 | `docs/SECURITY_MODEL.md` | Who can reach what, what auth guards each service, threats mitigated and not |
 | `tools/upload_pcap.py` | Signed HMAC upload CLI - streams a PCAP to the VM's `/v1/pcap` with `--email <address>` for the report |
@@ -141,7 +141,7 @@ tailnet - the whole site is invisible from the public internet.
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full
 service map, ports and data flows, and **[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)** for the auth and threat model.
 
-For a fresh-VM install: **[deploy/README.md](deploy/README.md)**.
+For a fresh-VM install: **[docs/deploy_README.md](docs/deploy_README.md)**.
 
 ## Run on your own PCAPs (three ways)
 
@@ -190,7 +190,7 @@ Requires `tshark` on PATH (installed with Wireshark), plus one LLM
 provider - Ollama for the zero-key path (`LLM_JUDGE_PROVIDER=ollama`),
 or Groq / Gemini / Cerebras / OpenRouter / Anthropic / GitHub Models
 with your own key. Set `LLM_JUDGE_PANEL=<m1>,<m2>[,...]` for a real
-multi-judge debate. See `llm_judge/README.md` for every knob.
+multi-judge debate. See `docs/llm_judge_README.md` for every knob.
 
 **B2. Upload to your VM + mail the report** (same as the dashboard
 button, from the shell):
@@ -209,7 +209,7 @@ worker's SMTP → n8n fallback chain delivers the PDF report.
 For continuous monitoring that does not depend on your laptop being
 awake - and where raw packets never leave your own network - run the
 analysis stack on a small VM you control. The full design (in Hebrew,
-by request) is `ARCHITECTURE_HE.md`, and the deployment templates
+by request) is `docs/ARCHITECTURE_SPEC_HE.md`, and the deployment templates
 live in `deploy/`.
 
 **What it is.** Four cooperating tiers instead of four tools glued by
@@ -234,7 +234,7 @@ live in `deploy/`.
   ~55 s/verdict on ARM 24GB), and `gemini:gemini-2.5-flash` (Google
   AI Studio Bearer-auth). The ThreadPoolExecutor runs all four in
   parallel so wall-clock ≈ max(judges), not sum. Full breakdown +
-  code in `docs/VM_ARCHITECTURE_HE.md` section 10 and the exact prompt
+  code in `docs/VM_docs/ARCHITECTURE_SPEC_HE.md` section 10 and the exact prompt
   in `docs/LLM_INTERFACE.md`.
 - **Consumers (Tier 3)** - the notebook (as a remote client *or* a fully
   offline local analyzer), email, and n8n alerts.
@@ -246,7 +246,7 @@ Actions-based "push a PCAP to `incoming/`" flow that used to live here
 was retired - the 25 MB Actions cap made it unusable for real captures,
 and the VM path covers every case it did.
 
-**Quickstart** (full guide in `deploy/README.md`):
+**Quickstart** (full guide in `docs/deploy_README.md`):
 
 ```bash
 # on the VM (any Ubuntu 22.04+ box; Oracle Always Free is the $0 path)

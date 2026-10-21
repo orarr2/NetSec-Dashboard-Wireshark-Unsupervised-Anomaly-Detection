@@ -5,7 +5,7 @@
 הרצת מערך הניתוח בן ארבעת השירותים (`deploy/docker-compose.yml`)
 על VM קטן שבבעלותכם, שנגיש רק דרך רשת Tailscale פרטית.
 הפריסה הייחוס משתמשת ב-instance ARM חינמי של Oracle Cloud;
-כל VM של Ubuntu 22.04+ עם 4GB RAM עובד זהה. `deploy/README.md`
+כל VM של Ubuntu 22.04+ עם 4GB RAM עובד זהה. `deploy_README.md`
 מכסה את ה-quickstart המינימלי; הקובץ הזה נכנס לעומק של תאימות ARM64,
 מודל הרשת של Tailscale-only, הקמה ראשונית, ואימות שנתיב הניתוח
 בפועל ביצע קריאת LLM.
@@ -286,14 +286,14 @@ sudo NETSEC_DATA_ROOT=/srv/netsec python3 deploy/create_sensor.py laptop
 (`NETSEC_SENSOR_ID`, `NETSEC_SENSOR_SECRET`, `NETSEC_API_TOKEN`)
 לסביבה של כל מכונה שתעלה.
 
-אוטוריזציה בין sensors נאכפת: ‏bearer token יכול לקרוא רק את
+אוטוריזציה בין sensors נאכפת: ‏bearer טוקנים יכול לקרוא רק את
 ה-sessions והדוחות שלו. הגדירו `NETSEC_ADMIN_SENSOR=<name>` אם
-אתם רוצים שה-token של sensor אחד יקרא sessions של כל sensor
+אתם רוצים שה-טוקנים של sensor אחד יקרא sessions של כל sensor
 (טיפוסי לחשבון דשבורד מרכזי).
 
 ---
 
-## ייבוא ה-workflow התרעת n8n
+## ייבוא ה-תהליך עבודה התרעת n8n
 
 שני נתיבים, שניהם עובדים. התבנית נשלחת כ-volume mounted ב-
 `/workflows` בתוך container ה-n8n, אז ייבוא CLI לא צריך העתקת קובץ:
@@ -309,7 +309,7 @@ docker compose exec n8n n8n list:workflow
 אינו נתמך ב-n8n מודרני), ואז **‏Workflows** → **⋮** → **‏Import
 from File** → `deploy/n8n_workflows/mvp_triage_email.json`.
 
-ה-workflow מיובא **‏inactive**. פתחו אותו, לחצו על node ‏**Send Email
+ה-תהליך עבודה מיובא **‏inactive**. פתחו אותו, לחצו על node ‏**Send Email
 Alert**, צרפו אישור SMTP (ראו את הסעיף הבא), הגדירו את כתובות
 from/to, ואז הפעילו **‏Active** (ימין למעלה).
 
@@ -426,7 +426,7 @@ mv /tmp/judge_cache.sqlite <repo>/llm_judge/cache/
 עתידי של latency, עלות טוקנים או איכות שופט - עם ה-cache במקום
 אתם מודדים SQLite.
 
-ה-workflow ‏`analyze-pcap.yml` של GitHub Actions שנגרס עשה את זה
+ה-תהליך עבודה ‏`analyze-pcap.yml` של GitHub Actions שנגרס עשה את זה
 נכון בחינם (כל ריצה התחילה על runner טרי בלי cache); הוא נגרס
 לטובת צינור ה-VM כנתיב האוטונומי.
 
@@ -439,7 +439,7 @@ mv /tmp/judge_cache.sqlite <repo>/llm_judge/cache/
 | `address already in use` ב-`docker compose up` | תהליך אחר (או מערך compose ישן) כבר קושר `${TS_BIND}:5678` או `:8766`. `sudo lsof -i :5678` כדי למצוא. |
 | ‏n8n לא נגיש מעל Tailscale, ‏SSH בסדר | חוק ACCEPT של `tailscale0` חסר או אבד אחרי reboot (‏`netfilter-persistent save` לא רץ) |
 | `docker compose up -d` נכשל רק מיד אחרי reboot | `${TS_BIND}` עדיין לא הוקצה - ‏Tailscale לא סיים להתחיל. `restart: unless-stopped` מכסה; drop-in של `After=tailscaled.service` לעיל נמנע מהרעש. |
-| `NOT NULL constraint failed: workflow_entity.id` | שימוש בייבוא של גרסת n8n ישנה; ה-workflow שנשלח כולל `id` מפורש. אם ערכתם אותו, הוסיפו אחד. |
+| `NOT NULL constraint failed: workflow_entity.id` | שימוש בייבוא של גרסת n8n ישנה; ה-תהליך עבודה שנשלח כולל `id` מפורש. אם ערכתם אותו, הוסיפו אחד. |
 | אישור מתייבא אבל ה-node עדיין נותן שגיאה | `N8N_ENCRYPTION_KEY` שונה בין מקור ליעד |
 | ‏Verdicts חוזרים מידית עם `cache_hits` > 0 | ‏`judge_cache.sqlite` שהועתק או ישן; הזיזו הצידה |
 | ‏Prompt של basic auth לעולם לא מופיע | צפוי - ‏n8n מודרני משתמש בחשבונות owner, לא ב-`N8N_BASIC_AUTH_*` |
