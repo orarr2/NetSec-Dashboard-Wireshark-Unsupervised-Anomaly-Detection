@@ -127,7 +127,10 @@ def build_profile(case: Mapping[str, Any]) -> dict:
     )
     nothing = not rules and not ml_flags and not adv_fired and (fusion is None or fusion < min_adv)
 
-    if rules and ml_agrees and asset["critical"]:
+    scope = str(case.get("kind") or "ip")
+    session_rules = policy.get("decision", "urgent", "session_scope_rules", default=[])
+    aggregate_event = scope == "session" and any(r in session_rules for r in rules)
+    if (rules and ml_agrees and asset["critical"]) or aggregate_event:
         severity = "severe"
     elif rules:
         severity = "high"
@@ -165,6 +168,7 @@ def build_profile(case: Mapping[str, Any]) -> dict:
 
     history = context.get("baseline_history") or {}
     return {
+        "scope": scope,
         "primary_technique": primary,
         "other_techniques": techniques[1:],
         "engines_fired": {"rules": rules, "ml": ml_flags, "advanced": adv_fired},

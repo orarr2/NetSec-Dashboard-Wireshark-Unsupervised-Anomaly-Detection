@@ -101,10 +101,23 @@
     "expect": {"action": "urgent", "priority": 90, "reason": "urgent_preconditions_met", "technique": "T1498.001", "cited": ["attack:T1498.001"]}
   },
   {
-    "id": "flood_session_candidate_has_no_ml_and_no_asset",
-    "about": "The shape NETSEC gives an aggregate flood: one session-level candidate with no ML signals and no device.",
+    "id": "flood_session_candidate_is_urgent_on_the_rule_alone",
+    "about": "The shape NETSEC gives an aggregate flood: one session-level candidate with no ML signals and no device. The rule alone makes it urgent.",
     "build": {"candidate": "session:S1", "kind": "session", "rules": ["flood_alerts"],
               "ml": {"anomaly": null, "cluster": null, "iso_score": null, "iso_stability": null}},
+    "expect": {"action": "urgent", "priority": 90, "reason": "urgent_session_scope_rule", "technique": "T1498.001", "cited": ["attack:T1498.001"]}
+  },
+  {
+    "id": "scan_on_a_session_candidate_is_not_urgent",
+    "about": "The session-scope exception covers the flood rule only.",
+    "build": {"candidate": "session:S1", "kind": "session", "rules": ["scan_alerts"],
+              "ml": {"anomaly": null, "cluster": null, "iso_score": null, "iso_stability": null}},
+    "expect": {"action": "standard", "priority": 60, "reason": "rule_fired", "technique": "T1046", "cited": ["attack:T1046"]}
+  },
+  {
+    "id": "flood_on_a_per_ip_candidate_without_ml_is_not_urgent",
+    "about": "Outside the session scope a flood still needs ML agreement and a critical asset.",
+    "build": {"rules": ["flood_alerts"]},
     "expect": {"action": "standard", "priority": 60, "reason": "rule_fired", "technique": "T1498.001", "cited": ["attack:T1498.001"]}
   },
   {

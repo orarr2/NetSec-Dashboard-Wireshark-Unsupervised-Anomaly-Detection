@@ -12,6 +12,7 @@ from agent.rule_tree import apply_floors, decide_rule_based, urgent_precondition
 from agent.tests.builders import make_payload
 
 ML_AGREES = {"anomaly": True, "iso_score": -0.08, "cluster": -1}
+NO_ML = {"anomaly": None, "cluster": None, "iso_score": None, "iso_stability": None}
 SUSPICIOUS = {"suspicious": True, "traffic_suspicious": True, "note_suspicious": False}
 CONTRADICTION = {"contradictions": ["technique"], "mentioned": ["beaconing"]}
 CATALOGUE = {"match": True, "id": "cat_1"}
@@ -43,6 +44,12 @@ def _model(action: str, priority: int = 40) -> dict:
     ({"rules": ["amp_alerts"], "ml": ML_AGREES, "category": "Network Infrastructure"}, {},
      ["rule_in_scan_alerts_or_flood_alerts"]),
     ({}, {}, ["rule_in_scan_alerts_or_flood_alerts", "ml_agreement", "critical_asset"]),
+    # An aggregate flood is a session-level candidate: no ML score and no asset exist, the rule is enough.
+    ({"candidate": "session:S1", "kind": "session", "rules": ["flood_alerts"], "ml": NO_ML}, {}, []),
+    ({"candidate": "session:S1", "kind": "session", "rules": ["scan_alerts"], "ml": NO_ML}, {},
+     ["ml_agreement", "critical_asset"]),
+    ({"candidate": "session:S1", "kind": "session", "ml": NO_ML}, {},
+     ["rule_in_scan_alerts_or_flood_alerts", "ml_agreement", "critical_asset"]),
 ])
 def test_urgent_preconditions(spec, env, missing):
     ok, lacking = urgent_preconditions(_profile(env, **spec))
@@ -191,6 +198,18 @@ def test_floor_rule_fired_lifts_to_urgent_when_the_tree_says_urgent():
     profile = _profile(rules=["scan_alerts"], ml=ML_AGREES, category="Network Infrastructure")
     final = _floors(_model("monitor", 5), profile)
     assert (final["action"], final["floor_reason"], final["priority"]) == ("urgent", "rule_fired", 90)
+
+
+def test_an_aggregate_flood_is_urgent_and_a_model_cannot_lower_it_to_monitor():
+    profile = _profile(candidate="session:S1", kind="session", rules=["flood_alerts"], ml=NO_ML)
+    tree = decide_rule_based(profile=profile, research=_research(profile))
+    assert (tree["action"], tree["priority"], tree["reason"]) == ("urgent", 90, "urgent_session_scope_rule")
+    assert "session-level candidate" in tree["rationale"] and "IsolationForest agrees" not in tree["rationale"]
+    assert (profile["scope"], profile["severity"], profile["ml_agrees"]) == ("session", "severe", False)
+    lifted = _floors(_model("monitor", 5), profile)
+    assert (lifted["action"], lifted["floor_reason"], lifted["priority"]) == ("urgent", "rule_fired", 90)
+    kept = _floors(_model("urgent", 95), profile)
+    assert (kept["action"], kept["floor_applied"]) == ("urgent", False)
 
 
 def test_a_model_verdict_with_no_trigger_stands():

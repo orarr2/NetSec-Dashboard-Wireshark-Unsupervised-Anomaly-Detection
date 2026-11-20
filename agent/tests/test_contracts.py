@@ -154,10 +154,12 @@ def test_a_fired_cap_is_a_human_review_that_says_how_far_the_run_got():
 # ---- policy -----------------------------------------------------------------
 
 def test_the_policy_file_carries_a_version_and_the_agreed_actions():
-    assert re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", policy.POLICY_VERSION)
+    # The date of the policy, with a revision number when it changed twice on one day.
+    assert re.fullmatch(r"\d{4}\.\d{2}\.\d{2}(\.\d+)?", policy.POLICY_VERSION)
     assert policy.get("actions") == ["urgent", "standard", "human_review", "known_pattern", "monitor"]
     assert policy.get("decision", "urgent") == {"rules": ["scan_alerts", "flood_alerts"],
-                                                "requires_ml_agreement": True, "requires_critical_asset": True}
+                                                "requires_ml_agreement": True, "requires_critical_asset": True,
+                                                "session_scope_rules": ["flood_alerts"]}
     assert set(policy.get("engines", "rule_technique")) == set(policy.get("engines", "high_precision_rules"))
     assert policy.get("grounding", "allow_empty_citations") == ["human_review", "known_pattern", "monitor"]
     assert policy.get("no", "such", "key", default="fallback") == "fallback"
@@ -170,6 +172,8 @@ def test_the_prompt_text_is_rendered_from_the_same_file():
     assert text.splitlines()[0] == f"POLICY version {policy.POLICY_VERSION}"
     assert "Actions: urgent, standard, human_review, known_pattern, monitor." in text
     assert "one of the rules scan_alerts, flood_alerts fired, IsolationForest agrees" in text
+    assert "On a session-level candidate (an aggregate event with no ML score and no asset) the rule flood_alerts " \
+           "is enough. urgent always waits for a human approval." in text
     for trigger in policy.get("decision", "human_review", "triggers"):
         assert f"  - {trigger}" in text
     assert text.splitlines()[-1] == "Floors applied over your verdict: " + ", ".join(policy.get("floors")) + "."
@@ -284,6 +288,8 @@ def test_profile_of_the_real_scan(vm_candidates):
     ({"rules": ["scan_alerts"], "ml": ML_AGREES, "category": "Network Infrastructure"},
      ("severe", "high", 0.9, "strong", False)),
     ({"rules": ["scan_alerts"], "fusion": 0.45}, ("high", "medium", 0.45, "mid", False)),
+    ({"candidate": "session:S1", "kind": "session", "rules": ["flood_alerts"],
+      "ml": {"anomaly": None, "cluster": None, "iso_score": None}}, ("severe", "medium", 0.7, "strong", False)),
 ])
 def test_profile_bands(spec, expected):
     profile = build_profile(normalize_case(make_payload(**spec), {}))

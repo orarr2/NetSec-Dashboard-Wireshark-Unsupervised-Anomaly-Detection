@@ -17,9 +17,18 @@ def _verdict(action: str, priority_name: str, reason: str, rationale: str, sourc
     }
 
 
+def session_scope_urgent(profile: Mapping[str, Any]) -> bool:
+    """A session-level candidate on which a rule fired that is urgent at that scope (an aggregate flood)."""
+    rules = policy.get("decision", "urgent", "session_scope_rules", default=[])
+    fired = (profile.get("engines_fired") or {}).get("rules") or []
+    return profile.get("scope") == "session" and any(r in rules for r in fired)
+
+
 def urgent_preconditions(profile: Mapping[str, Any]) -> tuple[bool, list[str]]:
     cfg = policy.get("decision", "urgent", default={})
     fired = (profile.get("engines_fired") or {}).get("rules") or []
+    if session_scope_urgent(profile):
+        return True, []
     missing = []
     if not any(r in cfg.get("rules", []) for r in fired):
         missing.append("rule_in_" + "_or_".join(cfg.get("rules", [])))
@@ -91,6 +100,12 @@ def decide_rule_based(
     rules = engines.get("rules") or []
     if rules:
         ok, missing = urgent_preconditions(profile)
+        if ok and session_scope_urgent(profile):
+            return _verdict(
+                "urgent", "urgent", "urgent_session_scope_rule",
+                f"{', '.join(rules)} fired on a session-level candidate (an aggregate event has no per-device ML "
+                "score and no asset, so the rule alone is the precondition); containment or escalation is proposed "
+                "and waits for approval.")
         if ok:
             return _verdict(
                 "urgent", "urgent", "urgent_preconditions_met",

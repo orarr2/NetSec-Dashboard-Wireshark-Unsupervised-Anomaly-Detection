@@ -4,10 +4,11 @@
 # (agent/rule_tree.py) reads these values at import time and the Decision
 # prompt is rendered from them, so the model and the tree share one policy.
 #
-# Bump `version` on every substantive rule change. The string is stamped on
-# every trace entry, so a reviewer can tell which policy produced a verdict.
+# Bump `version` on every substantive rule change (the date, plus a revision
+# number for a second change on the same day). The string is stamped on every
+# trace entry, so a reviewer can tell which policy produced a verdict.
 
-version: "2026.11.20"
+version: "2026.11.20.2"
 grounding_target_pct: 90
 
 actions: [urgent, standard, human_review, known_pattern, monitor]
@@ -38,6 +39,10 @@ decision:
     rules: [scan_alerts, flood_alerts]
     requires_ml_agreement: true
     requires_critical_asset: true
+    # NETSEC reports an aggregate flood once, as a session-level candidate
+    # (kind "session") that has no ML signals and no device. At that scope
+    # the rule alone is the precondition.
+    session_scope_rules: [flood_alerts]
   standard:
     when:
       - "a high-precision rule fired"

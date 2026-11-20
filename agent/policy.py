@@ -48,7 +48,8 @@ def render_policy_rules() -> str:
         + (", IsolationForest agrees" if urgent.get("requires_ml_agreement") else "")
         + (", and the asset is critical (my device, declared infrastructure, or a critical role)"
            if urgent.get("requires_critical_asset") else "")
-        + ". It always waits for a human approval.",
+        + ". On a session-level candidate (an aggregate event with no ML score and no asset) the rule "
+        + f"{', '.join(urgent.get('session_scope_rules', []))} is enough. urgent always waits for a human approval.",
         "standard: " + "; or ".join(get("decision", "standard", "when", default=[])) + ".",
         "monitor: " + "; or ".join(get("decision", "monitor", "when", default=[])) + ".",
         "known_pattern: " + str(get("decision", "known_pattern", "requires", default="")) + ".",
