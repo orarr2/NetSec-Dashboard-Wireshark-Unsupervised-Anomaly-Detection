@@ -1,0 +1,103 @@
+# Decision policy for the NETSEC triage agents.
+#
+# Single source of truth for the decision rules. The deterministic rule tree
+# (agent/rule_tree.py) reads these values at import time and the Decision
+# prompt is rendered from them, so the model and the tree share one policy.
+#
+# Bump `version` on every substantive rule change. The string is stamped on
+# every trace entry, so a reviewer can tell which policy produced a verdict.
+
+version: "2026.11.20"
+grounding_target_pct: 90
+
+actions: [urgent, standard, human_review, known_pattern, monitor]
+
+engines:
+  # Deterministic rules precise enough that a model may not talk a hit down.
+  # The order is also the order in which the primary technique is picked.
+  high_precision_rules: [arp_multi_mac, flood_alerts, scan_alerts, amp_alerts]
+  rule_technique:
+    arp_multi_mac: "T1557.002"
+    flood_alerts: "T1498.001"
+    scan_alerts: "T1046"
+    amp_alerts: "T1498.002"
+  advanced: [beaconing, dns_tunneling, dga, tls_anomaly]
+  # An advanced engine counts as fired from this score.
+  advanced_fired_min_score: 0.5
+  fusion_strong_min_score: 0.7
+  # IsolationForest scores at or below this are a strong outlier.
+  ml_strong_iso_score_max: -0.2
+
+asset:
+  # Device categories (app/device_rules.json) treated as critical infrastructure.
+  critical_roles: ["Network Infrastructure"]
+
+decision:
+  urgent:
+    # A containment or escalation proposal. Always waits for a human approval.
+    rules: [scan_alerts, flood_alerts]
+    requires_ml_agreement: true
+    requires_critical_asset: true
+  standard:
+    when:
+      - "a high-precision rule fired"
+      - "an advanced engine fired, the fusion score is strong and IsolationForest agrees"
+  human_review:
+    triggers:
+      - "suspicious text in any channel (traffic strings or the analyst note)"
+      - "the analyst note names a technique that no engine reported"
+      - "no engine fired (nothing to triage)"
+      - "research_coverage == no_match"
+      - "research_sufficiency == insufficient_coverage AND llm action == standard (exempt only on a true catalogue match)"
+      - "an advanced engine fired without a strong fusion score or without IsolationForest agreement"
+      - "a strong IsolationForest outlier with no rule and no advanced engine"
+      - "the model proposed urgent without the urgent preconditions"
+      - "the model proposed known_pattern without a catalogue match"
+  monitor:
+    when:
+      - "only IsolationForest or DBSCAN flagged the candidate, and not strongly"
+  known_pattern:
+    # Sealed without running models only when the same capture (sha256) and the
+    # same candidate were already judged and approved by a human.
+    requires: "catalogue match on pcap sha256 + candidate"
+
+floors:
+  # Applied over a model verdict. A floor moves a verdict toward a human or up
+  # to the tree's verdict, never down.
+  - suspicious_input
+  - intake_contradiction
+  - nothing_to_triage
+  - known_pattern_without_catalogue_match
+  - urgent_preconditions_not_met
+  - coverage_no_match
+  - rag_insufficient_coverage
+  - rule_fired
+
+priority:
+  urgent: 90
+  standard_rule_with_ml: 70
+  standard_rule: 60
+  standard_advanced: 55
+  human_review: 55
+  human_review_suspicious_input: 60
+  human_review_advanced_unconfirmed: 50
+  human_review_strong_ml: 45
+  human_review_nothing: 30
+  monitor_ml_anomaly: 10
+  monitor_noise: 5
+  known_pattern: 0
+
+grounding:
+  # cited_sources must be a subset of research.tool_result_ids, unless the
+  # action is listed here.
+  allow_empty_citations: [human_review, known_pattern, monitor]
+  retry_on_fail: 1
+
+research:
+  # A source is sufficient only when it answers all of these for the technique.
+  questions: [containment, severity, false_positive]
+  top_k: 3
+
+queues:
+  # An approval pending longer than this is marked overdue.
+  approval_sla_hours: 24

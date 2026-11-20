@@ -1,0 +1,1921 @@
+[
+ {
+  "adv_signals": [],
+  "candidate_id": "192.168.1.10",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "192.168.1.10",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "Hewlett Packard"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": true,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 785.9224,
+    "count": 1007.0,
+    "fin_count": 0.0,
+    "mean_len": 57.9801,
+    "null_count": 0.0,
+    "rst_count": 5.0,
+    "std_len": 0.2813,
+    "syn_count": 1002.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": true,
+    "cluster": -1,
+    "iso_score": -0.0165,
+    "iso_stability": 1.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": [
+     {
+      "count": 1002,
+      "ratio": 1.0,
+      "type": "SYN",
+      "unique_dsts": 1
+     }
+    ]
+   },
+   "session_context": {
+    "day_of_week": "Sat",
+    "duration_s": 1.2,
+    "hour_of_day": 20,
+    "iso_timestamp": "2009-01-03T20:58:34",
+    "total_ips": 5,
+    "total_packets": 2020
+   },
+   "tls": {
+    "has_weak_version": null,
+    "versions": null,
+    "weak_cipher_count": null
+   },
+   "traffic": {
+    "bytes_in": 60000,
+    "bytes_out": 58386,
+    "top_dst_ports": [
+     {
+      "count": 2,
+      "port_proto": "445/tcp"
+     },
+     {
+      "count": 2,
+      "port_proto": "1126/tcp"
+     },
+     {
+      "count": 2,
+      "port_proto": "79/tcp"
+     },
+     {
+      "count": 2,
+      "port_proto": "5000/tcp"
+     },
+     {
+      "count": 2,
+      "port_proto": "139/tcp"
+     }
+    ],
+    "upload_ratio": 0.493
+   },
+   "trigger_reasons": [
+    "dbscan_noise",
+    "isolation_forest",
+    "scan_rule"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [
+   {
+    "detail": {
+     "count": 1002,
+     "ratio": 1.0,
+     "src": "192.168.1.10",
+     "type": "SYN",
+     "unique_dsts": 1
+    },
+    "ip": "192.168.1.10",
+    "layer": "rules",
+    "rule": "scan_alerts",
+    "severity": "high"
+   }
+  ],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 785.9223784006592,
+   "bytes_dst": 60000,
+   "bytes_src": 58386,
+   "count": 1007,
+   "dbscan_anomaly": 1,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "192.168.1.10",
+   "iso_flag": -1,
+   "iso_score": -0.016484194573393784,
+   "lstm_flag": null,
+   "mean_len": 57.98013902681232,
+   "null_count": 0,
+   "rst_count": 5,
+   "self_telemetry": 0,
+   "std_len": 0.2812970182236451,
+   "syn_count": 1002,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "syn_flood",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.6,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 0,
+  "session": {
+   "duration_s": 1.241322,
+   "id": 1,
+   "kind": "prod",
+   "label": "bootstrap_test_1543",
+   "n_ips": 5,
+   "n_pkts": 2020,
+   "orig_name": "tcp_syn_scan.pcap",
+   "pcap_sha256": "dea976e9f081d758f13e988481ce09dd8262031d48efb59d0daa9764e816e23d",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [
+   {
+    "count": 38,
+    "detail": "IP 192.168.1.1 claimed by 2 MACs: ['08:00:27:2d:f8:5a', '08:00:27:5e:01:7c'] + gratuitous reply signature",
+    "device": "192.168.1.1",
+    "first_ts": 17.522412,
+    "last_ts": 538.666533,
+    "peer": "08:00:27:2d:f8:5a;08:00:27:5e:01:7c",
+    "score": 0.8999999999999999,
+    "severity": "high",
+    "signal": "arp_ip_multi_mac",
+    "tactic": "Collection / MITM",
+    "technique": "T1557.002"
+   }
+  ],
+  "candidate_id": "192.168.1.1",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": {
+     "score": 0.9,
+     "techniques": 1
+    },
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "192.168.1.1",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": true,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 3.0536,
+    "count": 280.0,
+    "fin_count": 0.0,
+    "mean_len": 209.6857,
+    "null_count": 0.0,
+    "rst_count": 0.0,
+    "std_len": 90.6958,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.0814,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [
+     {
+      "mean_size": 207.7,
+      "responses": 271
+     }
+    ],
+    "arp_multi_mac": true,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": null,
+    "versions": null,
+    "weak_cipher_count": null
+   },
+   "traffic": {
+    "bytes_in": 22357,
+    "bytes_out": 58712,
+    "top_dst_ports": [
+     {
+      "count": 6,
+      "port_proto": "40426/tcp"
+     },
+     {
+      "count": 3,
+      "port_proto": "52050/udp"
+     },
+     {
+      "count": 2,
+      "port_proto": "68/udp"
+     },
+     {
+      "count": 2,
+      "port_proto": "49824/udp"
+     },
+     {
+      "count": 2,
+      "port_proto": "55952/udp"
+     }
+    ],
+    "upload_ratio": 0.724
+   },
+   "trigger_reasons": [
+    "amp_rule",
+    "arp_rule",
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [
+   {
+    "detail": {
+     "mean_size": 207.7,
+     "responses": 271,
+     "src": "192.168.1.1"
+    },
+    "ip": "192.168.1.1",
+    "layer": "rules",
+    "rule": "amp_alerts",
+    "severity": "high"
+   }
+  ],
+  "fusion": [
+   {
+    "device": "192.168.1.1",
+    "engines_hit": 1,
+    "score": 0.9,
+    "window_start": null
+   }
+  ],
+  "ip_features": {
+   "burst_score": 3.0535748462602936,
+   "bytes_dst": 22357,
+   "bytes_src": 58712,
+   "count": 280,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "192.168.1.1",
+   "iso_flag": 1,
+   "iso_score": 0.08141009949072447,
+   "lstm_flag": null,
+   "mean_len": 209.68571428571428,
+   "null_count": 0,
+   "rst_count": 0,
+   "self_telemetry": 0,
+   "std_len": 90.69580380284943,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_amp",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.6185,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 0,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [
+   {
+    "count": 1,
+    "detail": "JA3 839bbe3ed07fed922ded5aaf714d6842 seen once on 192.168.1.104 to external 54.230.243.201 (new/unusual client)",
+    "device": "192.168.1.104",
+    "first_ts": 537.715423,
+    "last_ts": 537.715423,
+    "peer": "839bbe3ed07fed92",
+    "score": 0.5,
+    "severity": "low",
+    "signal": "rare_ja3",
+    "tactic": "Command and Control",
+    "technique": "T1071.001"
+   },
+   {
+    "count": 1,
+    "detail": "SNI www.reddit.com -> Reddit, but dst 151.101.129.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 386.940698,
+    "last_ts": 386.940698,
+    "peer": "www.reddit.com",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI external-preview.redd.it -> Reddit, but dst 151.101.129.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 390.055188,
+    "last_ts": 390.055188,
+    "peer": "external-preview.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI preview.redd.it -> Reddit, but dst 151.101.1.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 390.065621,
+    "last_ts": 390.065621,
+    "peer": "preview.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI gql.reddit.com -> Reddit, but dst 151.101.1.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 393.031064,
+    "last_ts": 393.031064,
+    "peer": "gql.reddit.com",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI www.reddit.com -> Reddit, but dst 151.101.193.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 513.942524,
+    "last_ts": 513.942524,
+    "peer": "www.reddit.com",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI external-preview.redd.it -> Reddit, but dst 151.101.1.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 516.888841,
+    "last_ts": 516.888841,
+    "peer": "external-preview.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI gql.reddit.com -> Reddit, but dst 151.101.129.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 519.633596,
+    "last_ts": 519.633596,
+    "peer": "gql.reddit.com",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI preview.redd.it -> Reddit, but dst 151.101.193.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 520.205044,
+    "last_ts": 520.205044,
+    "peer": "preview.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI v.redd.it -> Reddit, but dst 151.101.65.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 522.00737,
+    "last_ts": 522.00737,
+    "peer": "v.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI i.redd.it -> Reddit, but dst 151.101.193.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 528.843342,
+    "last_ts": 528.843342,
+    "peer": "i.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   },
+   {
+    "count": 1,
+    "detail": "SNI i.redd.it -> Reddit, but dst 151.101.129.140 -> Fastly (possible domain fronting)",
+    "device": "192.168.1.104",
+    "first_ts": 529.63619,
+    "last_ts": 529.63619,
+    "peer": "i.redd.it",
+    "score": 0.6,
+    "severity": "medium",
+    "signal": "sni_ip_mismatch",
+    "tactic": "Command and Control",
+    "technique": "T1090"
+   }
+  ],
+  "candidate_id": "192.168.1.104",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": {
+     "score": 0.9,
+     "techniques": 2
+    },
+    "tls_anomaly": {
+     "count": 1,
+     "peer": "www.reddit.com",
+     "score": 0.6,
+     "severity": "medium"
+    }
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "192.168.1.104",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": true,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 51.8091,
+    "count": 4774.0,
+    "fin_count": 0.0,
+    "mean_len": 79.1248,
+    "null_count": 0.0,
+    "rst_count": 81.0,
+    "std_len": 91.1459,
+    "syn_count": 64.0,
+    "unique_dsts": 25.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": true,
+    "cluster": -1,
+    "iso_score": -0.2801,
+    "iso_stability": 1.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": true,
+    "versions": [
+     {
+      "count": 339,
+      "version": "TLS 1.2"
+     },
+     {
+      "count": 54,
+      "version": "TLS 1.0"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 14440910,
+    "bytes_out": 377742,
+    "top_dst_ports": [
+     {
+      "count": 4415,
+      "port_proto": "443/tcp"
+     },
+     {
+      "count": 277,
+      "port_proto": "53/udp"
+     },
+     {
+      "count": 59,
+      "port_proto": "80/tcp"
+     },
+     {
+      "count": 7,
+      "port_proto": "53/tcp"
+     },
+     {
+      "count": 5,
+      "port_proto": "123/udp"
+     }
+    ],
+    "upload_ratio": 0.025
+   },
+   "trigger_reasons": [
+    "dbscan_noise",
+    "isolation_forest"
+   ],
+   "websites": {
+    "top_dns_queries": [
+     {
+      "count": 32,
+      "host": "www.redditstatic.com"
+     },
+     {
+      "count": 22,
+      "host": "styles.redditmedia.com"
+     },
+     {
+      "count": 20,
+      "host": "v.redd.it"
+     },
+     {
+      "count": 14,
+      "host": "www.reddit.com"
+     },
+     {
+      "count": 14,
+      "host": "preview.redd.it"
+     }
+    ],
+    "top_http_hosts": [
+     {
+      "count": 4,
+      "host": "detectportal.firefox.com"
+     },
+     {
+      "count": 3,
+      "host": "ocsp.pki.goog"
+     },
+     {
+      "count": 2,
+      "host": "ocsp.digicert.com"
+     },
+     {
+      "count": 1,
+      "host": "reddit.com"
+     }
+    ],
+    "top_tls_sni": [
+     {
+      "count": 9,
+      "host": "www.redditstatic.com"
+     },
+     {
+      "count": 4,
+      "host": "a.thumbs.redditmedia.com"
+     },
+     {
+      "count": 4,
+      "host": "styles.redditmedia.com"
+     },
+     {
+      "count": 4,
+      "host": "gql.reddit.com"
+     },
+     {
+      "count": 3,
+      "host": "external-preview.redd.it"
+     }
+    ]
+   }
+  },
+  "findings": [],
+  "fusion": [
+   {
+    "device": "192.168.1.104",
+    "engines_hit": 2,
+    "score": 0.9,
+    "window_start": null
+   }
+  ],
+  "ip_features": {
+   "burst_score": 51.80912907358618,
+   "bytes_dst": 14440910,
+   "bytes_src": 377742,
+   "count": 4774,
+   "dbscan_anomaly": 1,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "192.168.1.104",
+   "iso_flag": -1,
+   "iso_score": -0.28008514290688014,
+   "lstm_flag": null,
+   "mean_len": 79.12484289903645,
+   "null_count": 0,
+   "rst_count": 81,
+   "self_telemetry": 0,
+   "std_len": 91.14592264655393,
+   "syn_count": 64,
+   "unique_dsts": 25,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_amp",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.8,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 1,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "151.101.193.140",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "151.101.193.140",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 18.6609,
+    "count": 5024.0,
+    "fin_count": 0.0,
+    "mean_len": 1408.794,
+    "null_count": 0.0,
+    "rst_count": 13.0,
+    "std_len": 268.2255,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": true,
+    "cluster": -1,
+    "iso_score": -0.1081,
+    "iso_stability": 1.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": false,
+    "versions": [
+     {
+      "count": 568,
+      "version": "TLS 1.2"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 129497,
+    "bytes_out": 7077781,
+    "top_dst_ports": [
+     {
+      "count": 4926,
+      "port_proto": "41800/tcp"
+     },
+     {
+      "count": 17,
+      "port_proto": "41844/tcp"
+     },
+     {
+      "count": 17,
+      "port_proto": "41852/tcp"
+     },
+     {
+      "count": 15,
+      "port_proto": "41822/tcp"
+     },
+     {
+      "count": 14,
+      "port_proto": "41824/tcp"
+     }
+    ],
+    "upload_ratio": 0.982
+   },
+   "trigger_reasons": [
+    "dbscan_noise",
+    "isolation_forest"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 18.660938543146802,
+   "bytes_dst": 129497,
+   "bytes_src": 7077781,
+   "count": 5024,
+   "dbscan_anomaly": 1,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "151.101.193.140",
+   "iso_flag": -1,
+   "iso_score": -0.10809681991788556,
+   "lstm_flag": null,
+   "mean_len": 1408.7939888535032,
+   "null_count": 0,
+   "rst_count": 13,
+   "self_telemetry": 0,
+   "std_len": 268.22547268369067,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_amp",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.7137,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 2,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "151.101.129.140",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "151.101.129.140",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 15.6443,
+    "count": 4986.0,
+    "fin_count": 0.0,
+    "mean_len": 1382.3028,
+    "null_count": 0.0,
+    "rst_count": 9.0,
+    "std_len": 317.7096,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": true,
+    "cluster": -1,
+    "iso_score": -0.0858,
+    "iso_stability": 1.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": false,
+    "versions": [
+     {
+      "count": 618,
+      "version": "TLS 1.2"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 147983,
+    "bytes_out": 6892162,
+    "top_dst_ports": [
+     {
+      "count": 3329,
+      "port_proto": "33318/tcp"
+     },
+     {
+      "count": 1570,
+      "port_proto": "33256/tcp"
+     },
+     {
+      "count": 14,
+      "port_proto": "33278/tcp"
+     },
+     {
+      "count": 14,
+      "port_proto": "33276/tcp"
+     },
+     {
+      "count": 14,
+      "port_proto": "33312/tcp"
+     }
+    ],
+    "upload_ratio": 0.979
+   },
+   "trigger_reasons": [
+    "dbscan_noise",
+    "isolation_forest"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 15.644334732019967,
+   "bytes_dst": 147983,
+   "bytes_src": 6892162,
+   "count": 4986,
+   "dbscan_anomaly": 1,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "151.101.129.140",
+   "iso_flag": -1,
+   "iso_score": -0.08576704182427919,
+   "lstm_flag": null,
+   "mean_len": 1382.3028479743282,
+   "null_count": 0,
+   "rst_count": 9,
+   "self_telemetry": 0,
+   "std_len": 317.70962143215513,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_amp",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.7025,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 3,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "fe80::1:1",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "fe80::1:1",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": true,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 13.1916,
+    "count": 148.0,
+    "fin_count": 0.0,
+    "mean_len": 99.5946,
+    "null_count": 0.0,
+    "rst_count": 0.0,
+    "std_len": 10.2193,
+    "syn_count": 0.0,
+    "unique_dsts": 5.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.0214,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": null,
+    "versions": null,
+    "weak_cipher_count": null
+   },
+   "traffic": {
+    "bytes_in": 172,
+    "bytes_out": 14740,
+    "top_dst_ports": null,
+    "upload_ratio": 0.988
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 13.191607032576428,
+   "bytes_dst": 172,
+   "bytes_src": 14740,
+   "count": 148,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "fe80::1:1",
+   "iso_flag": 1,
+   "iso_score": 0.021441760456069714,
+   "lstm_flag": null,
+   "mean_len": 99.5945945945946,
+   "null_count": 0,
+   "rst_count": 0,
+   "self_telemetry": 0,
+   "std_len": 10.219254760585025,
+   "syn_count": 0,
+   "unique_dsts": 5,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "benign_anomaly",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 0,
+   "priority_score": 0.3486,
+   "verdict": "benign"
+  },
+  "kind": "ip",
+  "rank": 4,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "216.58.203.98",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "216.58.203.98",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 0.1758,
+    "count": 117.0,
+    "fin_count": 0.0,
+    "mean_len": 866.5385,
+    "null_count": 0.0,
+    "rst_count": 4.0,
+    "std_len": 664.6422,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.0414,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": false,
+    "versions": [
+     {
+      "count": 75,
+      "version": "TLS 1.2"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 10087,
+    "bytes_out": 101385,
+    "top_dst_ports": [
+     {
+      "count": 67,
+      "port_proto": "46446/tcp"
+     },
+     {
+      "count": 15,
+      "port_proto": "46460/tcp"
+     },
+     {
+      "count": 12,
+      "port_proto": "46480/tcp"
+     },
+     {
+      "count": 12,
+      "port_proto": "46482/tcp"
+     },
+     {
+      "count": 11,
+      "port_proto": "46478/tcp"
+     }
+    ],
+    "upload_ratio": 0.91
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 0.17577009288884987,
+   "bytes_dst": 10087,
+   "bytes_src": 101385,
+   "count": 117,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "216.58.203.98",
+   "iso_flag": 1,
+   "iso_score": 0.041394440923854026,
+   "lstm_flag": null,
+   "mean_len": 866.5384615384615,
+   "null_count": 0,
+   "rst_count": 4,
+   "self_telemetry": 0,
+   "std_len": 664.6422493557321,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_tunnel",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.6086,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 5,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "104.74.36.68",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "104.74.36.68",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 0.1822,
+    "count": 105.0,
+    "fin_count": 0.0,
+    "mean_len": 1143.381,
+    "null_count": 0.0,
+    "rst_count": 1.0,
+    "std_len": 575.1553,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.0716,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": false,
+    "versions": [
+     {
+      "count": 89,
+      "version": "TLS 1.2"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 6095,
+    "bytes_out": 120055,
+    "top_dst_ports": [
+     {
+      "count": 93,
+      "port_proto": "55310/tcp"
+     },
+     {
+      "count": 12,
+      "port_proto": "55332/tcp"
+     }
+    ],
+    "upload_ratio": 0.952
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 0.18224251922600934,
+   "bytes_dst": 6095,
+   "bytes_src": 120055,
+   "count": 105,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "104.74.36.68",
+   "iso_flag": 1,
+   "iso_score": 0.07161978909227273,
+   "lstm_flag": null,
+   "mean_len": 1143.3809523809523,
+   "null_count": 0,
+   "rst_count": 1,
+   "self_telemetry": 0,
+   "std_len": 575.1553365588824,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_tunnel",
+   "confidence": 0.9,
+   "guardrail_applied": 0,
+   "needs_human_review": 0,
+   "priority_score": 0.6534,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 6,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "54.230.241.12",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "54.230.241.12",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 0.0527,
+    "count": 34.0,
+    "fin_count": 0.0,
+    "mean_len": 981.3529,
+    "null_count": 0.0,
+    "rst_count": 0.0,
+    "std_len": 644.297,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.0904,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": false,
+    "versions": [
+     {
+      "count": 8,
+      "version": "TLS 1.2"
+     }
+    ],
+    "weak_cipher_count": 0
+   },
+   "traffic": {
+    "bytes_in": 2579,
+    "bytes_out": 33366,
+    "top_dst_ports": [
+     {
+      "count": 34,
+      "port_proto": "41902/tcp"
+     }
+    ],
+    "upload_ratio": 0.928
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 0.052688918488084546,
+   "bytes_dst": 2579,
+   "bytes_src": 33366,
+   "count": 34,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "54.230.241.12",
+   "iso_flag": 1,
+   "iso_score": 0.09035711206756197,
+   "lstm_flag": null,
+   "mean_len": 981.3529411764706,
+   "null_count": 0,
+   "rst_count": 0,
+   "self_telemetry": 0,
+   "std_len": 644.2969803828676,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "benign_anomaly",
+   "confidence": 0.7,
+   "guardrail_applied": 0,
+   "needs_human_review": 0,
+   "priority_score": 0.294,
+   "verdict": "benign"
+  },
+  "kind": "ip",
+  "rank": 7,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "0.0.0.0",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "0.0.0.0",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": true,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 4.0,
+    "count": 4.0,
+    "fin_count": 0.0,
+    "mean_len": 342.0,
+    "null_count": 0.0,
+    "rst_count": 0.0,
+    "std_len": 0.0,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.1169,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": null,
+    "versions": null,
+    "weak_cipher_count": null
+   },
+   "traffic": {
+    "bytes_in": null,
+    "bytes_out": 1368,
+    "top_dst_ports": [
+     {
+      "count": 4,
+      "port_proto": "67/udp"
+     }
+    ],
+    "upload_ratio": null
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 4.0,
+   "bytes_dst": 0,
+   "bytes_src": 1368,
+   "count": 4,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "0.0.0.0",
+   "iso_flag": 1,
+   "iso_score": 0.11692565160544832,
+   "lstm_flag": null,
+   "mean_len": 342.0,
+   "null_count": 0,
+   "rst_count": 0,
+   "self_telemetry": 0,
+   "std_len": 0.0,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "benign_anomaly",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 0,
+   "priority_score": 0.3007,
+   "verdict": "benign"
+  },
+  "kind": "ip",
+  "rank": 8,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ },
+ {
+  "adv_signals": [],
+  "candidate_id": "45.76.113.31",
+  "context": {
+   "advanced_signals": {
+    "beaconing": null,
+    "dga": null,
+    "dns_tunneling": null,
+    "fusion_score": null,
+    "tls_anomaly": null
+   },
+   "baseline_history": {
+    "days_since_first_seen": null,
+    "prior_verdict_summary": null,
+    "seen_before": null
+   },
+   "candidate_id": "45.76.113.31",
+   "device_context": {
+    "category": "unknown",
+    "hostname": null,
+    "oui_vendor": "PCS Computer Systems GmbH"
+   },
+   "enrichments": {
+    "asn": null,
+    "baseline_seen_before": null,
+    "is_private": false,
+    "reverse_dns": null
+   },
+   "features": {
+    "burst_score": 5.0,
+    "count": 5.0,
+    "fin_count": 0.0,
+    "mean_len": 90.0,
+    "null_count": 0.0,
+    "rst_count": 0.0,
+    "std_len": 0.0,
+    "syn_count": 0.0,
+    "unique_dsts": 1.0,
+    "xmas_count": 0.0
+   },
+   "kind": "ip",
+   "ml_signals": {
+    "anomaly": false,
+    "cluster": -1,
+    "iso_score": 0.1183,
+    "iso_stability": 0.0,
+    "lstm_bin_flag_count": null,
+    "silhouette": null
+   },
+   "rule_signals": {
+    "amp_alerts": [],
+    "arp_multi_mac": false,
+    "flood_alerts": [],
+    "scan_alerts": []
+   },
+   "session_context": {
+    "day_of_week": "Thu",
+    "duration_s": 543.3,
+    "hour_of_day": 2,
+    "iso_timestamp": "1970-01-01T02:00:00",
+    "total_ips": 29,
+    "total_packets": 16285
+   },
+   "tls": {
+    "has_weak_version": null,
+    "versions": null,
+    "weak_cipher_count": null
+   },
+   "traffic": {
+    "bytes_in": 450,
+    "bytes_out": 450,
+    "top_dst_ports": [
+     {
+      "count": 1,
+      "port_proto": "59812/udp"
+     },
+     {
+      "count": 1,
+      "port_proto": "38651/udp"
+     },
+     {
+      "count": 1,
+      "port_proto": "33005/udp"
+     },
+     {
+      "count": 1,
+      "port_proto": "40201/udp"
+     },
+     {
+      "count": 1,
+      "port_proto": "59171/udp"
+     }
+    ],
+    "upload_ratio": 0.5
+   },
+   "trigger_reasons": [
+    "dbscan_noise"
+   ],
+   "websites": {
+    "top_dns_queries": null,
+    "top_http_hosts": null,
+    "top_tls_sni": null
+   }
+  },
+  "findings": [],
+  "fusion": [],
+  "ip_features": {
+   "burst_score": 5.0,
+   "bytes_dst": 450,
+   "bytes_src": 450,
+   "count": 5,
+   "dbscan_anomaly": 0,
+   "dbscan_cluster": -1,
+   "fin_count": 0,
+   "ip": "45.76.113.31",
+   "iso_flag": 1,
+   "iso_score": 0.11827762862030983,
+   "lstm_flag": null,
+   "mean_len": 90.0,
+   "null_count": 0,
+   "rst_count": 0,
+   "self_telemetry": 0,
+   "std_len": 0.0,
+   "syn_count": 0,
+   "unique_dsts": 1,
+   "xmas_count": 0
+  },
+  "judge_verdict": {
+   "category": "dns_tunnel",
+   "confidence": 0.75,
+   "guardrail_applied": 0,
+   "needs_human_review": 1,
+   "priority_score": 0.57,
+   "verdict": "suspicious"
+  },
+  "kind": "ip",
+  "rank": 9,
+  "session": {
+   "duration_s": 543.332577,
+   "id": 2,
+   "kind": "prod",
+   "label": "completion_verification",
+   "n_ips": 29,
+   "n_pkts": 16285,
+   "orig_name": "arpspoof.pcap",
+   "pcap_sha256": "0ce605556689edec01ef50703df7cc88c97a0d1731c4938d54cabcb28a71837a",
+   "prompt_version": "v0.6.1",
+   "status": "done"
+  }
+ }
+]
