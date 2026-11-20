@@ -10,6 +10,7 @@ _ENV_TO_CLEAR = (
     "NETSEC_MY_DEVICE_IP", "NETSEC_INFRA_DSTS", "NETSEC_AGENT_DISPLAY_TZ", "NETSEC_AGENT_ASYNC_CONCURRENCY",
     "NETSEC_AGENT_POLICY_PATH", "AGENT_MAX_ITERATIONS", "AGENT_MAX_TOOL_HOPS", "AGENT_COST_CAP_USD",
     "WALL_CLOCK_CAP_SECONDS", "AGENT_LLM_TIMEOUT_SECONDS", "AGENT_SUPERVISOR_ROUTING", "AGENT_LLM_PROVIDER",
+    "NETSEC_AGENT_SOURCE_DB", "NETSEC_AGENT_POLL_SECONDS", "NETSEC_AGENT_POLL_LOOKBACK", "NETSEC_AGENT_COMMIT",
 )
 
 
@@ -18,6 +19,8 @@ def isolated_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("NETSEC_AGENT_DB_PATH", str(tmp_path / "netsec-agent.db"))
     monkeypatch.setenv("NETSEC_AGENT_CHECKPOINT_PATH", str(tmp_path / "checkpoints.sqlite"))
     monkeypatch.setenv("NETSEC_AGENT_USE_LIVE", "0")
+    # The test client calls the service as http://testserver; that name is private for the tests.
+    monkeypatch.setenv("NETSEC_AGENT_PRIVATE_HOSTS", "testserver,127.0.0.1,localhost")
     for name in _ENV_TO_CLEAR:
         monkeypatch.delenv(name, raising=False)
     from agent.db import reset_db_registry

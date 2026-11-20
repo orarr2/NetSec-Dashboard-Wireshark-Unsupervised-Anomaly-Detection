@@ -1,0 +1,36 @@
+[Unit]
+# NETSEC triage agents - the decision-support layer over the analysis
+# pipeline (the agent/ package). One uvicorn worker on the VM's Tailscale
+# address; Caddy serves it under /netsec/ behind the stack's one basicauth.
+# NOT reachable from the public interface.
+Description=NETSEC triage agents (FastAPI)
+After=network-online.target tailscaled.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netsec-agent
+Group=netsec-agent
+WorkingDirectory=/opt/netsec-agent/repo
+# Bind address, port, paths, private hosts and the poller's source are
+# all in this file; install-agent.sh writes it once and never overwrites it.
+EnvironmentFile=/etc/netsec-agent/env
+Environment=PYTHONUNBUFFERED=1
+# No access log: the journal carries the agents' trace blocks, the same
+# lines GET /report/{id} and the /netsec/trace page show.
+ExecStart=/opt/netsec-agent/venv/bin/uvicorn agent.api:app \
+    --host ${NETSEC_AGENT_BIND} --port ${NETSEC_AGENT_PORT} \
+    --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=5
+# Standard hardening. ProtectSystem=strict leaves the whole filesystem
+# read-only for the service except its own data folder, so NETSEC's
+# database under /srv/netsec can be read and never written.
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/netsec-agent
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

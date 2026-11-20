@@ -1,4 +1,4 @@
-"""The agents' HTTP service: submit a candidate, poll its report, the 24-hour overview and health."""
+"""The agents' HTTP service: submit and poll cases, the operator pages and their endpoints, and health."""
 
 from __future__ import annotations
 
@@ -6,24 +6,34 @@ import contextlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent import __version__, policy
 from agent.adapter import case_metadata, normalize_case
 from agent.db import OPEN_ACTIONS, Database, get_db, new_id
 from agent.graph import build_graph, stream_graph
+from agent.poller import Poller
 from agent.profile import build_profile
-from agent.sanitize import sanitize_case
+from agent.sanitize import sanitize_case, sanitize_note
+from agent.status import collect_status, display_now, status_lines
 from agent.trace import build_agent_value_summary, emit_trace, format_trace_lines
 
 LOGGER = logging.getLogger("netsec_agent")
 WINDOW_HOURS = 24
+STATUS_TTL_S = 20.0
+DEFAULT_PRIVATE_HOSTS = "127.0.0.1,localhost"
+SQL_ROW_LIMIT = 1000
+_PAGES_DIR = Path(__file__).parent / "pages"
+PAGES = {name: (_PAGES_DIR / f"{name}.html").read_text(encoding="utf-8") for name in ("trace", "flow", "supervisor")}
 
 
 class CaseSubmit(BaseModel):
@@ -41,6 +51,15 @@ class CaseSubmit(BaseModel):
     fusion: list[dict[str, Any]] = Field(default_factory=list)
     ip_features: dict[str, Any] | None = None
     analyst_note: str = Field(default="", max_length=4000)
+
+
+class SqlQuery(BaseModel):
+    query: str = Field(min_length=1, max_length=4000)
+
+
+class ApprovalDecision(BaseModel):
+    decision: Literal["approved", "denied"]
+    note: str = Field(default="", max_length=500)
 
 
 def _iso(ts: float | None) -> str | None:
@@ -124,6 +143,41 @@ def recover_interrupted_runs(db: Database | None = None) -> int:
     return len(rows)
 
 
+def record_decision_lesson(db: Database, approval: dict, decision: str, note: dict) -> int:
+    """A human's decision becomes a one-sentence lesson the agents can recall as a hint, never as a rule."""
+    case = db.get_case(approval["case_id"]) or {}
+    technique, role = case.get("technique"), case.get("asset_role")
+    lesson = (f"A human {decision} {approval['action']} for {technique or 'no technique'} "
+              f"(asset role: {role or 'unknown'})")
+    # A note that reads like an instruction stays on the approval row and is kept out of what the agents read.
+    lesson += f": {note['text']}" if note["has_text"] and not note["suspicious"] else "."
+    return db.add_note(technique, role, lesson[:600], approval["id"])
+
+
+def _host_of(request: Request) -> str:
+    raw = (request.headers.get("host") or "").strip().lower()
+    if raw.startswith("["):
+        return raw[: raw.find("]") + 1]
+    return raw.split(":")[0]
+
+
+def require_private_host(request: Request) -> None:
+    """Everything but /health answers only on a private origin: loopback or the tailnet names Caddy preserves.
+
+    Any other Host gets a plain 404, so nothing is advertised if the service is ever reached another way.
+    """
+    allowed = {h.strip().lower()
+               for h in os.environ.get("NETSEC_AGENT_PRIVATE_HOSTS", DEFAULT_PRIVATE_HOSTS).split(",") if h.strip()}
+    if _host_of(request) not in allowed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+
+def _operator(request: Request) -> str:
+    """The basicauth user Caddy authenticated, when it passes it on; otherwise a neutral name."""
+    name = (request.headers.get("x-netsec-user") or "").strip()
+    return name[:64] if name and name.isprintable() else "operator"
+
+
 def _agent_ready() -> bool:
     try:
         build_graph()
@@ -139,15 +193,24 @@ def create_app() -> FastAPI:
             recover_interrupted_runs()
         except Exception as exc:
             LOGGER.warning("recover_interrupted_runs_failed: %s", exc)
+        if app.state.poller is not None:
+            app.state.poller.start()
         yield
+        if app.state.poller is not None:
+            app.state.poller.stop()
 
-    app = FastAPI(title="NETSEC triage agents", version=__version__, lifespan=lifespan)
+    # No generated docs pages: they would answer on any Host, outside the private-host gate.
+    app = FastAPI(title="NETSEC triage agents", version=__version__, lifespan=lifespan,
+                  docs_url=None, redoc_url=None, openapi_url=None)
+    private = APIRouter(dependencies=[Depends(require_private_host)])
     # At most this many graphs run at once; the rest wait in their task thread with the row in 'queued'.
     concurrency = max(1, int(os.environ.get("NETSEC_AGENT_ASYNC_CONCURRENCY", "2") or 2))
+    app.state.async_concurrency = concurrency
     app.state.async_slots = threading.BoundedSemaphore(concurrency)
+    app.state.status_cache = {"at": 0.0, "payload": None}
 
     def _run_case(case_id: str, payload: dict) -> None:
-        """Background task: wait for a slot, stream the graph, keep the row's trace current, store the verdict."""
+        """Wait for a slot, stream the graph, keep the row's trace current, store the verdict."""
         db = get_db()
         trace: list[dict] = []
         final: dict[str, Any] = {}
@@ -192,30 +255,70 @@ def create_app() -> FastAPI:
                 elapsed_s=time.time() - started,
             )
 
-    @app.post("/cases/submit-async", status_code=status.HTTP_202_ACCEPTED)
-    def cases_submit_async(body: CaseSubmit, background: BackgroundTasks, response: Response) -> dict:
-        """Returns 202 and a case id at once; the graph runs in the background. Poll GET /report/{case_id}."""
-        payload = body.model_dump()
+    def _register_case(payload: dict) -> tuple[dict, bool]:
+        """The case row of a payload and whether it was created now. One case per candidate of a session."""
         case = normalize_case(payload)
         db = get_db()
         existing = db.find_case(case["session_id"], case["candidate_id"])
-        case_id = new_id("ns")
-        if existing is None:
-            try:
-                db.create_case(case_id, sanitize_case(case)["clean_case"], case_metadata(case, build_profile(case)))
-            except sqlite3.IntegrityError:
-                existing = db.find_case(case["session_id"], case["candidate_id"])
-                if existing is None:
-                    raise
         if existing is not None:
-            # One case per candidate of a session: a second submit returns the first one.
-            response.status_code = status.HTTP_200_OK
-            return {"case_id": existing["id"], "status": existing["status"],
-                    "poll": f"/report/{existing['id']}", "duplicate": True}
-        background.add_task(_run_case, case_id, payload)
-        return {"case_id": case_id, "status": "queued", "poll": f"/report/{case_id}"}
+            return existing, False
+        try:
+            return db.create_case(new_id("ns"), sanitize_case(case)["clean_case"],
+                                  case_metadata(case, build_profile(case))), True
+        except sqlite3.IntegrityError:
+            existing = db.find_case(case["session_id"], case["candidate_id"])
+            if existing is None:
+                raise
+            return existing, False
 
-    @app.get("/report/{case_id}")
+    def _submit_from_poller(payload: dict) -> bool:
+        """The poller's path into the same steps as the endpoint; it runs the case in its own thread."""
+        body = CaseSubmit.model_validate(payload).model_dump()
+        row, created = _register_case(body)
+        if created:
+            _run_case(row["id"], body)
+        return created
+
+    source = (os.environ.get("NETSEC_AGENT_SOURCE_DB") or "").strip()
+    app.state.poller = Poller(
+        source, get_db, _submit_from_poller,
+        interval_s=float(os.environ.get("NETSEC_AGENT_POLL_SECONDS", "30") or 30),
+        lookback=int(os.environ.get("NETSEC_AGENT_POLL_LOOKBACK", "50") or 50),
+    ) if source else None
+
+    # ---- cases ----------------------------------------------------------
+
+    @private.post("/cases/submit-async", status_code=status.HTTP_202_ACCEPTED)
+    def cases_submit_async(body: CaseSubmit, background: BackgroundTasks, response: Response) -> dict:
+        """Returns 202 and a case id at once; the graph runs in the background. Poll GET /report/{case_id}."""
+        payload = body.model_dump()
+        row, created = _register_case(payload)
+        if not created:
+            # A second submit of the same candidate returns the first case.
+            response.status_code = status.HTTP_200_OK
+            return {"case_id": row["id"], "status": row["status"], "poll": f"/report/{row['id']}", "duplicate": True}
+        background.add_task(_run_case, row["id"], payload)
+        return {"case_id": row["id"], "status": "queued", "poll": f"/report/{row['id']}"}
+
+    @private.get("/cases/history")
+    def cases_history(limit: int = 20) -> dict:
+        """The newest cases first; the trace and flow pages use it to find what to show."""
+        rows = get_db().list_cases(limit=max(1, min(int(limit), 200)))
+        return {"items": [
+            {
+                "case_id": row["id"],
+                "submitted_at": _iso(row["submitted_at"]),
+                "session_id": row["session_id"],
+                "candidate_id": row["candidate_id"],
+                "technique": row["technique"],
+                "action": row["action"],
+                "priority": row["priority"],
+                "status": row["status"],
+            }
+            for row in rows
+        ]}
+
+    @private.get("/report/{case_id}")
     def report_case(case_id: str) -> dict:
         """One case: metadata, verdict, cited sources, timeline, token usage, the trace and its terminal lines."""
         row = get_db().get_case(case_id)
@@ -246,7 +349,7 @@ def create_app() -> FastAPI:
             "trace": trace,
         }
 
-    @app.get("/report")
+    @private.get("/report")
     def report_overview() -> dict:
         """The last 24 hours: counts by action and by technique, and the approvals waiting on a human."""
         db = get_db()
@@ -283,6 +386,90 @@ def create_app() -> FastAPI:
             ],
         }
 
+    # ---- operator endpoints ---------------------------------------------
+
+    @private.post("/approvals/{approval_id}/decide")
+    def approval_decide(approval_id: str, body: ApprovalDecision, request: Request) -> dict:
+        """Approve or deny a pending approval. The decision is also kept as a lesson in agent_notes."""
+        db = get_db()
+        note = sanitize_note(body.note)
+        row = db.decide_approval(approval_id, body.decision, _operator(request), note["text"])
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_not_pending_or_missing")
+        try:
+            record_decision_lesson(db, row, body.decision, note)
+        except Exception as exc:
+            # A lesson that cannot be written never fails the decision itself.
+            LOGGER.warning("agent_note_write_failed approval_id=%s: %s", approval_id, exc)
+        return {
+            "approval_id": row["id"],
+            "case_id": row["case_id"],
+            "action": row["action"],
+            "status": row["status"],
+            "decided_at": _iso(row["decided_at"]),
+            "decided_by": row["decided_by"],
+            "note_suspicious": note["suspicious"],
+        }
+
+    @private.get("/status")
+    def system_status(request: Request) -> dict:
+        """The banner of the trace terminal: host, service, policy, research, database, poller, what is missing."""
+        cache = app.state.status_cache
+        now = time.time()
+        if cache["payload"] is None or now - cache["at"] >= STATUS_TTL_S:
+            poller = app.state.poller.snapshot() if app.state.poller is not None else None
+            data = collect_status(get_db(), poller, app.state.async_concurrency)
+            cache.update(at=now, payload={"generated_at": _iso(now), "data": data, "lines": status_lines(data)})
+        return {**cache["payload"], "greeting": f"hello {_operator(request)} - {display_now()}"}
+
+    @private.post("/sql")
+    def operator_sql(body: SqlQuery) -> dict:
+        """A read-only SQL console over the agents' own database: one SELECT, PRAGMA, WITH or EXPLAIN per call."""
+        query = body.query.strip().rstrip(";").strip()
+        if not query:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query is required")
+        if ";" in query:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="one statement per call")
+        lead = query.split(None, 1)[0].lower()
+        if lead not in ("select", "pragma", "with", "explain"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="only SELECT, PRAGMA, EXPLAIN or WITH are accepted")
+        if lead in ("select", "with") and not re.search(r"\blimit\b", query, re.IGNORECASE):
+            query = f"{query} LIMIT {SQL_ROW_LIMIT}"
+        started = time.time()
+        try:
+            columns, rows = get_db().query_readonly(query, SQL_ROW_LIMIT)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"{type(exc).__name__}: {exc}") from exc
+        return {"query": query, "columns": columns, "rows": rows, "row_count": len(rows),
+                "elapsed_ms": int((time.time() - started) * 1000)}
+
+    # ---- operator pages -------------------------------------------------
+
+    def _page(name: str) -> HTMLResponse:
+        return HTMLResponse(PAGES[name], headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+
+    @private.get("/trace", response_class=HTMLResponse)
+    @private.get("/trace/", response_class=HTMLResponse, include_in_schema=False)
+    def trace_page() -> HTMLResponse:
+        """The live trace terminal."""
+        return _page("trace")
+
+    @private.get("/flow", response_class=HTMLResponse)
+    @private.get("/flow/", response_class=HTMLResponse, include_in_schema=False)
+    def flow_page() -> HTMLResponse:
+        """The live flow diagram of the newest case."""
+        return _page("flow")
+
+    @private.get("/supervisor", response_class=HTMLResponse)
+    @private.get("/supervisor/", response_class=HTMLResponse, include_in_schema=False)
+    def supervisor_page() -> HTMLResponse:
+        """The approvals inbox."""
+        return _page("supervisor")
+
+    # ---- health ---------------------------------------------------------
+
     @app.get("/health")
     def health() -> dict:
         db_ok = get_db().ready()
@@ -296,6 +483,7 @@ def create_app() -> FastAPI:
             "rag_ready": False,
         }
 
+    app.include_router(private)
     return app
 
 

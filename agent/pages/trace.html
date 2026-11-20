@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>NETSEC - Live Agent Trace (private)</title>
+<style>
+  html, body { margin: 0; background: #0c0c0c; color: #cccccc; }
+  body {
+    font-family: Consolas, "Cascadia Mono", Menlo, "DejaVu Sans Mono", monospace;
+    font-size: 13px; line-height: 1.4;
+    padding: 10px max(10px, env(safe-area-inset-right))
+             calc(12px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
+  .lbl { color: #16c60c; }
+  .dec { color: #f9f1a5; }
+  .hdr { color: #8a8a8a; }
+  .err { color: #e74856; }
+  .sys { color: #a3b1c2; }
+  .cur {
+    display: none; width: 8px; height: 15px; background: #cccccc;
+    vertical-align: -3px; animation: blink 1s steps(2) infinite;
+  }
+  .cur.on { display: inline-block; }
+  @keyframes blink { to { visibility: hidden; } }
+  .ln { display: block; }
+  @media (max-width: 700px) {
+    /* On a phone the wide alignment of the continuation lines is drawn as a short hanging indent, so a long
+       line wraps under its own text. The characters are untouched: copying gives the journal's lines. */
+    body { font-size: 12px; }
+    .ln { padding-left: 2ch; text-indent: -2ch; }
+    .ln.cont { padding-left: var(--w, 4ch); text-indent: calc(-1 * var(--w, 4ch)); }
+    .ind { display: inline-block; width: var(--w, 4ch); overflow: hidden; white-space: pre;
+           vertical-align: top; text-indent: 0; }
+  }
+</style>
+</head>
+<body>
+<pre id="term"># NETSEC live agent trace - PRIVATE - follows every new case
+</pre>
+<span id="cursor" class="cur"></span>
+<script>
+const term = document.getElementById("term");
+const cursor = document.getElementById("cursor");
+const only = new URLSearchParams(window.location.search).get("case");
+
+function apiPath(path) {
+  // Served under /netsec/ behind the reverse proxy: keep whatever prefix this page has.
+  const here = window.location.pathname;
+  const idx = here.lastIndexOf("/trace");
+  return (idx >= 0 ? here.substring(0, idx) : "") + path;
+}
+
+function classOf(line) {
+  const body = line.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} /, "");
+  if (body.startsWith("[GUARD") || body.startsWith("[PIPELINE")) return "err";
+  if (body.startsWith("[DECISION") || body.startsWith("[DONE")) return "dec";
+  if (body.startsWith("[")) return "lbl";
+  if (/^[=-]{10,}$/.test(body) || body.startsWith("AGENT RUN")) return "hdr";
+  return "";
+}
+
+function print(line, cls) {
+  // Follow the output only while the reader is at the bottom; scrolling up to read is left alone.
+  const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+  const s = document.createElement("span");
+  s.className = "ln" + (cls ? " " + cls : "");
+  const lead = /^ {4,}/.exec(line);
+  if (lead) {
+    // Keep the two alignment columns of the formatter (11 and 31 spaces) and any extra depth beyond them.
+    const n = lead[0].length;
+    const ind = document.createElement("span");
+    ind.className = "ind";
+    ind.textContent = lead[0];
+    s.classList.add("cont");
+    s.style.setProperty("--w", (4 + n - (n >= 31 ? 31 : Math.min(n, 11))) + "ch");
+    s.append(ind, line.slice(n) + "\n");
+  } else {
+    s.textContent = line + "\n";
+  }
+  term.appendChild(s);
+  if (atBottom) window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function get(path) {
+  const r = await fetch(apiPath(path), { headers: { "Accept": "application/json" }, cache: "no-store" });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.json();
+}
+
+function running(rep) {
+  const st = (rep.verdict || {}).status;
+  return st === "queued" || st === "processing";
+}
+
+const seen = new Set();
+let current = null, printed = 0, lastErr = "", idleShown = false;
+
+async function tick() {
+  try {
+    if (!current) {
+      // Between runs: the oldest case not printed yet, so a burst of cases comes out in the order it ran.
+      const items = (await get("/cases/history?limit=100")).items || [];
+      let next = null;
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (!seen.has(items[i].case_id)) { next = items[i].case_id; break; }
+      }
+      if (!next) {
+        if (!items.length && !idleShown) { print("(no cases yet)"); idleShown = true; }
+        cursor.classList.remove("on");
+        return;
+      }
+      current = next; printed = 0;
+    }
+    const rep = await get("/report/" + encodeURIComponent(current));
+    const active = running(rep);
+    // A queued case has no entries yet; its header is printed once the first agent has spoken.
+    if (!(active && !(rep.trace || []).length)) {
+      const lines = rep.trace_lines || [];
+      if (printed === 0 && lines.length) print("");
+      for (let i = printed; i < lines.length; i++) print(lines[i], classOf(lines[i]));
+      printed = lines.length;
+    }
+    cursor.classList.toggle("on", active);
+    if (!active) { seen.add(current); current = only ? current : null; if (only) stop(); }
+    lastErr = "";
+  } catch (err) {
+    // A restart of the service or the proxy shows up as 502/504 for a moment; say it once and keep polling.
+    if (err.message !== lastErr) {
+      const transient = ["502", "503", "504", "Failed to fetch"].includes(err.message);
+      print(transient ? "(connection lost: " + err.message + "; retrying)" : "error: " + err.message, "err");
+      lastErr = err.message;
+    }
+  }
+}
+
+async function banner() {
+  try {
+    const st = await get("/status");
+    print(st.greeting || "", "sys");
+    (st.lines || []).forEach(l => print(l, /^[=-]{10,}$/.test(l) ? "hdr" : "sys"));
+    print("");
+  } catch (err) {
+    print("status unavailable (" + err.message + ")", "err");
+  }
+}
+
+async function replayHistory() {
+  // On opening: the traces of the last 24 hours, newest first, at most 20 cases. Everything already in the
+  // history counts as seen, so the live loop prints only what arrives from now on.
+  try {
+    const items = (await get("/cases/history?limit=200")).items || [];
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    const done = items.filter(it => it.status !== "queued" && it.status !== "processing");
+    done.forEach(it => seen.add(it.case_id));
+    const recent = done.filter(it => {
+      const t = Date.parse(it.submitted_at || "");
+      return !Number.isFinite(t) || t >= cutoff;
+    }).slice(0, 20);
+    if (!recent.length) { print("--- no cases in the last 24 hours; following live ---", "hdr"); return; }
+    print("--- replaying " + recent.length + " case(s) from the last 24 hours, newest first ---", "hdr");
+    let rendered = 0, failed = 0;
+    for (const item of recent) {
+      try {
+        const lines = (await get("/report/" + encodeURIComponent(item.case_id))).trace_lines || [];
+        for (const line of lines) print(line, classOf(line));
+        print("");
+        rendered++;
+      } catch (e) { failed++; }
+    }
+    print(failed
+      ? "--- end of replay; rendered " + rendered + "/" + recent.length + " (" + failed + " errored); following live ---"
+      : "--- end of replay; following live ---", "hdr");
+  } catch (err) {
+    print("history replay failed: " + err.message, "err");
+  }
+}
+
+let timer = null;
+function stop() { if (timer) { clearInterval(timer); timer = null; } cursor.classList.remove("on"); }
+
+async function follow() {
+  await banner();
+  if (only) { current = only; print("--- case " + only + " ---", "hdr"); }
+  else await replayHistory();
+  await tick();
+  if (!(only && seen.has(only))) timer = setInterval(tick, 2000);
+}
+
+follow();
+</script>
+</body>
+</html>

@@ -119,6 +119,68 @@ def make_payload(
     }
 
 
+def write_netsec_db(path: Any, payloads: Iterable[Mapping[str, Any]], *, status: Mapping[int, str] | None = None) -> None:
+    """A NETSEC database with the real schema (server/db.py), filled so that it yields these payloads.
+
+    `status` overrides the state of a session by id; every session is 'done' otherwise.
+    """
+    from server import db as server_db  # the pipeline's own schema and migrations, stdlib only
+
+    conn = server_db.connect(str(path))
+    seen: set[int] = set()
+    for payload in payloads:
+        session = payload["session"]
+        session_id = int(session["id"])
+        if session_id not in seen:
+            seen.add(session_id)
+            pcap_id, _ = server_db.register_pcap(conn, session["pcap_sha256"], session.get("orig_name"), 1, None,
+                                                 f"/srv/netsec/raw/{session['pcap_sha256']}.pcap")
+            conn.execute(
+                "INSERT INTO sessions (id, pcap_id, label, status, kind, n_pkts, n_ips, duration_s, prompt_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (session_id, pcap_id, session.get("label"), (status or {}).get(session_id, "done"),
+                 session.get("kind") or "prod", session.get("n_pkts"), session.get("n_ips"),
+                 session.get("duration_s"), session.get("prompt_version")))
+        cur = conn.execute(
+            "INSERT INTO candidates (session_id, candidate_id, kind, rank, capped, context_json) VALUES (?, ?, ?, ?, 0, ?)",
+            (session_id, payload["candidate_id"], payload.get("kind"), payload.get("rank"),
+             json.dumps(payload.get("context") or {})))
+        candidate_row = cur.lastrowid
+        for f in payload.get("findings") or []:
+            conn.execute(
+                "INSERT INTO findings (session_id, layer, rule, ip, severity, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, f.get("layer"), f.get("rule"), f.get("ip"), f.get("severity"),
+                 json.dumps(f.get("detail") or {})))
+        for a in payload.get("adv_signals") or []:
+            conn.execute(
+                "INSERT INTO adv_signals (session_id, device, peer, signal, tactic, technique, score, severity, "
+                "count, first_ts, last_ts, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (session_id, a.get("device"), a.get("peer"), a.get("signal"), a.get("tactic"), a.get("technique"),
+                 a.get("score"), a.get("severity"), a.get("count"), a.get("first_ts"), a.get("last_ts"),
+                 a.get("detail")))
+        for f in payload.get("fusion") or []:
+            conn.execute(
+                "INSERT OR REPLACE INTO fusion_scores (session_id, device, score, engines_hit, window_start) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session_id, f.get("device"), f.get("score"), f.get("engines_hit"), f.get("window_start")))
+        features = dict(payload.get("ip_features") or {})
+        if features:
+            columns = ["session_id", *features]
+            conn.execute(
+                f"INSERT OR REPLACE INTO ip_features ({', '.join(columns)}) VALUES ({', '.join('?' * len(columns))})",
+                (session_id, *features.values()))
+        verdict = payload.get("judge_verdict")
+        if verdict:
+            conn.execute(
+                "INSERT INTO verdicts (candidate_row, session_id, verdict, category, confidence, priority_score, "
+                "guardrail_applied, needs_human_review, verdict_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')",
+                (candidate_row, session_id, verdict.get("verdict"), verdict.get("category"),
+                 verdict.get("confidence"), verdict.get("priority_score"), verdict.get("guardrail_applied"),
+                 verdict.get("needs_human_review")))
+    conn.commit()
+    conn.close()
+
+
 def scenario_payload(scenario: Mapping[str, Any], vm_candidates: Mapping[str, dict]) -> dict:
     """A scenario starts from a real candidate (`base`), a literal payload (`raw`) or the builder (`build`)."""
     if scenario.get("base"):

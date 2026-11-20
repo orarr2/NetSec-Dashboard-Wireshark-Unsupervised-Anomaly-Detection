@@ -187,7 +187,7 @@ class Database:
     def list_cases(self, since: float | None = None, limit: int = 500) -> list[dict]:
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM cases WHERE submitted_at >= ? ORDER BY submitted_at DESC LIMIT ?",
+                "SELECT * FROM cases WHERE submitted_at >= ? ORDER BY submitted_at DESC, rowid DESC LIMIT ?",
                 (since or 0.0, limit),
             ).fetchall()
         return [dict(r) for r in rows]
@@ -196,6 +196,27 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM cases WHERE status IN ('queued', 'processing')").fetchall()
         return [dict(r) for r in rows]
+
+    def cases_per_session(self) -> dict[int, int]:
+        """How many cases exist for each NETSEC session; the poller compares it with the session's candidates."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT session_id, COUNT(*) AS n FROM cases WHERE session_id IS NOT NULL GROUP BY session_id"
+            ).fetchall()
+        return {int(r["session_id"]): int(r["n"]) for r in rows}
+
+    def query_readonly(self, query: str, limit: int = 1000) -> tuple[list[str], list[list]]:
+        """Run one statement on a connection that cannot write, whatever the statement says."""
+        with self.connect():
+            pass  # the file and its tables exist before a read-only connection opens it
+        conn = sqlite3.connect(f"{Path(self.path).resolve().as_uri()}?mode=ro", uri=True, timeout=10)
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            cur = conn.execute(query)
+            columns = [d[0] for d in cur.description] if cur.description else []
+            return columns, [list(r) for r in cur.fetchmany(limit)]
+        finally:
+            conn.close()
 
     # ---- approvals -----------------------------------------------------
 
@@ -220,6 +241,24 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM approvals WHERE case_id = ? ORDER BY created_at", (case_id,)).fetchall()
         return [dict(r) for r in rows]
+
+    def get_approval(self, approval_id: str) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+        return dict(row) if row else None
+
+    def decide_approval(self, approval_id: str, decision: str, decided_by: str, note: str = "") -> dict | None:
+        """Record a human's decision on a pending approval. Returns the row, or None when it was not pending."""
+        with self.connect() as conn:
+            cur = conn.execute(
+                "UPDATE approvals SET status = ?, decided_at = ?, decided_by = ?, note = ? "
+                "WHERE id = ? AND status = 'pending'",
+                (decision, time.time(), decided_by, note, approval_id),
+            )
+            if cur.rowcount != 1:
+                return None
+            row = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+        return dict(row)
 
     # ---- work orders, notes, feedback ----------------------------------
 

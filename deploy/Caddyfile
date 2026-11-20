@@ -8,6 +8,7 @@
 # Routes (order matters - specific paths win over the catch-all):
 #   /rag/   -> the RAG chat  (host 5200)
 #   /chat/  -> the Companion (host 5100)
+#   /netsec/ -> the triage agents (host 8010 - prefix stripped)
 #   /       -> the portal    (host 8080 - static, no base-path config)
 #
 # NOT proxied (each has its own auth or is defense-in-depth):
@@ -103,6 +104,18 @@ netsec-agent.tail37ac21.ts.net {
     # (not handle_path) so the prefix reaches Dash intact.
     handle /chat/* {
         reverse_proxy 100.68.246.54:5100
+    }
+
+    # /netsec/ -> the triage agents (deploy/netsec-agent.service).
+    # handle_path strips the prefix: the service has no base-path
+    # setting, and its pages build their URLs from wherever they are
+    # served. The Host header reaches the service unchanged, which is
+    # what its private-host gate checks. The basicauth user is passed
+    # on so that an approval records who decided it.
+    handle_path /netsec/* {
+        reverse_proxy 100.68.246.54:8010 {
+            header_up X-NetSec-User {http.auth.user.id}
+        }
     }
 
     # Catch-all: the static portal.

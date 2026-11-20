@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>NETSEC - Supervisor Inbox (private)</title>
+<style>
+:root {
+  --bg: #0b1220; --card: #121a2e; --border: #1f2a44; --text: #e6ecff; --dim: #8a95b3;
+  --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --info: #38bdf8;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  padding: calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+           calc(14px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.hdr { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.hdr h1 { margin: 0; font-size: 21px; color: var(--info); }
+.hdr .badge { margin-left: auto; background: rgba(239,68,68,.18); color: var(--bad); padding: 3px 10px;
+  border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+input, button, select { background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; font-size: 16px; font-family: inherit; min-height: 48px; }
+button { cursor: pointer; font-weight: 700; }
+button:active { transform: scale(0.97); }
+button:disabled { opacity: .5; }
+button.approve { background: var(--ok); color: #06200f; border-color: var(--ok); }
+button.deny { background: transparent; color: var(--bad); border-color: var(--bad); }
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+  margin-bottom: 12px; }
+.panel h3 { margin: 0 0 8px 0; color: var(--info); font-size: 16px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.hint { color: var(--dim); font-size: 13px; margin-top: 8px; min-height: 18px; }
+.counts { display: flex; gap: 8px; flex-wrap: wrap; }
+.counts span { border: 1px solid var(--border); padding: 5px 11px; border-radius: 999px; font-size: 12px; }
+.counts b { color: var(--info); }
+.row { border: 1px solid var(--border); border-left: 4px solid var(--dim); border-radius: 10px;
+  padding: 12px 14px; margin: 10px 0; }
+.row.urgent { border-left-color: var(--bad); }
+.row .top { font-weight: 700; font-size: 15px; word-break: break-all; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
+  margin-left: 8px; letter-spacing: .4px; vertical-align: middle; background: rgba(138,149,179,.18);
+  color: var(--dim); }
+.pill.urgent { background: rgba(239,68,68,.18); color: var(--bad); }
+.pill.overdue { background: rgba(245,158,11,.22); color: var(--warn); }
+.row .meta { color: var(--dim); font-size: 12px; margin-top: 4px; }
+.row .why { font-size: 13px; margin-top: 8px; word-break: break-word; }
+.row .act { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.row .act input { flex: 1 1 220px; }
+.row .act a { color: var(--info); align-self: center; font-size: 14px; padding: 12px 4px; }
+.row .msg { color: var(--bad); font-size: 12px; margin-top: 6px; min-height: 16px; }
+.empty { color: var(--dim); text-align: center; padding: 28px 16px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>Supervisor Inbox</h1>
+  <span class="badge">PRIVATE</span>
+</div>
+
+<div class="panel">
+  <div class="bar">
+    <button id="refresh">Refresh</button>
+    <select id="speed" aria-label="refresh interval">
+      <option value="10000">Auto 10s</option>
+      <option value="30000">Auto 30s</option>
+      <option value="0">Manual</option>
+    </select>
+  </div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<div class="panel">
+  <h3>Overview</h3>
+  <div class="counts" id="counts"></div>
+</div>
+
+<div class="panel">
+  <h3>Pending approvals</h3>
+  <div id="pending"></div>
+</div>
+
+<script>
+const el = (id) => document.getElementById(id);
+const ACTIONS = ["urgent", "standard", "human_review", "known_pattern", "monitor"];
+let timer = null;
+
+function apiPath(path) {
+  const here = window.location.pathname;
+  const idx = here.lastIndexOf("/supervisor");
+  return (idx >= 0 ? here.substring(0, idx) : "") + path;
+}
+
+async function call(path, options) {
+  const r = await fetch(apiPath(path), Object.assign({ cache: "no-store" }, options || {}));
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).detail || ""; } catch (e) {}
+    throw new Error(r.status + (detail ? " " + detail : ""));
+  }
+  return r.json();
+}
+
+function node(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+async function decide(a, decision, note, buttons, msg) {
+  buttons.forEach(b => b.disabled = true);
+  try {
+    await call("/approvals/" + encodeURIComponent(a.approval_id) + "/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: decision, note: note.value }),
+    });
+    tick();
+  } catch (err) {
+    msg.textContent = "could not record the decision: " + err.message;
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+
+function row(a) {
+  const kind = String(a.action || "");
+  const div = node("div", "row " + kind);
+  const top = node("div", "top", a.case_id);
+  top.appendChild(node("span", "pill " + kind, kind.replace(/_/g, " ")));
+  if (a.overdue) top.appendChild(node("span", "pill overdue", "overdue " + a.age_hours + "h"));
+  div.appendChild(top);
+  div.appendChild(node("div", "meta", "approval " + a.approval_id + " - priority " + a.priority
+    + " - created " + a.created_at + " - waiting " + a.age_hours + "h"));
+  const why = node("div", "why", "");
+  div.appendChild(why);
+  // The rationale comes from the case report; the list itself stays one request.
+  call("/report/" + encodeURIComponent(a.case_id)).then(rep => {
+    const md = rep.metadata || {};
+    why.textContent = (md.candidate_id || "") + (md.technique ? " - " + md.technique : "") + " - "
+      + ((rep.verdict || {}).rationale || "");
+  }).catch(() => {});
+  const act = node("div", "act");
+  const note = document.createElement("input");
+  note.type = "text"; note.maxLength = 500; note.placeholder = "note (optional)"; note.autocomplete = "off";
+  const approve = node("button", "approve", "Approve");
+  const deny = node("button", "deny", "Deny");
+  const link = node("a", "", "View trace");
+  link.href = apiPath("/trace") + "?case=" + encodeURIComponent(a.case_id);
+  const msg = node("div", "msg", "");
+  approve.addEventListener("click", () => decide(a, "approved", note, [approve, deny], msg));
+  deny.addEventListener("click", () => decide(a, "denied", note, [approve, deny], msg));
+  act.append(note, approve, deny, link);
+  div.append(act, msg);
+  return div;
+}
+
+async function tick() {
+  try {
+    const d = await call("/report");
+    const counts = el("counts");
+    counts.replaceChildren();
+    const total = node("span", "", " " + (d.total_cases ?? 0));
+    total.prepend(node("b", "", "Total (last " + d.window_hours + "h):"));
+    counts.appendChild(total);
+    for (const action of ACTIONS) {
+      const chip = node("span", "", " " + ((d.by_action || {})[action] ?? 0));
+      chip.prepend(node("b", "", action.replace(/_/g, " ") + ":"));
+      counts.appendChild(chip);
+    }
+    const pending = d.pending_approvals || [];
+    const list = el("pending");
+    // A card that is being typed into is not rebuilt under the operator's fingers.
+    const typing = list.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
+    if (!typing) {
+      list.replaceChildren();
+      if (!pending.length) list.appendChild(node("div", "empty", "no pending approvals"));
+      else pending.forEach(a => list.appendChild(row(a)));
+    }
+    el("hint").textContent = "Last refresh " + new Date().toLocaleTimeString()
+      + (d.overdue_approvals ? " - " + d.overdue_approvals + " overdue (sla " + d.approval_sla_hours + "h)" : "");
+    el("hint").style.color = "";
+  } catch (err) {
+    el("hint").textContent = "error: " + err.message;
+    el("hint").style.color = "var(--bad)";
+  }
+}
+
+function start() {
+  if (timer) clearInterval(timer);
+  const speed = parseInt(el("speed").value, 10) || 0;
+  tick();
+  if (speed > 0) timer = setInterval(tick, speed);
+}
+
+el("refresh").addEventListener("click", start);
+el("speed").addEventListener("change", start);
+start();
+</script>
+</body>
+</html>
