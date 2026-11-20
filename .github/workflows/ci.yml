@@ -45,6 +45,27 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v --timeout=900
 
+  agent-tests:
+    # The triage agents have their own requirements and need neither tshark
+    # nor the analysis stack, so their offline tests run in a job of their own.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: agent/requirements.txt
+
+      - name: Install the agent requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r agent/requirements.txt
+
+      - name: Run the agent tests
+        run: pytest agent/tests -v
+
   module-sync:
     runs-on: ubuntu-latest
     steps:
