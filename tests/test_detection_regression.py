@@ -25,8 +25,17 @@ _cache = {}
 
 
 def result_for(name):
-    """Each PCAP is analyzed once per test session (ML included)."""
+    """Each PCAP is analyzed once per test session (ML included).
+
+    A PCAP that is not tracked in the repo (for example a reference capture
+    the owner keeps locally) is skipped rather than treated as a detection
+    failure; the test only has an opinion on the detection code, not on
+    whether the file was shipped.
+    """
     if name not in _cache:
+        path = os.path.join(ROOT, "attack_tests", "pcaps", name)
+        if not os.path.exists(path):
+            pytest.skip(f"{name} is not in attack_tests/pcaps/")
         _cache[name] = evaluate.evaluate_pcap(name, GT[name], quiet=True)
     return _cache[name]
 

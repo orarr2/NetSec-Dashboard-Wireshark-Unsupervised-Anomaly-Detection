@@ -71,12 +71,31 @@ def find_tshark():
     return found
 
 
+def _known_fields(tshark):
+    """The set of field names the installed tshark knows, or None when the probe failed."""
+    try:
+        text = subprocess.check_output([tshark, "-G", "fields"], encoding="utf-8",
+                                       errors="replace", stderr=subprocess.DEVNULL, timeout=15)
+    except Exception:
+        return None
+    out = set()
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0] == "F":
+            out.add(parts[2])
+    return out
+
+
 def measure(pcap_path, tshark, keep=False):
     """Stream the union field export, gzip it, and return the numbers."""
     cmd = [tshark, "-r", pcap_path, "-n", "-T", "fields",
            "-E", "header=n", "-E", "separator=\t",
            "-E", "occurrence=f", "-E", "quote=n"]
-    for f in UNION_FIELDS:
+    # Drop fields this tshark does not know (older Ubuntu packages predate ja4, for example),
+    # so one unknown field does not make the whole run fail.
+    known = _known_fields(tshark)
+    fields = [f for f in UNION_FIELDS if known is None or f in known]
+    for f in fields:
         cmd += ["-e", f]
 
     raw_bytes = os.path.getsize(pcap_path)

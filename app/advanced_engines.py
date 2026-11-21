@@ -115,16 +115,76 @@ _ADV_COLS = [
     "dhcp_sid",
 ]
 
+_ADV_UNSUPPORTED_FIELDS: set = set()
+
+
+def _adv_tshark_supports(tsh, field):
+    """True iff this tshark build accepts `field` as a `-e` argument.
+
+    Older distribution packages (Ubuntu 22.04 ships tshark 3.6) do not know
+    about `tls.handshake.ja4` and refuse the whole command with exit code 2,
+    which would turn every advanced-engines test red on that runner. This
+    probe is cached per-process in `_ADV_UNSUPPORTED_FIELDS` so the typical
+    case (every field is known) costs one subprocess call per unknown field.
+    """
+    try:
+        _adv_subprocess.check_output(
+            [tsh, "-G", "fields"], encoding="utf-8", errors="replace",
+            stderr=_adv_subprocess.DEVNULL, timeout=15)
+    except Exception:
+        return True  # we cannot probe; assume supported and let the real call succeed or fail
+    # The costly dump is cached on the tshark binary via lru_cache below.
+    return field in _adv_tshark_fields_of(tsh)
+
+
+def _adv_tshark_fields_of(tsh):
+    """The set of field names the installed tshark knows, cached per binary."""
+    try:
+        from functools import lru_cache
+    except ImportError:
+        lru_cache = lambda **kw: (lambda f: f)
+    cached = getattr(_adv_tshark_fields_of, "_cache", None)
+    if cached is not None and cached[0] == tsh:
+        return cached[1]
+    try:
+        text = _adv_subprocess.check_output(
+            [tsh, "-G", "fields"], encoding="utf-8", errors="replace",
+            stderr=_adv_subprocess.DEVNULL, timeout=15)
+    except Exception:
+        _adv_tshark_fields_of._cache = (tsh, None)
+        return None
+    # Each row of -G fields begins with 'F' + tab + the display name + tab + abbreviation.
+    out = set()
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0] == "F":
+            out.add(parts[2])
+    _adv_tshark_fields_of._cache = (tsh, out)
+    return out
+
+
 def _adv_load_pk(pcap_path, label, tshark_path=None):
     tsh = tshark_path if tshark_path is not None else _adv_find_tshark()
     if not tsh: return None
+    # Drop fields this tshark does not know (e.g. tls.handshake.ja4 before ja4 landed in tshark 4.2).
+    known = _adv_tshark_fields_of(tsh)
+    if known is not None:
+        fields = [f for f in _ADV_TSHARK_FIELDS if f in known]
+        cols = [c for f, c in zip(_ADV_TSHARK_FIELDS, _ADV_COLS) if f in known]
+    else:
+        fields, cols = list(_ADV_TSHARK_FIELDS), list(_ADV_COLS)
     cmd = [tsh, "-r", str(pcap_path), "-n", "-T", "fields",
            "-E", "header=n", "-E", "separator=\t", "-E", "occurrence=f", "-E", "quote=n"]
-    for f in _ADV_TSHARK_FIELDS: cmd += ["-e", f]
+    for f in fields: cmd += ["-e", f]
     raw = _adv_subprocess.check_output(cmd, encoding="utf-8", errors="replace",
                                        stderr=_adv_subprocess.DEVNULL)
     df = _adv_pd.read_csv(_adv_io.StringIO(raw), sep="\t", header=None,
-                          names=_ADV_COLS, dtype=str, na_filter=False, low_memory=False)
+                          names=cols, dtype=str, na_filter=False, low_memory=False)
+    # Reintroduce any columns that were stripped because this tshark did not know the field, as empty strings.
+    for name in _ADV_COLS:
+        if name not in df.columns:
+            df[name] = ""
+    df = df[_ADV_COLS]
     if not len(df): return df
     df["ts"]  = _adv_pd.to_numeric(df["ts"],  errors="coerce")
     df["len"] = _adv_pd.to_numeric(df["len"], errors="coerce").fillna(0).astype(int)
