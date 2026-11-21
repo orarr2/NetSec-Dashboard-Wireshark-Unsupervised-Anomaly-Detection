@@ -155,7 +155,7 @@ def test_status_is_the_banner_of_the_trace_page(client):
         ["host", "load", "service", "agents", "policy", "research", "database", "poller", "missing"]
     assert "  agents    model layer off (rule tree only)  wall clock 360s  parallel runs 2" in lines
     assert f"  policy    {policy.POLICY_VERSION}  actions urgent, standard, human_review, known_pattern, monitor" in lines
-    assert "  research  static_table (a stand-in until the corpus of phase P3)" in lines
+    assert "  research  static_table (a stand-in until the corpus is wired)" in lines
     assert "  database  1 cases in 24h: human_review 1   approvals pending 1 (overdue 0, sla 24h)" in lines
     assert "  poller    off" in lines
     assert lines[-2] == ("  missing   live models (phase P2); research corpus (phase P3); "

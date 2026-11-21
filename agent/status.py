@@ -13,7 +13,8 @@ from typing import Any
 from agent import __version__, policy
 from agent.chat import use_live
 from agent.db import Database
-from agent.research import BACKEND
+from agent.corpus.store import corpus_path, open_corpus
+from agent.research import BACKEND as _STATIC_BACKEND
 from agent.state import caps
 from agent.trace import _clock
 
@@ -98,6 +99,22 @@ def _database(db: Database) -> dict[str, Any]:
     }
 
 
+def _research_info() -> dict[str, Any]:
+    """The research backend actually in use, with how many chunks the corpus holds."""
+    store = open_corpus()
+    if store is None:
+        return {"backend": _STATIC_BACKEND, "corpus_path": corpus_path()}
+    try:
+        return {
+            "backend": "corpus", "corpus_path": store.path, "chunks": store.count(),
+            "built_at": store.get_meta("built_at"),
+            "embed_model": store.get_meta("embed_model"),
+            "sources": store.get_meta("sources"),
+        }
+    finally:
+        store.close()
+
+
 def collect_status(db: Database, poller: dict[str, Any] | None, async_concurrency: int) -> dict[str, Any]:
     database = _database(db)
     poller = poller or {"enabled": False}
@@ -105,7 +122,8 @@ def collect_status(db: Database, poller: dict[str, Any] | None, async_concurrenc
     missing = []
     if not live:
         missing.append("live models (phase P2)")
-    if BACKEND == "static_table":
+    research_info = _research_info()
+    if research_info["backend"] == "static_table":
         missing.append("research corpus (phase P3)")
     if not poller.get("enabled"):
         missing.append("poller is off (NETSEC_AGENT_SOURCE_DB is not set)")
@@ -126,7 +144,7 @@ def collect_status(db: Database, poller: dict[str, Any] | None, async_concurrenc
             "policy_version": policy.POLICY_VERSION,
             "actions": list(policy.get("actions", default=[])),
         },
-        "research": {"backend": BACKEND},
+        "research": research_info,
         "database": database,
         "poller": poller,
         "missing": missing,
@@ -159,9 +177,14 @@ def status_lines(d: dict[str, Any]) -> list[str]:
                   f"cases submitted {p['submitted_total']}  last poll {last}")
         if p.get("last_error"):
             poller += f"  error: {p['last_error']}"
-    research = d["research"]["backend"]
-    if research == "static_table":
-        research += " (a stand-in until the corpus of phase P3)"
+    r = d["research"]
+    if r["backend"] == "static_table":
+        research = "static_table (a stand-in until the corpus is wired)"
+    else:
+        chunks = r.get("chunks")
+        built = (r.get("built_at") or "")[:10]
+        model = r.get("embed_model") or "?"
+        research = f"corpus  {chunks} chunks  built {built}  embedder {model}"
     return [
         BAR,
         f"  NETSEC agents - {'degraded' if degraded else 'operational'}   {h['hostname']}   {display_now()}",
