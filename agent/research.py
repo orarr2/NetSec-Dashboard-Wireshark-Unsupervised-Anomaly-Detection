@@ -69,6 +69,9 @@ def query_security_standards(technique: str | None, asset_role: str | None = Non
     questions = list(policy.get("research", "questions", default=[]))
     query = f"security guidance for technique {technique or 'unknown'} (asset role: {asset_role or 'unknown'}): " \
             f"{', '.join(questions)}"
+    # Until the real corpus of phase P3 exists this backend is a stand-in and its sufficiency is marked as such.
+    # The `rag_insufficient_coverage` floor fires only on `insufficient_coverage`, so standards do not stop here now.
+    sufficiency = "stand_in_backend" if BACKEND == "static_table" else "insufficient_coverage"
     out = {
         "backend": BACKEND,
         "rag_query": query,
@@ -76,7 +79,7 @@ def query_security_standards(technique: str | None, asset_role: str | None = Non
         "procedures": [],
         "tool_result_ids": [],
         "coverage": "no_match",
-        "decision_coverage": {"answered": [], "missing": questions, "sufficiency": "insufficient_coverage"},
+        "decision_coverage": {"answered": [], "missing": questions, "sufficiency": sufficiency},
     }
     if not technique:
         out["coverage"] = "not_applicable"

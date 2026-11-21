@@ -189,6 +189,9 @@ def apply_floors(
         ("urgent_preconditions_not_met", action == "urgent" and not urgent_ok, human, ",".join(urgent_missing)),
         ("coverage_no_match", bool(profile.get("primary_technique")) and coverage == "no_match" and action != human,
          human, f"technique {profile.get('primary_technique')}"),
+        # The floor only fires on an explicit "insufficient_coverage"; `stand_in_backend` is the default
+        # the static table returns until the real corpus is wired (phase P3). The trigger shows the list
+        # of still-missing policy questions, which is the only meaningful hint before the corpus exists.
         ("rag_insufficient_coverage",
          action == "standard" and sufficiency == "insufficient_coverage" and not catalogue.get("match"), human,
          ",".join(missing_q)),

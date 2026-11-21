@@ -176,14 +176,26 @@ def test_floor_coverage_no_match():
 
 def test_floor_insufficient_coverage_stops_a_model_standard():
     profile = _profile(rules=["scan_alerts"], ml=ML_AGREES)
-    final = _floors(_model("standard"), profile, research=_research(profile))
+    # The floor only fires on explicit `insufficient_coverage`; `stand_in_backend` (the default until
+    # the real corpus is wired in phase P3) is exempt by design.
+    final = _floors(_model("standard"), profile, research=_research(profile, "insufficient_coverage"))
     assert (final["action"], final["floor_reason"]) == ("human_review", "rag_insufficient_coverage")
-    assert final["floor_trigger"] == "containment,severity,false_positive"
+    assert final["floor_trigger"] == ""
 
 
 def test_insufficient_coverage_is_exempt_only_on_a_catalogue_match():
     profile = _profile(rules=["scan_alerts"], ml=ML_AGREES)
-    final = _floors(_model("standard"), profile, research=_research(profile), catalogue=CATALOGUE)
+    final = _floors(_model("standard"), profile,
+                    research=_research(profile, "insufficient_coverage"), catalogue=CATALOGUE)
+    assert (final["action"], final["floor_applied"]) == ("standard", False)
+
+
+def test_the_stand_in_backend_does_not_fire_the_floor():
+    """Until the real corpus is wired, the research step's sufficiency is `stand_in_backend` and the floor
+    does not fire; a model standard verdict on a fired rule stays standard."""
+    profile = _profile(rules=["scan_alerts"], ml=ML_AGREES)
+    # The default research returns the stand-in backend.
+    final = _floors(_model("standard"), profile, research=_research(profile))
     assert (final["action"], final["floor_applied"]) == ("standard", False)
 
 

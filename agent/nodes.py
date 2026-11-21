@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
 from typing import Any, Mapping
 
-from agent import policy
-from agent.chat import llm_skip_reason
+from agent import factcheck, policy, prompts
+
+LOGGER = logging.getLogger("netsec_agent")
+from agent.chat import ModelError, chat, deadline_now, llm_skip_reason, use_live
 from agent.db import get_db
 from agent.profile import build_profile, fired_rules, own_adv_rows
 from agent.research import query_security_standards
-from agent.rule_tree import decide_rule_based
+from agent.rule_tree import apply_floors, decide_rule_based
 from agent.sanitize import sanitize_case
 from agent.state import (
     GATED_ACTIONS,
@@ -101,30 +104,73 @@ def sanitize_node(state: CaseState) -> dict:
     }
 
 
+def _rule_intake(note_text: str, families_reported: set[str]) -> dict:
+    """The deterministic reading of a note: keywords, addresses, urgency, and a flag when it contradicts."""
+    text = note_text.lower()
+    mentioned = [family for family, rx in _NOTE_KEYWORDS.items() if re.search(rx, text)]
+    contradicts = bool(mentioned) and not (set(mentioned) & families_reported)
+    return {
+        "mentioned": mentioned, "reported_by_engines": sorted(families_reported),
+        "devices": sorted(set(_IP.findall(note_text)))[:5],
+        "urgency_claimed": bool(_URGENCY.search(note_text)),
+        "contradictions": ["technique"] if contradicts else [],
+    }
+
+
+def _llm_intake(note_text: str, families_reported: set[str], state_dict: Mapping[str, Any]) -> tuple[dict, dict]:
+    """The LLM's reading of the same note. The rule reading stays the fallback on any failure."""
+    reply = chat(
+        [{"role": "system", "content": prompts.intake_prompt()},
+         {"role": "user", "content": prompts.render_case(state_dict["case"],
+                                                         extra={"analyst_note": note_text,
+                                                                "engines_reported": sorted(families_reported)})}],
+        json_format=True, deadline=deadline_now(state_dict),
+    )
+    parsed = factcheck.repair_json(reply["content"])
+    mentioned = [str(f) for f in (parsed.get("mentioned_families") or []) if isinstance(f, str)]
+    devices = [str(d) for d in (parsed.get("mentioned_devices") or []) if isinstance(d, str)][:5]
+    urgency = bool(parsed.get("urgency_claimed"))
+    disagrees = bool(parsed.get("disagrees_with_engines")) or (bool(mentioned)
+                                                               and not (set(mentioned) & families_reported))
+    return {
+        "mentioned": mentioned, "reported_by_engines": sorted(families_reported), "devices": devices,
+        "urgency_claimed": urgency, "contradictions": ["technique"] if disagrees else [],
+    }, {"model": reply["model"], "calls": reply["calls"], "latency_s": reply["latency_s"],
+        "tokens_in": reply["tokens_in"], "tokens_out": reply["tokens_out"], "mode": reply["mode"]}
+
+
 def signal_extractor_node(state: CaseState) -> dict:
     """Intake: what the analyst note claims and where it contradicts the engines. Without a note it passes through."""
     note = (state.get("sanitized") or {}).get("note") or {}
+    tokens_in = tokens_out = 0
+    content: dict[str, Any] = {"has_text": bool(note.get("has_text")), "source": "none", "llm_used": False}
+
     if not note.get("has_text"):
-        content = {"has_text": False, "source": "none", "llm_used": False}
+        pass
     elif note.get("suspicious"):
-        content = {"has_text": True, "source": "none", "llm_used": False, "suspicious": True,
-                   "mentioned": [], "devices": [], "urgency_claimed": False, "contradictions": []}
+        content.update(has_text=True, suspicious=True, mentioned=[], devices=[], urgency_claimed=False,
+                       contradictions=[])
     else:
-        text = note["text"].lower()
-        mentioned = [family for family, rx in _NOTE_KEYWORDS.items() if re.search(rx, text)]
         reported = engine_families(state["case"])
-        contradicts = bool(mentioned) and not (set(mentioned) & reported)
-        content = {
-            "has_text": True, "source": "rules", "llm_used": False, "llm_skipped_reason": llm_skip_reason(),
-            "mentioned": mentioned, "reported_by_engines": sorted(reported),
-            "devices": sorted(set(_IP.findall(note["text"])))[:5],
-            "urgency_claimed": bool(_URGENCY.search(note["text"])),
-            "contradictions": ["technique"] if contradicts else [],
-        }
+        # The signal gate of the Intake worker: no note, no call.
+        if use_live():
+            try:
+                parsed, llm = _llm_intake(note["text"], reported, state)
+                content.update(parsed, source="llm", llm_used=True, llm=llm)
+                tokens_in, tokens_out = llm["tokens_in"], llm["tokens_out"]
+            except (ModelError, TimeoutError, ValueError, KeyError) as exc:
+                LOGGER.warning("intake_llm_failed: %s", type(exc).__name__)
+                content.update(_rule_intake(note["text"], reported), source="rules", llm_used=False,
+                               llm_skipped_reason=f"model fallback: {type(exc).__name__}; the rule path stands")
+        else:
+            content.update(_rule_intake(note["text"], reported), source="rules", llm_used=False,
+                           llm_skipped_reason=llm_skip_reason())
     return {
         "intake_signals": content,
         "next_hop": "supervisor",
         "last_speaker": "signal_extractor",
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
         "trace": [_entry(state, "signal_extractor", "handoff", content)],
     }
 
@@ -255,27 +301,152 @@ def rag_retriever_node(state: CaseState) -> dict:
     }
 
 
+def _llm_decision(
+    *,
+    case: Mapping[str, Any], profile: Mapping[str, Any], research: Mapping[str, Any],
+    sanitized: Mapping[str, Any], intake: Mapping[str, Any], tree: Mapping[str, Any],
+    state_dict: Mapping[str, Any],
+) -> tuple[dict, dict, list[str]]:
+    """One ReAct hop: ask the model, repair, fact-check, and on failure ask once more with the reasons.
+
+    Returns the verdict the model proposed, the accounting of the calls, and the reasons of the last
+    fact-check pass (empty when the verdict is good).
+    """
+    base_messages = [
+        {"role": "system", "content": prompts.decision_prompt()},
+        {"role": "user", "content": prompts.render_case(case, profile, research,
+                                                        extra={"rule_tree_verdict": dict(tree),
+                                                               "intake_signals": dict(intake),
+                                                               "sanitized_summary": {
+                                                                   "suspicious": sanitized.get("suspicious"),
+                                                                   "pii_redacted": sanitized.get("pii_redacted"),
+                                                               }})},
+    ]
+    calls, tokens_in, tokens_out, latency = 0, 0, 0, 0.0
+    model_name = "offline:stub"
+    reasons: list[str] = []
+    repair_rounds = int(policy.get("grounding", "retry_on_fail", default=1))
+    attempt_messages = list(base_messages)
+    verdict: dict = {}
+    for attempt in range(1 + repair_rounds):
+        reply = chat(attempt_messages, json_format=True, deadline=deadline_now(state_dict))
+        calls += int(reply.get("calls") or 1)
+        tokens_in += int(reply.get("tokens_in") or 0)
+        tokens_out += int(reply.get("tokens_out") or 0)
+        latency += float(reply.get("latency_s") or 0.0)
+        model_name = reply.get("model") or model_name
+        try:
+            parsed = factcheck.repair_json(reply["content"])
+        except (ValueError, KeyError, TypeError) as exc:
+            reasons = [f"json_parse_failed: {type(exc).__name__}"]
+            parsed = {}
+        # The fact check only runs when the JSON parsed into a dict.
+        verdict = {
+            "action": parsed.get("action"),
+            "priority": parsed.get("priority"),
+            "rationale": parsed.get("rationale"),
+            "cited_sources": parsed.get("cited_sources") or [],
+            "assessment": parsed.get("assessment") or "",
+        }
+        ok, reasons = (False, reasons) if not parsed else factcheck.verify(
+            verdict, case=case, profile=profile, research=research, sanitized=sanitized)
+        if ok:
+            reasons = []
+            break
+        if attempt >= repair_rounds:
+            break
+        # One repair round: the same prompt plus the reasons the check failed; the model answers again.
+        attempt_messages = list(base_messages) + [
+            {"role": "assistant", "content": reply["content"]},
+            {"role": "user", "content": "Your reply did not pass the fact check: " + "; ".join(reasons)
+             + ". Reply again with only the JSON object, fixing these points. Never cite an id that is not "
+             + "in tool_result_ids."},
+        ]
+    llm = {"model": model_name, "calls": calls, "latency_s": round(latency, 3),
+           "tokens_in": tokens_in, "tokens_out": tokens_out, "mode": "ollama"}
+    return verdict, llm, reasons
+
+
 def decision_node(state: CaseState) -> dict:
-    """Decision. The rule tree always produces a verdict; no model is asked until phase P2."""
+    """Decision. The rule tree always produces a verdict; on a live run the model is asked once, then floors apply."""
     profile = state.get("profile") or {}
     research = state.get("research") or {}
-    tree = decide_rule_based(
-        profile=profile, research=research, sanitized=state.get("sanitized"),
-        intake=state.get("intake_signals"), catalogue=profile.get("catalogue"),
-    )
-    verdict = dict(tree)
+    sanitized = state.get("sanitized") or {}
+    intake = state.get("intake_signals") or {}
+    catalogue = profile.get("catalogue") or {}
+    tree = decide_rule_based(profile=profile, research=research, sanitized=sanitized,
+                             intake=intake, catalogue=catalogue)
     ids = list(state.get("tool_result_ids") or [])
+    verdict = dict(tree)
     cited = ids[:3] if verdict["action"] in ("urgent", "standard") else []
-    fallback = None
+    llm_proposed: str | None = None
+    floor_applied = False
+    floor_reason: str | None = None
+    floor_trigger: str | None = None
+    overridden: dict | None = None
+    fallback: str | None = None
+    llm: dict | None = None
+    llm_used = False
+    llm_reasons: list[str] = []
+
+    # The signal gate: a catalogue match ends the case without a model; the tree verdict is final.
+    skip_reason: str | None = None
+    if catalogue.get("match"):
+        skip_reason = "catalogue match; the rule tree decided without a model"
+    elif sanitized.get("suspicious"):
+        skip_reason = "suspicious input; no model is trusted on this case"
+    elif tree.get("reason") == "nothing_to_triage":
+        skip_reason = "nothing to triage; the rule tree decided without a model"
+    elif not use_live():
+        skip_reason = llm_skip_reason()
+
+    if skip_reason is None:
+        llm_used = True
+        try:
+            proposed, llm, llm_reasons = _llm_decision(
+                case=state["case"], profile=profile, research=research, sanitized=sanitized,
+                intake=intake, tree=tree, state_dict=state,
+            )
+            llm_proposed = proposed.get("action")
+            if llm_reasons:
+                # Fact-check failed twice: keep the rule tree's verdict but mark the model text as unverified.
+                fallback = "rationale_unverified"
+                verdict = dict(tree, rationale=factcheck.deterministic_rationale(tree, profile))
+                cited = ids[:3] if verdict["action"] in ("urgent", "standard") else []
+            else:
+                # Apply the floors over the model verdict; a floor sends it to a human, never to monitor.
+                final = apply_floors(proposed, tree_verdict=tree, profile=profile, research=research,
+                                     sanitized=sanitized, intake=intake, catalogue=catalogue)
+                floor_applied = bool(final.get("floor_applied"))
+                floor_reason = final.get("floor_reason")
+                floor_trigger = final.get("floor_trigger")
+                overridden = final.get("overridden_llm_verdict")
+                verdict = {
+                    "action": final.get("action"),
+                    "priority": final.get("priority"),
+                    "reason": final.get("floor_reason") or final.get("reason") or tree.get("reason"),
+                    "rationale": final.get("rationale") or proposed.get("rationale") or tree.get("rationale"),
+                    "source": final.get("source") or "llm_react",
+                }
+                cited = list(proposed.get("cited_sources") or [])
+                if floor_applied:
+                    # A floor moves the verdict toward a human; its own rationale is deterministic, no cite needed.
+                    cited = ids[:3] if verdict["action"] in ("urgent", "standard") else []
+        except (ModelError, TimeoutError) as exc:
+            llm_used = False
+            fallback = f"llm_{type(exc).__name__}"
+            LOGGER.warning("decision_llm_failed case_id=%s: %s", state.get("case_id"), type(exc).__name__)
+
+    # The grounding assert over the final verdict: every cite must come from the retrieved ids.
     try:
         assert_decision_grounded(verdict["action"], cited, ids)
     except ContractError as exc:
-        fallback = "rule_verdict_not_grounded"
-        verdict.update(
-            action="human_review", priority=policy.priority("human_review"), reason=fallback,
-            rationale=f"{fallback}: {exc}; routed to a human."[:500],
-        )
+        fallback = fallback or "rule_verdict_not_grounded"
+        verdict = dict(tree, action="human_review", priority=policy.priority("human_review"),
+                       reason=fallback, rationale=f"{fallback}: {exc}; routed to a human."[:500],
+                       source="rule_based")
         cited = []
+        floor_applied = False
 
     case = state["case"]
     tool_calls = []
@@ -291,20 +462,27 @@ def decision_node(state: CaseState) -> dict:
         tool_calls.append({"tool": "create_draft_ticket", "ok": True, "executed": True, "result": work_order_id})
 
     content = {
-        "action": verdict["action"], "priority": verdict["priority"], "source": verdict["source"],
-        "reason": verdict["reason"], "rationale": verdict["rationale"], "cited_sources": cited,
-        "rule_tree_action": tree["action"], "llm_proposed_action": None, "floor_applied": False,
-        "fallback_reason": fallback, "llm_used": False, "llm_skipped_reason": llm_skip_reason(),
-        "tool_calls": tool_calls, "work_order_id": work_order_id,
+        "action": verdict["action"], "priority": verdict["priority"], "source": verdict.get("source", "rule_based"),
+        "reason": verdict.get("reason"), "rationale": verdict.get("rationale") or "", "cited_sources": cited,
+        "rule_tree_action": tree["action"], "llm_proposed_action": llm_proposed,
+        "floor_applied": floor_applied, "floor_reason": floor_reason, "floor_trigger": floor_trigger,
+        "overridden_llm_verdict": overridden, "fallback_reason": fallback,
+        "llm_used": llm_used, "llm_skipped_reason": skip_reason if not llm_used else None,
+        "llm": llm, "tool_calls": tool_calls, "work_order_id": work_order_id,
         "worker_impact": {
             "profile_llm_changed": False, "research_llm_changed": False,
             "rule_hint_without_worker_llm": tree["action"], "rule_hint_with_worker_llm": tree["action"],
         },
         "budget_state": budget_state(state.get("budget") or {}, state.get("tokens_in", 0), state.get("tokens_out", 0)),
     }
+    tokens_in = (llm or {}).get("tokens_in", 0)
+    tokens_out = (llm or {}).get("tokens_out", 0)
     out = {
         "verdict": verdict, "action": verdict["action"], "priority": int(verdict["priority"]),
-        "rationale": verdict["rationale"], "assessment": "", "cited_sources": cited,
+        "rationale": verdict.get("rationale") or "",
+        "assessment": "" if fallback else "",  # the assessment field is wired here for a later phase
+        "cited_sources": cited,
+        "tokens_in": int(tokens_in), "tokens_out": int(tokens_out),
         "next_hop": "approval_gate" if verdict["action"] in GATED_ACTIONS else "end",
         "last_speaker": "decision",
         "trace": [_entry(state, "decision", "final", content)],

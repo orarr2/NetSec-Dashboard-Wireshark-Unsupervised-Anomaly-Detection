@@ -80,7 +80,7 @@ def test_research_block_shows_the_query_the_ids_and_the_passage(vm_candidates):
     lines = _render("ns_arp", final)
     assert any(line.endswith(
         "[RAG     ] query_security_standards -> 1 passages  topic=direct_match  sufficient=no  answers=none  "
-        "missing=containment,severity,false_positive  sufficiency=insufficient_coverage  llm_used=False")
+        "missing=containment,severity,false_positive  sufficiency=stand_in_backend  llm_used=False")
         for line in lines)
     for expected in (
         'rag_query: "security guidance for technique T1557.002 (asset role: unknown): containment, severity, '

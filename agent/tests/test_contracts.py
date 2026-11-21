@@ -201,14 +201,15 @@ def test_offline_the_stub_calls_a_tool_once_and_then_answers_without_citations()
     assert chat([{"role": "user", "content": "case"}])["tool_calls"] == []
 
 
-def test_no_live_provider_exists_yet(monkeypatch):
+def test_the_live_flag_and_the_skip_reason(monkeypatch):
     assert chat_module.use_live() is False
     assert llm_skip_reason() == "offline (NETSEC_AGENT_USE_LIVE=0); the rule path stands"
     monkeypatch.setenv("NETSEC_AGENT_USE_LIVE", "1")
     assert chat_module.use_live() is True
-    assert llm_skip_reason() == "the model layer is not wired yet (phase P2); the rule path stands"
+    assert llm_skip_reason() == "the model layer did not decide to speak; the rule path stands"
+    # Only Ollama and the offline stub are wired; other providers are refused.
     with pytest.raises(NotImplementedError):
-        chat([{"role": "user", "content": "case"}], provider="ollama:qwen2.5:3b")
+        chat([{"role": "user", "content": "case"}], provider="openai:gpt-4")
     assert chat([{"role": "user", "content": "case"}], provider="offline:stub")["mode"] == "offline-stub"
 
 
@@ -312,8 +313,10 @@ def test_research_names_its_sources_and_how_well_they_cover_the_question():
         ("static_table", "direct_match", ["attack:T1046"])
     assert direct["procedures"][0]["title"] == "Network Service Discovery"
     assert direct["rag_filter"] == {"technique": "T1046", "asset_role": "unknown", "k": 3}
+    # The sufficiency is `stand_in_backend` until the real corpus is wired (phase P3), so the
+    # rag_insufficient_coverage floor does not fire on every standard verdict in the meantime.
     assert direct["decision_coverage"] == {"answered": [], "missing": ["containment", "severity", "false_positive"],
-                                           "sufficiency": "insufficient_coverage"}
+                                           "sufficiency": "stand_in_backend"}
     parent = query_security_standards("T1090.004")
     assert (parent["coverage"], parent["tool_result_ids"], parent["procedures"][0]["support"]) == \
         ("partial_match", ["attack:T1090"], "parent")
