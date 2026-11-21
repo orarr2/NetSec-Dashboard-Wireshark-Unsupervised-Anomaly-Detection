@@ -108,12 +108,14 @@ netsec-agent.tail37ac21.ts.net {
 
     # /netsec/ -> the triage agents (deploy/netsec-agent.service).
     # handle_path strips the prefix: the service has no base-path
-    # setting, and its pages build their URLs from wherever they are
+    # setting and its pages build their URLs from wherever they are
     # served. The Host header reaches the service unchanged, which is
     # what its private-host gate checks. The basicauth user is passed
-    # on so that an approval records who decided it.
+    # on so that an approval records who decided it. The agent service
+    # binds 127.0.0.1 and Caddy runs in host network mode, so this is
+    # a loopback hop; nothing on the tailnet reaches port 8010 directly.
     handle_path /netsec/* {
-        reverse_proxy 100.68.246.54:8010 {
+        reverse_proxy 127.0.0.1:8010 {
             header_up X-NetSec-User {http.auth.user.id}
         }
     }
