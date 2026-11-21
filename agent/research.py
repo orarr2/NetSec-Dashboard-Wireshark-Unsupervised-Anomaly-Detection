@@ -1,9 +1,14 @@
-"""Research tool. Until the corpus is built (phase P3) the backend is a small static technique table."""
+"""Research tool. A real corpus is read when one is configured; otherwise a small static table stands in."""
 
 from __future__ import annotations
 
-from agent import policy
+import logging
+from typing import Any
 
+from agent import policy
+from agent.corpus.store import embed_batch, open_corpus
+
+LOGGER = logging.getLogger("netsec_agent")
 BACKEND = "static_table"
 
 # One line per ATT&CK technique the NETSEC engines can name. A stand-in for the
@@ -63,23 +68,16 @@ _TECHNIQUES: dict[str, dict[str, str]] = {
 }
 
 
-def query_security_standards(technique: str | None, asset_role: str | None = None, k: int | None = None) -> dict:
-    """Sources about a technique: procedures with ids, topic coverage, and whether they answer the policy's questions."""
-    k = int(k or policy.get("research", "top_k", default=3))
-    questions = list(policy.get("research", "questions", default=[]))
-    query = f"security guidance for technique {technique or 'unknown'} (asset role: {asset_role or 'unknown'}): " \
-            f"{', '.join(questions)}"
-    # Until the real corpus of phase P3 exists this backend is a stand-in and its sufficiency is marked as such.
-    # The `rag_insufficient_coverage` floor fires only on `insufficient_coverage`, so standards do not stop here now.
-    sufficiency = "stand_in_backend" if BACKEND == "static_table" else "insufficient_coverage"
+def _static_query(technique: str | None, asset_role: str | None, k: int, query: str, questions: list[str]) -> dict:
+    """The fallback: the small per-technique table of one chunk each."""
     out = {
-        "backend": BACKEND,
+        "backend": "static_table",
         "rag_query": query,
         "rag_filter": {"technique": technique, "asset_role": asset_role or "unknown", "k": k},
         "procedures": [],
         "tool_result_ids": [],
         "coverage": "no_match",
-        "decision_coverage": {"answered": [], "missing": questions, "sufficiency": sufficiency},
+        "decision_coverage": {"answered": [], "missing": questions, "sufficiency": "stand_in_backend"},
     }
     if not technique:
         out["coverage"] = "not_applicable"
@@ -103,3 +101,68 @@ def query_security_standards(technique: str | None, asset_role: str | None = Non
     out["tool_result_ids"] = [proc["id"]]
     out["coverage"] = "direct_match" if support == "direct" else "partial_match"
     return out
+
+
+def _coverage_from_passages(passages: list[dict], questions: list[str]) -> tuple[list[str], list[str]]:
+    """Which policy questions the retrieved passages answer. Keyword-based because the corpus answers in prose."""
+    text = " ".join(p.get("text", "") for p in passages).lower()
+    keywords = {
+        "containment": ("mitigation", "block", "containment", "quarantine", "isolate", "firewall", "drop", "detect"),
+        "severity": ("severity", "impact", "damage", "critical", "high risk", "privileg"),
+        "false_positive": ("false positive", "benign", "legitimate", "normal use", "false-positive", "known good"),
+    }
+    answered, missing = [], []
+    for question in questions:
+        needles = keywords.get(question, ())
+        (answered if needles and any(n in text for n in needles) else missing).append(question)
+    return answered, missing
+
+
+def _corpus_query(store, technique: str | None, asset_role: str | None, k: int,
+                  query: str, questions: list[str]) -> dict | None:
+    """Try the real corpus. Returns None on a failure (the caller falls back to the static table)."""
+    try:
+        vectors = embed_batch([query])
+    except Exception as exc:
+        LOGGER.warning("corpus_embed_failed: %s; falling back to the static table", type(exc).__name__)
+        return None
+    try:
+        passages = store.search(vectors[0], k=k, technique=technique)
+    except Exception as exc:
+        LOGGER.warning("corpus_search_failed: %s; falling back to the static table", type(exc).__name__)
+        return None
+    answered, missing = _coverage_from_passages(passages, questions)
+    if not passages:
+        coverage = "not_applicable" if technique is None else "no_match"
+        sufficiency = "insufficient_coverage"
+    else:
+        exact = any(p.get("support") == "direct" for p in passages)
+        parent = any(p.get("support") == "parent" for p in passages)
+        coverage = "direct_match" if exact else ("partial_match" if parent else "no_match")
+        sufficiency = "sufficient_coverage" if not missing else "insufficient_coverage"
+    return {
+        "backend": "corpus",
+        "rag_query": query,
+        "rag_filter": {"technique": technique, "asset_role": asset_role or "unknown", "k": k},
+        "procedures": passages,
+        "tool_result_ids": [p["id"] for p in passages],
+        "coverage": coverage,
+        "decision_coverage": {"answered": answered, "missing": missing, "sufficiency": sufficiency},
+    }
+
+
+def query_security_standards(technique: str | None, asset_role: str | None = None, k: int | None = None) -> dict:
+    """Sources about a technique: procedures with ids, topic coverage, and whether they answer the policy's questions."""
+    k = int(k or policy.get("research", "top_k", default=3))
+    questions = list(policy.get("research", "questions", default=[]))
+    query = f"security guidance for technique {technique or 'unknown'} (asset role: {asset_role or 'unknown'}): " \
+            f"{', '.join(questions)}"
+    store = open_corpus()
+    if store is not None:
+        try:
+            result = _corpus_query(store, technique, asset_role, k, query, questions)
+        finally:
+            store.close()
+        if result is not None:
+            return result
+    return _static_query(technique, asset_role, k, query, questions)
